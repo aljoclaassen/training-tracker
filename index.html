@@ -125,7 +125,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     buildHdSession(dayN, variantChoice)
     buildPbSession(dayN, week, variantChoice)
     pbItem(item, dayN, week, f, letter, variantId) : Takes a powerbuilding item and the week. Returns the session item for this week.
-    leftPhrase(text) : Takes reps-left text from the plan. Returns it as a short phrase: "2 left", "about 3 left", "1 left, last set to failure", "to failure", or the text unchanged ("Can still talk").
+    leftPhrase(text, log) : Takes reps-left text from the plan. Returns it as a short phrase: "2 left", "about 3 left", "1 left, last set to failure", "to failure", or the text unchanged ("Can still talk"). For carries (log "carry") the number reads as an effort level instead: "effort: hard".
     weekDaysDone(slot, sessions) : Takes the slot and the week's sessions. Returns {done, total}: training days fully done (not missed days).
     alignEmptySlot(slot, weekStart) : Takes a slot and the current Monday. Moves an untouched slot forward to this week, so a plan with nothing logged never asks for "Start new week". Changes slot in place.
     sessionItems(session) : Takes a session. Returns its items in order, flattened.
@@ -950,7 +950,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-10.1",
+ "appVersion": "2026-10-10.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -1234,8 +1234,36 @@ const CONFIG = {
   "variation": "Another version of the same exercise, like a rope instead of a bar.",
   "shy": "Stop that many clean reps before you can't do another.",
   "makeup": "An exercise from a missed day, done on a later day.",
-  "topsetfinder": "Work up in small jumps to find today's heaviest set of 5."
- }
+  "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
+  "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down."
+ },
+ "carryEffortScale": [
+  {
+   "left": 4,
+   "name": "Easy",
+   "short": "Grip fresh, could walk much further"
+  },
+  {
+   "left": 3,
+   "name": "Steady",
+   "short": "Grip solid, walking tall"
+  },
+  {
+   "left": 2,
+   "name": "Hard",
+   "short": "Grip burning, still walking tall"
+  },
+  {
+   "left": 1,
+   "name": "Very hard",
+   "short": "Grip about to open, or posture slipping"
+  },
+  {
+   "left": 0,
+   "name": "Couldn't go on",
+   "short": "Had to put it down before the end"
+  }
+ ]
 };
 
 const PROGRAMME = {
@@ -3534,8 +3562,13 @@ function pbItem(item, dayN, week, f, letter, variantId){
 
 // Takes reps-left text from the plan. Returns it as a short phrase: "2 left", "about 3 left",
 // "1 left, last set to failure", "to failure", or the text unchanged ("Can still talk").
-function leftPhrase(text){
+// For carries (log "carry") the number reads as an effort level instead: "effort: hard".
+function leftPhrase(text, log){
   const t = String(text || "");
+  if (log === "carry" && /^\d$/.test(t)){
+    const lvl = CONFIG.carryEffortScale.filter(x => String(x.left) === t)[0];
+    return lvl ? "effort: " + lvl.name.toLowerCase() : t;
+  }
   let m = /^(.+), last set to failure$/.exec(t);
   if (m) return m[1] + " left, last set to failure";
   if (t === "0") return "to failure";
@@ -4635,7 +4668,7 @@ function summaryText(c, item){
   } else {
     parts.push(item.setsText);
     if (item.kind === "main" && item.rows[0].role === "top") parts.push(leftPhrase(item.rows[0].left) + " on the top set");
-    else if (item.leftText && item.kind !== "warmup" && item.kind !== "main") parts.push(leftPhrase(item.leftText));
+    else if (item.leftText && item.kind !== "warmup" && item.kind !== "main") parts.push(leftPhrase(item.leftText, item.log));
   }
   const e = c.slot.entries[item.id];
   if (isComplete(e)){
@@ -4673,7 +4706,7 @@ function panelHTML(c, item){
   const unit = a.unit;
   let html = '<div class="exercise__details">';
   if (item.plan === "hd") html += "<p>Plan: " + esc(hdPlanText(item)) + "</p>";
-  else if (item.kind !== "warmup") html += "<p>" + esc(item.setsText) + (item.leftText ? " · " + term("repsleft", "Reps left") + ": " + esc(leftPhrase(item.leftText)) : "") + "</p>";
+  else if (item.kind !== "warmup") html += "<p>" + esc(item.setsText) + (item.leftText ? " · " + term("repsleft", "Reps left") + ": " + esc(leftPhrase(item.leftText, item.log)) : "") + "</p>";
   html += "<p>" + esc(item.equip) + (item.rest ? " · Rest " + esc(item.rest) : "") + "</p>";
   if (item.notes) html += "<p>" + esc(item.notes) + "</p>";
   html += "</div>";
@@ -4683,7 +4716,8 @@ function panelHTML(c, item){
   if (!missed && hasWeight(item)) html += unitToggleHTML(item, "main", unit);
   if (!missed && item.kind === "main" && !item.rows.some(r => r.role === "test")) html += finderHTML(c, item);
   if (!missed){
-    if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
+    if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
+    else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
     if (item.log !== "check" && item.log !== "time" && item.log !== "rounds") html += setActionsHTML("main", e.sets.length, item.name);
   }
@@ -4750,7 +4784,7 @@ function setRowHTML(c, item, kind, i, s, a){
   else if (row.role === "top") label = term("topset", label);
   else if (row.role === "backoff") label = term("backoff", label);
   else label = esc(label);
-  const spec = row.reps ? " · " + esc(row.reps) + (row.reps === "1" ? " rep" : " reps") + (row.left && parseLeft(row.left) ? ", " + esc(leftPhrase(row.left)) : "") : "";
+  const spec = row.reps ? " · " + esc(row.reps) + (row.reps === "1" ? " rep" : " reps") + (row.left && parseLeft(row.left) ? ", " + esc(leftPhrase(row.left, item.log)) : "") : "";
   let html = '<div class="set-row' + (warm ? " is-warm" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
     '<div class="set-row__head"><span class="set-row__label">' + label + spec + '</span><span class="set-row__beat">Beat last time</span></div>';
   if (t.text) html += '<p class="set-row__hint">' + term("target", "Target") + ": " + esc(t.text) + "</p>";
@@ -4761,7 +4795,8 @@ function setRowHTML(c, item, kind, i, s, a){
     const em = estimatedMax(s.kg, s.reps, s.left);
     if (em) html += '<p class="set-row__hint">' + term("estmax", "Estimated max") + ": about " + esc(fmtLoad(em, unit)) + ".</p>";
   }
-  html += '<p class="set-row__last">' + (last && isLogged(last) ? "Last time: " + esc(perfText(last, unit)) : "") + "</p>";
+  const lastText = last && isLogged(last) ? (item.log === "carry" && kind === "main" ? (Number(last.kg) > 0 ? fmtLoad(last.kg, unit) + " for " : "") + last.reps + " m" + (last.left !== undefined && last.left !== "" ? ", " + leftPhrase(String(last.left), "carry") : "") : perfText(last, unit)) : "";
+  html += '<p class="set-row__last">' + (lastText ? "Last time: " + esc(lastText) : "") + "</p>";
   html += '<p class="error-text" role="alert"></p></div>';
   return html;
 }
@@ -4779,9 +4814,11 @@ function fieldsHTML(item, kind, row, s, base, unit, warm, suggestKg){
   let html = stepperHTML(base, "reps", log === "carry" ? "Metres" : (item.plan === "hd" && !warm && kind === "main" ? "Clean reps" : "Reps"), s.reps, "numeric");
   html += stepperHTML(base, "kg", weightLabel, s.kg, "decimal", suggestKg);
   if (item.plan === "pb" && kind === "main" && log !== "time" && log !== "rounds"){
-    html += '<div class="select-field"><label class="field__label" for="' + base + '-left">Reps left</label>' +
+    const carry = log === "carry";
+    html += '<div class="select-field"><label class="field__label" for="' + base + '-left">' + (carry ? "How hard was it?" : "Reps left") + "</label>" +
       '<select class="select-input" id="' + base + '-left" data-left><option value="">Choose</option>' +
-      CONFIG.repsLeftScale.map(r => '<option value="' + r.left + '"' + (String(s.left) === String(r.left) ? " selected" : "") + ">" + r.left + " left: " + esc(r.short) + "</option>").join("") + "</select></div>";
+      (carry ? CONFIG.carryEffortScale.map(r => '<option value="' + r.left + '"' + (String(s.left) === String(r.left) ? " selected" : "") + ">" + r.left + " " + esc(r.name) + ": " + esc(r.short) + "</option>").join("")
+        : CONFIG.repsLeftScale.map(r => '<option value="' + r.left + '"' + (String(s.left) === String(r.left) ? " selected" : "") + ">" + r.left + " left: " + esc(r.short) + "</option>").join("")) + "</select></div>";
   }
   if (item.plan === "hd" && kind === "main" && !warm){
     const end = s.end || "clean";
@@ -4927,7 +4964,8 @@ function pbGuideHTML(){
   const rows = (head, list) => '<div class="table-scroll"><table class="finder-table"><thead><tr>' + head.map(h => '<th scope="col">' + esc(h) + "</th>").join("") + "</tr></thead><tbody>" + list.map(r => "<tr>" + r.map(x => "<td>" + esc(x) + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>";
   return '<p class="small plan-summary">' + esc(p.summary) + "</p>" +
     guide("How hard: reps left", "<p>Every weight is set by how many more clean reps you could still do. \"2 left\" means stop with 2 in the tank.</p>" +
-      rows(["Reps left", "What it looks like"], CONFIG.repsLeftScale.map(r => [String(r.left), r.short])) + "<p>A range like \"2–3 left\" means anywhere in it is fine.</p>") +
+      rows(["Reps left", "What it looks like"], CONFIG.repsLeftScale.map(r => [String(r.left), r.short])) + "<p>A range like \"2–3 left\" means anywhere in it is fine.</p>" +
+      "<p>Carries use the same numbers, judged by grip and posture:</p>" + rows(["Level", "How it feels"], CONFIG.carryEffortScale.map(r => [r.left + " " + r.name, r.short]))) +
     guide("Find your top set", "<p>You find it on the day by working up in small jumps. Within about 5 kg is good enough.</p>" +
       rows(["Lift", "From Heavy Duty", "First guess"], Object.keys(p.mainLifts).map(k => [p.mainLifts[k].name, p.mainLifts[k].hdNote, p.mainLifts[k].guessNote])) +
       rows(["Set", "Weight", "Reps", "Rest"], p.topSetLadder.map(s => [String(s.set), s.weight, s.reps, s.rest])) +
