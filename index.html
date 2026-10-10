@@ -950,7 +950,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-10.2",
+ "appVersion": "2026-10-10.3",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -3205,7 +3205,8 @@ const PROGRAMME = {
        "rest": "2 min",
        "notes": "Start near bodyweight on the bar; add 10 kg when all sets feel like 3 left.",
        "swap": "two heavy dumbbells",
-       "rule": "carry"
+       "rule": "carry",
+       "swapNote": "With dumbbells: start at about a third of bodyweight in each hand. Go up one dumbbell size (usually 2–2.5 kg per hand) when every carry is Steady or easier. Log the weight of one dumbbell."
       },
       {
        "id": "pb-d5-sprints",
@@ -3518,7 +3519,7 @@ function pbItem(item, dayN, week, f, letter, variantId){
     swap: item.swap || "", tag: "", optional: item.kind === "warmup", counted: item.kind !== "warmup", skipped: false,
     variants: item.variants ? pb.variants[item.variants] : null, variant: v ? v.id : null, unitHint: null,
     rows: [], repMin: item.repMin != null ? item.repMin : null, repMax: item.repMax != null ? item.repMax : null,
-    backoffPct: null, lift: item.lift || null, checklist: item.checklist || null, rule: item.rule || null
+    backoffPct: null, lift: item.lift || null, checklist: item.checklist || null, rule: item.rule || null, swapNote: item.swapNote || ""
   };
   if (item.kind === "main"){
     const top = f.top[letter] === "test" ? f.top.A : f.top[letter];
@@ -4876,6 +4877,7 @@ function swapPanelHTML(c, item, e, lw){
   const a = rowArgs(c, item);
   return '<div class="sub-panel"><h4>' + term("swap", "Swap exercise") + "</h4>" +
     (item.swap ? '<p class="small">The plan suggests: <strong>' + esc(item.swap) + '</strong>. <button type="button" class="link-button" data-act="use-swap">Use this swap</button></p>' : "") +
+    (item.swapNote ? '<p class="small">' + esc(item.swapNote) + "</p>" : "") +
     '<div class="field"><label class="field__label" for="' + base + '-name">What did you do instead?</label><input class="text-input" id="' + base + '-name" data-repl="name" type="text" maxlength="60" autocomplete="off" placeholder="For example, Smith machine squat" value="' + esc(e.repl.name) + '"></div>' +
     '<div class="field"><label class="field__label" for="' + base + '-reason">Why?</label><select class="select-input" id="' + base + '-reason" data-repl="reason"><option value="">Choose a reason</option>' +
     Object.keys(CONFIG.reasons).map(k => '<option value="' + k + '"' + (e.repl.reason === k ? " selected" : "") + ">" + esc(CONFIG.reasons[k]) + "</option>").join("") + "</select></div>" +
@@ -4996,7 +4998,7 @@ function pbDayTableHTML(d, current){
     d.items.map(it => {
       const name = (it.pair ? it.pair + " " : "") + it.name, swap = it.swap ? (it.notes ? " " : "") + "Swap: " + it.swap : "";
       if (it.kind === "main") return row(name + ": top set", it, it.top.sets, it.top.left, it.top.rest, it.top.notes + swap) + row(name + ": back-offs", it, it.backoff.sets, it.backoff.left, it.backoff.rest, it.backoff.notes);
-      return row(name, it, it.sets, it.left, it.rest, it.notes + swap);
+      return row(name, it, it.sets, it.left, it.rest, it.notes + swap + (it.swapNote ? " " + it.swapNote : ""));
     }).join("") + "</tbody></table></div></section>";
 }
 
