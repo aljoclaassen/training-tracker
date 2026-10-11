@@ -227,7 +227,14 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     rowTarget(item, i, a) : Takes an item, a row index and {entry, last, unit, streak, cycle}. Returns {text, kg}: what to aim for on that row today. Dispatches to the Heavy Duty, top-set, back-off or accessory rule.
     hdWarmup(item, i, a) : Heavy Duty. Takes an item, a row index and the same args as rowTarget. Returns the warm-up line data: {pct, kg, workingKg, from, source} or {pct, pending: true}, or null for rows without a warm-up percentage. Rules: the main-set load is this week's entry, else today's target, else last week's load. The warm-up share is the one you actually used last time (last warm-up ÷ last main set, same unit), so your own choices carry forward; with no history, or a share outside CONFIG.warmupShareRange, it is the plan's percentage. Same main-set weight as last time → exactly last time's warm-up weight.
 
-  2.18 App state shape
+  2.18 Logging a set quickly
+    restSeconds(text, role) : Takes the plan's rest text and the row's role. Returns seconds to rest after that set, or null. Rules: "None" → no rest (the first half of a pair); a range uses its lower end; "4 min after the top set, 3 min after back-offs" picks the part for the role; warm-ups and checklists → null, because the plan gives them no rest time.
+    planRowReps(item, i) : Takes an item and a row index. Returns the planned reps for that row as a number, or null. Rules: Heavy Duty reads the row's part of the prescription ("15 @ 50%" → 15, "10–12 @ 100%" → 10); powerbuilding reads the row's reps ("10–12" → 10).
+    suggestedSet(set, suggestKg, lastSet, planReps) : Takes the set as typed, the suggested load (warm-up weight or target), last time's same set and the planned reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight takes the suggested load, else last time's; empty reps take last time's reps, else the planned reps.
+    setsProgress(item, entry) : Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets, counting working sets only when the exercise has warm-ups.
+    firstOpenRow(item, entry) : Takes an item and its entry. Returns the index of the first set not yet logged, or -1 when all are.
+
+  2.19 App state shape
     freshSlot(weekStart) : Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
     slotOf(state, plan) : Takes the whole state and a plan id. Returns that plan's slot. Rule: Heavy Duty lives at the top level, exactly where version 1 kept it; powerbuilding lives in state.pb.
     normaliseState(raw, today) : Takes whatever was stored (or null) and today. Returns a complete, current state. Rules: version 1 data loads unchanged; moved calf ids are renamed; missing parts are added.
@@ -276,6 +283,10 @@ FEATURES AND WHERE THEY LIVE
   8 themes, Light/Dark/Match phone, layout ....... CSS tokens; 3.9 applyTheme, applyMode, applyLayout
   Saving and the "not saving" warning ............ 2b; 3.2 save; 3.3 renderStorageWarning
   Older Android and Huawei fallbacks ............. Layer 0; 3.8 openDialog fallback
+  One active set, other sets one line each ..... 3.4 setRowHTML, compactRowHTML; 3.4 activeRowOf; 2.18 firstOpenRow
+  "Log set" with grey suggested values ......... 3.11 logSet; 2.18 suggestedSet, planRowReps
+  Sets done per exercise ("2/4 sets") .......... 3.4 exerciseHTML; 2.18 setsProgress
+  Rest timer after each set ..................... 3.11b startRest; 2.18 restSeconds (memory only, not saved)
   Offline copy and "Update now" bar .............. sw.js; 3.15 setupOffline; CONFIG.appVersion
 
 HOSTING AND UPDATES (GitHub Pages)
@@ -310,6 +321,8 @@ HOSTING AND UPDATES (GitHub Pages)
   --font-size-base: 14px;
   --font-size-large: 18px;
   --font-size-title: 22px;
+  --font-size-numeral: 22px;     /* numbers you read at arm's length: inputs, timer */
+  --font-size-timer: 28px;
   --font-weight-normal: 400;
   --font-weight-bold: 600;
   --line-height-base: 1.45;
@@ -325,6 +338,8 @@ HOSTING AND UPDATES (GitHub Pages)
   /* Sizes */
   --size-tap: 44px;
   --size-input: 56px;
+  --size-input-height: 52px;     /* set inputs and steppers: bigger than the 44px minimum for sweaty thumbs */
+  --size-badge: 32px;
   --size-ring: 56px;
   --size-status: 28px;
   --size-content-max: 960px;
@@ -340,6 +355,7 @@ HOSTING AND UPDATES (GitHub Pages)
   --radius-pill: 999px;
   /* Motion */
   --duration-fast: 150ms;
+  --duration-flash: 180ms;
   /* Colours: light, Steel theme (default) */
   --color-bg: #ECEFF3;
   --color-surface: #FFFFFF;
@@ -403,6 +419,7 @@ HOSTING AND UPDATES (GitHub Pages)
 *, *::before, *::after{ box-sizing: border-box; }
 html{ -webkit-text-size-adjust: 100%; }
 body{
+  font-variant-numeric: tabular-nums;
   margin: 0; background: var(--color-bg); color: var(--color-text);
   font-family: var(--font-family-body); font-size: var(--font-size-base); line-height: var(--line-height-base);
   padding-bottom: calc(var(--size-nav) + var(--space-7) + env(safe-area-inset-bottom, 0px));
@@ -556,8 +573,8 @@ button, input, select, textarea{ font: inherit; color: inherit; }
 .set-row__last:empty{ display: none; }
 .stepper-field{ display: grid; gap: var(--space-1); flex: 1 1 128px; min-width: 0; }
 .stepper{ display: flex; align-items: stretch; border: var(--border-width) solid var(--color-border); border-radius: var(--radius-base); background: var(--color-surface); overflow: hidden; }
-.stepper__button{ width: var(--size-tap); min-height: var(--size-tap); border: 0; background: var(--color-surface); font-size: var(--font-size-large); font-weight: var(--font-weight-bold); cursor: pointer; }
-.stepper__input{ flex: 1; width: auto; min-width: var(--size-tap); min-height: var(--size-tap); border: 0; border-left: var(--border-width) solid var(--color-border); border-right: var(--border-width) solid var(--color-border); text-align: center; background: var(--color-surface); font-weight: var(--font-weight-bold); }
+.stepper__button{ width: var(--size-tap); min-height: var(--size-input-height); border: 0; background: var(--color-surface); font-size: var(--font-size-large); font-weight: var(--font-weight-bold); cursor: pointer; }
+.stepper__input{ flex: 1; width: auto; min-width: var(--size-tap); min-height: var(--size-input-height); font-size: var(--font-size-numeral); border: 0; border-left: var(--border-width) solid var(--color-border); border-right: var(--border-width) solid var(--color-border); text-align: center; background: var(--color-surface); font-weight: var(--font-weight-bold); }
 .select-field{ display: grid; gap: var(--space-1); flex: 1 1 160px; }
 .check-row{ display: flex; align-items: center; gap: var(--space-3); min-height: var(--size-tap); cursor: pointer; }
 .check-row input{ width: 22px; height: 22px; margin: 0; accent-color: var(--color-accent); }
@@ -614,6 +631,35 @@ body.has-hazard .next-fab, body.has-hazard .to-top{ bottom: calc(var(--size-nav)
 .update-bar__text{ flex: 1; font-weight: var(--font-weight-bold); }
 .compat-banner{ position: fixed; top: 0; left: 0; right: 0; z-index: 70; padding: var(--space-3); background: var(--color-danger); color: var(--color-on-danger); font-weight: var(--font-weight-bold); }
 
+
+/* =====================================================================
+   QUICK LOGGING: compact set rows, the active set, rest timer
+   ===================================================================== */
+.stepper__input::placeholder{ color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.set-row{ border-left: 4px solid transparent; }
+.set-row:not(.set-row--compact){ border-left-color: var(--color-accent); background: var(--color-accent-soft); }
+.set-row--compact{ padding: 0; background: var(--color-surface-alt); }
+.set-row__compact{ display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: var(--size-input-height); padding: var(--space-2) var(--space-3); border: 0; background: none; text-align: left; cursor: pointer; border-radius: var(--radius-base); }
+.set-row__badge{ flex: none; display: grid; place-items: center; width: var(--size-badge); height: var(--size-badge); border-radius: 50%; border: var(--border-width-strong) solid var(--color-border); font-weight: var(--font-weight-bold); font-size: var(--font-size-small); }
+.set-row--compact.is-done .set-row__badge{ background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+.set-row__name{ flex: 1; min-width: 0; }
+.set-row__value{ font-weight: var(--font-weight-bold); text-align: right; }
+.set-row--compact:not(.is-done) .set-row__value{ font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.set-row.is-just-logged{ animation: set-flash var(--duration-flash) ease-out; }
+@keyframes set-flash{ from{ background: var(--color-highlight); } to{ background: var(--color-surface-alt); } }
+.set-row__log{ min-height: var(--size-input-height); font-size: var(--font-size-large); }
+.exercise__count{ font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-accent); }
+.rest-bar{ position: fixed; left: var(--space-2); right: var(--space-2); top: calc(var(--space-2) + env(safe-area-inset-top, 0px)); z-index: 55; max-width: var(--size-dialog-max); margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); background: var(--color-text); color: var(--color-bg); border-radius: var(--radius-large); box-shadow: 0 4px 16px var(--color-shadow); overflow: hidden; }
+body.has-rest .toast{ top: calc(var(--space-2) + 72px); }
+.rest-bar__time{ font-size: var(--font-size-timer); font-weight: var(--font-weight-bold); min-width: 4ch; }
+.rest-bar__next{ font-size: var(--font-size-small); }
+.rest-bar .button{ background: transparent; color: var(--color-bg); border-color: var(--color-bg); }
+.rest-bar__track{ position: absolute; left: 0; right: 0; bottom: 0; height: 4px; }
+.rest-bar__fill{ height: 100%; width: 0; background: var(--color-highlight); }
+.rest-bar.is-done{ background: var(--color-highlight); color: var(--color-on-highlight); }
+.rest-bar.is-done .button{ color: var(--color-on-highlight); border-color: var(--color-on-highlight); }
+.bottom-nav__button{ display: grid; justify-items: center; align-content: center; gap: 2px; }
+.bottom-nav__icon{ width: 22px; height: 22px; }
 /* =====================================================================
    DIALOGS
    ===================================================================== */
@@ -727,13 +773,22 @@ dialog:not([open]){ display: none; }
      FLOATING CONTROLS
      ===================================================================== -->
 <nav class="bottom-nav" aria-label="Pages">
-  <button type="button" class="bottom-nav__button" data-tab="train">Train</button>
-  <button type="button" class="bottom-nav__button" data-tab="plan">Plan</button>
+  <button type="button" class="bottom-nav__button" data-tab="train"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Train</button>
+  <button type="button" class="bottom-nav__button" data-tab="plan"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
 </nav>
 <button type="button" class="button button--primary next-fab" id="next-fab" hidden>Next set</button>
 <button type="button" class="button to-top" id="to-top" hidden>Back to top</button>
 <aside class="hazard-bar" id="hazard-bar" aria-live="polite" hidden></aside>
 <div class="term-box" id="term-box" role="status" hidden><p class="term-box__text" id="term-box-text"></p><button type="button" class="button button--quiet" id="term-box-close">Close</button></div>
+<!-- REST TIMER: starts after each logged set, from the plan's rest time -->
+<div class="rest-bar" id="rest-bar" hidden>
+  <span class="rest-bar__time" id="rest-time" aria-hidden="true">0:00</span>
+  <span class="rest-bar__next" id="rest-next"></span>
+  <button type="button" class="button" id="rest-add">+30 s</button>
+  <button type="button" class="button" id="rest-skip">Skip rest</button>
+  <span class="rest-bar__track" aria-hidden="true"><span class="rest-bar__fill" id="rest-fill"></span></span>
+  <span class="visually-hidden" id="rest-status" role="status" aria-live="polite"></span>
+</div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <!-- UPDATE BANNER: shown when a new version of the app has downloaded -->
 <div class="update-bar" id="update-bar" role="status" hidden>
@@ -952,7 +1007,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-11.3",
+ "appVersion": "2026-10-11.4",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -4409,7 +4464,60 @@ function hdWarmup(item, i, a){
   return {pct: row.pct, kg: warmupLoad(row.pct, workingKg, a.unit), workingKg: workingKg, from: from, source: "plan"};
 }
 
-/* ---------- 2.18 App state shape ---------- */
+/* ---------- 2.18 Logging a set quickly ---------- */
+
+// Takes the plan's rest text and the row's role. Returns seconds to rest after that set, or null.
+// Rules: "None" → no rest (the first half of a pair); a range uses its lower end; "4 min after the
+// top set, 3 min after back-offs" picks the part for the role; warm-ups and checklists → null,
+// because the plan gives them no rest time.
+function restSeconds(text, role){
+  if (role === "warm" || role === "check" || role === "time" || role === "rounds") return null;
+  let t = String(text || "");
+  if (/after the top set/.test(t)){ const parts = t.split(","); t = role === "top" ? parts[0] : (parts[1] || parts[0]); }
+  if (/^\s*none/i.test(t)) return null;
+  const m = t.match(/(\d+)(?:\s*[–-]\s*\d+)?\s*(s|min)\b/);
+  if (!m) return null;
+  return m[2] === "min" ? Number(m[1]) * 60 : Number(m[1]);
+}
+
+// Takes an item and a row index. Returns the planned reps for that row as a number, or null.
+// Rules: Heavy Duty reads the row's part of the prescription ("15 @ 50%" → 15, "10–12 @ 100%" → 10);
+// powerbuilding reads the row's reps ("10–12" → 10).
+function planRowReps(item, i){
+  const row = item.rows[i] || {};
+  if (item.plan === "pb"){ const m = String(row.reps || "").match(/\d+/); return m ? Number(m[0]) : null; }
+  const parts = String(item.repsText || "").split(/,|→/);
+  const m = String(parts[i] || "").match(/^\s*(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+// Takes the set as typed, the suggested load (warm-up weight or target), last time's same set and the
+// planned reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight
+// takes the suggested load, else last time's; empty reps take last time's reps, else the planned reps.
+function suggestedSet(set, suggestKg, lastSet, planReps){
+  const lastOk = lastSet && isLogged(lastSet);
+  const reps = set.reps !== "" && set.reps != null ? set.reps : (lastOk ? String(lastSet.reps) : (planReps ? String(planReps) : ""));
+  let kg = set.kg;
+  if (kg === "" || kg == null) kg = suggestKg ? fmtNum(suggestKg) : (lastOk && Number(lastSet.kg) > 0 ? fmtNum(lastSet.kg) : "");
+  return {reps: reps, kg: kg};
+}
+
+// Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets,
+// counting working sets only when the exercise has warm-ups.
+function setsProgress(item, entry){
+  const idx = item.rows.map((r, i) => i).filter(i => isWorkingRow(item, i) || item.rows[i].role === "check");
+  const sets = entry ? entry.sets : [];
+  return {done: idx.filter(i => isLogged(sets[i])).length, total: idx.length};
+}
+
+// Takes an item and its entry. Returns the index of the first set not yet logged, or -1 when all are.
+function firstOpenRow(item, entry){
+  const sets = entry ? entry.sets : item.rows.map(emptySet);
+  for (let i = 0; i < sets.length; i++) if (!isLogged(sets[i])) return i;
+  return -1;
+}
+
+/* ---------- 2.19 App state shape ---------- */
 
 // Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
 function freshSlot(weekStart){
@@ -4738,6 +4846,7 @@ function exerciseHTML(c, item){
     '<span class="exercise__status" aria-hidden="true">' + esc(status) + "</span>" +
     '<span class="exercise__main"><span class="exercise__name">' + esc(item.name) + tags + "</span>" +
     '<span class="exercise__target">' + esc(item.skipped ? "Not this week." : summaryText(c, item)) + "</span>" +
+    (item.skipped || item.kind === "warmup" || missed ? "" : (function(){ const p = setsProgress(item, e); return p.total ? '<span class="exercise__count">' + p.done + "/" + p.total + " sets</span>" : ""; })()) +
     '<span class="visually-hidden">' + (done ? "Done." : missed ? "Missed." : "Not done yet.") + "</span></span>" +
     '<span class="exercise__chevron" aria-hidden="true"></span></button>' +
     '<div class="exercise__panel" id="ex-' + item.id + '-panel"' + (open ? "" : " hidden") + ">" + (open ? panelHTML(c, item) : "") + "</div></article>";
@@ -4820,6 +4929,9 @@ function setRowHTML(c, item, kind, i, s, a){
   }
   const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : {text: "", kg: null};
   const w = kind === "main" && item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
+  const sug = suggestedSet(s, w && w.kg ? w.kg : t.kg, last, kind === "main" ? planRowReps(item, i) : null);
+  const active = kind !== "main" || activeRowOf(item, e) === i;
+  if (!active) return compactRowHTML(item, kind, i, s, row, sug, unit, beat);
   let label = plainRowLabel(row.label);
   if (row.role === "warm") label = term("warmup", label);
   else if (row.role === "work") label = term("mainset", label);
@@ -4844,28 +4956,47 @@ function setRowHTML(c, item, kind, i, s, a){
     else line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of " + esc(fmtLoad(w.workingKg, unit)) + ", " + esc(w.from) + ".";
     html += '<p class="set-row__hint">' + line + "</p>";
   }
-  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, w && w.kg ? w.kg : t.kg) + "</div>";
+  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, sug.kg ? Number(sug.kg) : null, sug.reps) + "</div>";
   if (kind === "main" && (row.role === "top" || (row.role === "test" && i === 2)) && isLogged(s) && Number(s.kg) > 0){
     const em = estimatedMax(s.kg, s.reps, s.left);
     if (em) html += '<p class="set-row__hint">' + term("estmax", "Estimated max") + ": about " + esc(fmtLoad(em, unit)) + ".</p>";
   }
   const lastText = last && isLogged(last) ? (item.log === "carry" && kind === "main" ? (Number(last.kg) > 0 ? fmtLoad(last.kg, unit) + " for " : "") + last.reps + " m" + (last.left !== undefined && last.left !== "" ? ", " + leftPhrase(String(last.left), "carry") : "") : perfText(last, unit)) : "";
   html += '<p class="set-row__last">' + (lastText ? "Last time: " + esc(lastText) : "") + "</p>";
+  if (kind === "main" && item.log !== "time" && item.log !== "rounds"){
+    if (!anyLogged() && !isLogged(s)) html += '<p class="small muted">Grey numbers are filled in for you. Change them, or just tap the button.</p>';
+    html += '<button type="button" class="button button--primary button--full set-row__log" data-act="log-set">' + (isLogged(s) ? "Update set" : "Log set") + "</button>";
+  }
   html += '<p class="error-text" role="alert"></p></div>';
   return html;
 }
+// Sets you aren't on: one line each, tap to edit
+function compactRowHTML(item, kind, i, s, row, sug, unit, beat){
+  const done = isLogged(s);
+  const badge = done ? "✓" : row.role === "warm" ? "W" : String(i + 1);
+  const value = done ? (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " × " : "") + setText(s) + (item.log === "carry" ? " m" : Number(s.kg) > 0 ? "" : " reps") + (s.left !== undefined && s.left !== "" ? ", " + leftPhrase(String(s.left), item.log) : "")
+    : (sug.kg || sug.reps ? "Aim: " + (sug.kg ? fmtLoad(sug.kg, unit) + " × " + (sug.reps || "?") : sug.reps + " reps") : "Not logged");
+  return '<div class="set-row set-row--compact' + (done ? " is-done" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
+    '<button type="button" class="set-row__compact" data-act="edit-set"><span class="set-row__badge" aria-hidden="true">' + badge + "</span>" +
+    '<span class="set-row__name">' + esc(plainRowLabel(row.label)) + '</span><span class="set-row__value">' + esc(value) + "</span>" +
+    '<span class="visually-hidden">. ' + (done ? "Logged. Tap to change." : "Tap to log.") + "</span></button></div>";
+}
+function anyLogged(){ return Object.keys(state.entries).concat(state.pb ? Object.keys(state.pb.entries) : []).some(id => { const e = state.entries[id] || (state.pb && state.pb.entries[id]); return e && (e.sets || []).some(isLogged); }); }
+// Which set is open for editing in each exercise (memory only, never saved)
+const activeRows = {};
+function activeRowOf(item, e){ return activeRows[item.id] !== undefined ? activeRows[item.id] : firstOpenRow(item, e && e.sets ? e : null); }
 function stepperHTML(base, f, labelText, value, mode, suggestion){
   return '<div class="stepper-field"><label class="field__label" for="' + base + "-" + f + '">' + esc(labelText) + "</label>" +
     '<div class="stepper"><button type="button" class="stepper__button" data-act="dec" data-f="' + f + '" aria-label="Less">−</button>' +
     '<input class="stepper__input" id="' + base + "-" + f + '" data-f="' + f + '" type="text" inputmode="' + mode + '" autocomplete="off" value="' + esc(value) + '"' + (suggestion ? ' placeholder="' + esc(fmtNum(suggestion)) + '" data-suggest="' + esc(suggestion) + '"' : "") + ">" +
     '<button type="button" class="stepper__button" data-act="inc" data-f="' + f + '" aria-label="More">+</button></div></div>';
 }
-function fieldsHTML(item, kind, row, s, base, unit, warm, suggestKg){
+function fieldsHTML(item, kind, row, s, base, unit, warm, suggestKg, suggestReps){
   const weightLabel = unit === "plates" ? "Plates" : (item.log === "bw" ? "Added kg" : "Weight (kg)");
   const log = kind === "repl" ? "lift" : item.log;
   if (log === "time") return stepperHTML(base, "reps", "Minutes", s.reps, "numeric");
   if (log === "rounds") return stepperHTML(base, "reps", "Rounds", s.reps, "numeric");
-  let html = stepperHTML(base, "reps", log === "carry" ? "Metres" : (item.plan === "hd" && !warm && kind === "main" ? "Clean reps" : "Reps"), s.reps, "numeric");
+  let html = stepperHTML(base, "reps", log === "carry" ? "Metres" : (item.plan === "hd" && !warm && kind === "main" ? "Clean reps" : "Reps"), s.reps, "numeric", suggestReps ? Number(suggestReps) : null);
   html += stepperHTML(base, "kg", weightLabel, s.kg, "decimal", suggestKg);
   if (item.plan === "pb" && kind === "main" && log !== "time" && log !== "rounds"){
     const carry = log === "carry";
@@ -5249,7 +5380,8 @@ function setsFor(e, kind){ return kind === "repl" ? e.repl.sets : e.sets; }
 function goToNextSet(){
   const c = ctx(), day = sessionOf(c, state.ui.day), n = day ? nextSet(c.slot, day) : null;
   if (!n) return;
-  if (state.ui.openEx !== n.item.id){ state.ui.openEx = n.item.id; save(); renderAll(); }
+  if (n.kind === "main") activeRows[n.item.id] = n.i;
+  state.ui.openEx = n.item.id; save(); renderAll();
   const input = $("#" + n.item.id + "-" + n.kind + "-" + n.i + "-reps") || $("#ex-" + n.item.id + ' [data-kind="' + n.kind + '"][data-i="' + n.i + '"] input');
   if (!input) return;
   input.closest(".set-row").scrollIntoView({block: "center", behavior: reducedMotion() ? "auto" : "smooth"});
@@ -5264,6 +5396,7 @@ function applyValue(exEl, rowEl, input, raw, typing){
   if (input.value !== r.value) input.value = r.value;
   $(".error-text", rowEl).textContent = r.error;
   setsFor(e, kind)[i][f] = r.value;
+  if (kind === "main") activeRows[item.id] = i;   // keep this set open until "Log set" or another set is tapped
   if (kind === "main" && !e.doneAt && e.sets.some(isLogged)) e.doneAt = c.today;
   save();
   if (!typing){ refreshExercise(item.id, "#" + CSS.escape(input.id)); return; }
@@ -5289,6 +5422,7 @@ function refreshExercise(id, focusSel){
 }
 function listHandler(root){
   root.addEventListener("click", ev => {
+    clearTimeout(refreshTimer);
     const mk = ev.target.closest("[data-makeup]");
     if (mk){
       const c = ctx(), item = itemOf(c, mk.dataset.makeup), e = ensureEntry(c.slot, item);
@@ -5316,12 +5450,17 @@ function listHandler(root){
       const step = f !== "kg" ? CONFIG.repsStep : unit === "plates" ? CONFIG.plateStep : CONFIG.kgStep;
       const suggest = Number(input.dataset.suggest) || 0;
       let cur = Number(input.value);
-      if (input.value === "" && f === "kg" && suggest > 0){ applyValue(exEl, row, input, fmtNum(suggest)); return; }
+      if (input.value === "" && suggest > 0){ applyValue(exEl, row, input, fmtNum(suggest)); return; }
       cur = cur || 0;
       const next = Math.max(0, Math.round((cur + (act === "inc" ? step : -step)) * 100) / 100);
       applyValue(exEl, row, input, next === 0 && act === "dec" && f !== "kg" ? "" : fmtNum(next));
+    } else if (act === "log-set"){
+      logSet(c, item, e, exEl, +btn.closest(".set-row").dataset.i);
+    } else if (act === "edit-set"){
+      activeRows[item.id] = +btn.closest(".set-row").dataset.i;
+      rerenderExercise(item.id, '[data-i="' + activeRows[item.id] + '"] input[data-f="reps"]');
     } else if (act === "add"){
-      setsFor(e, btn.dataset.kind).push(emptySet()); save(); rerenderExercise(item.id, '[data-act="add"][data-kind="' + btn.dataset.kind + '"]');
+      setsFor(e, btn.dataset.kind).push(emptySet()); if (btn.dataset.kind === "main") activeRows[item.id] = e.sets.length - 1; save(); rerenderExercise(item.id, '[data-act="add"][data-kind="' + btn.dataset.kind + '"]');
     } else if (act === "remove"){
       const sets = setsFor(e, btn.dataset.kind);
       if (sets.length > 1){ sets.pop(); save(); rerenderExercise(item.id, '[data-act="' + (sets.length > 1 ? "remove" : "add") + '"][data-kind="' + btn.dataset.kind + '"]'); }
@@ -5375,7 +5514,7 @@ function listHandler(root){
     const t = ev.target, exEl = t.closest(".exercise"); if (!exEl) return;
     const c = ctx(), item = itemOf(c, exEl.dataset.id); if (!item) return;
     const e = ensureEntry(c.slot, item);
-    if (t.matches("input[data-f]") && t.closest(".set-row")){ refreshExercise(item.id, "#" + CSS.escape(t.id)); return; }
+    if (t.matches("input[data-f]") && t.closest(".set-row")){ deferRefresh(item.id); return; }
     if (t.matches("select[data-variant]")){
       e.variant = t.value;
       const fresh = itemOf(ctx(), item.id);
@@ -5411,6 +5550,16 @@ function listHandler(root){
     save(); rerenderExercise(item.id, "#" + CSS.escape(t.id));
   });
 }
+// Redraw after a field loses focus, but late enough that a tap on a button (which redraws anyway) wins.
+// Redrawing during the blur would swap the button out from under the tap.
+let refreshTimer = null;
+function deferRefresh(id){
+  clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    const act = document.activeElement, inside = act && act.id && act.closest && act.closest("#ex-" + id);
+    refreshExercise(id, inside ? "#" + CSS.escape(act.id) : null);
+  }, 300);
+}
 function finderStep(c, item, dir){
   const f = state.ui.finder[item.id], cur = Number(f.guess) || 0;
   f.guess = Math.max(0, cur + dir * CONFIG.kgStep);
@@ -5432,6 +5581,58 @@ function closeAndOpenNext(c, item){
   if (target){ target.scrollIntoView({block: "start", behavior: reducedMotion() ? "auto" : "smooth"}); const s = $(".exercise__summary", target); if (s) s.focus({preventScroll: true}); }
   if (isComplete(c.slot.entries[item.id])) toast(item.name + " saved.");
 }
+// "Log set": fill empty fields with the grey suggestions, save, confirm, start the rest timer, move on
+function logSet(c, item, e, exEl, i){
+  const a = rowArgs(c, item), row = item.rows[i] || {role: "set"};
+  const unit = unitOf(c.slot.units, item);
+  const last = a.last && a.last.sets ? sameUnit(withUnit(a.last.sets[i], a.last.unit), unit) : null;
+  const t = rowTarget(item, i, Object.assign({}, a, {entry: e}));
+  const w = item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
+  const sug = suggestedSet(e.sets[i], w && w.kg ? w.kg : t.kg, last, planRowReps(item, i));
+  const repsOk = sanitize("reps", sug.reps), kgOk = sanitize("kg", sug.kg, unit);
+  if (!(Number(repsOk.value) > 0)){ const err = $('[data-i="' + i + '"] .error-text', exEl); if (err) err.textContent = "Enter your reps first."; return; }
+  e.sets[i].reps = repsOk.value; e.sets[i].kg = kgOk.value;
+  if (!e.doneAt) e.doneAt = c.today;
+  save();
+  if (navigator.vibrate) try { navigator.vibrate(15); } catch (err){}
+  const next = e.sets.findIndex((s, k) => k > i && !isLogged(s));
+  activeRows[item.id] = next >= 0 ? next : -1;
+  rerenderExercise(item.id, next >= 0 ? '[data-i="' + next + '"] [data-act="log-set"]' : '[data-act="close"]');
+  const el = $("#ex-" + item.id + ' [data-i="' + i + '"]'); if (el){ el.classList.add("is-just-logged"); }
+  const secs = restSeconds(item.rest, row.role);
+  const day = sessionOf(c, state.ui.day), after = next < 0 && day ? nextSet(c.slot, day, item.id) : null;
+  if (secs) startRest(secs, next >= 0 ? item.name + ", " + plainRowLabel((item.rows[next] || {label: "next set"}).label) : (after ? after.item.name : "you're done for today"));
+  else toast(plainRowLabel(row.label || "Set") + " logged.");
+}
+
+/* ---------- 3.11b Rest timer (memory only; nothing is saved) ---------- */
+let rest = null, restTick = null;
+// Takes seconds and what comes next. Shows the timer bar and counts down.
+function startRest(secs, nextLabel){
+  rest = {end: Date.now() + secs * 1000, total: secs, next: nextLabel, doneShown: false};
+  $("#rest-bar").hidden = false; document.body.classList.add("has-rest");
+  clearInterval(restTick); restTick = setInterval(renderRest, 250); renderRest();
+}
+function stopRest(){ clearInterval(restTick); restTick = null; rest = null; $("#rest-bar").hidden = true; document.body.classList.remove("has-rest"); }
+function renderRest(){
+  if (!rest) return;
+  const left = Math.max(0, Math.ceil((rest.end - Date.now()) / 1000));
+  const mm = Math.floor(left / 60), ss = left % 60;
+  $("#rest-time").textContent = mm + ":" + (ss < 10 ? "0" : "") + ss;
+  $("#rest-fill").style.width = Math.round((1 - left / rest.total) * 100) + "%";
+  $("#rest-next").textContent = left > 0 ? "Next: " + rest.next : "Rest done. Go: " + rest.next;
+  $("#rest-bar").classList.toggle("is-done", left === 0);
+  if (left === 0 && !rest.doneShown){
+    rest.doneShown = true;
+    $("#rest-status").textContent = "Rest done.";
+    if (navigator.vibrate) try { navigator.vibrate([200, 100, 200]); } catch (err){}
+    setTimeout(() => { if (rest && rest.doneShown) stopRest(); }, 8000);
+  }
+}
+$("#rest-add").addEventListener("click", () => { if (rest){ rest.end = Math.max(rest.end, Date.now()) + 30000; rest.total += 30; rest.doneShown = false; renderRest(); } });
+$("#rest-skip").addEventListener("click", stopRest);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") renderRest(); });
+
 listHandler($("#exercise-list"));
 listHandler($("#catchup"));
 listHandler($("#makeup-body"));
