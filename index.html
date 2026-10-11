@@ -225,7 +225,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     plannedTopLeft(cycle, iso) : Takes the cycle and the date a powerbuilding session was done. Returns the top-set reps left planned that week.
     firstWorkRow(item) : Takes an item. Returns the index of its first working row (0 when there is none).
     rowTarget(item, i, a) : Takes an item, a row index and {entry, last, unit, streak, cycle}. Returns {text, kg}: what to aim for on that row today. Dispatches to the Heavy Duty, top-set, back-off or accessory rule.
-    hdWarmup(item, i, a) : Heavy Duty. Takes an item, a row index and the same args as rowTarget. Returns the warm-up line data: {pct, kg, workingKg, from} or {pct, pending: true}, or null for rows without a warm-up percentage. Rule: the main-set load is this week's entry, else today's target, else last week's load.
+    hdWarmup(item, i, a) : Heavy Duty. Takes an item, a row index and the same args as rowTarget. Returns the warm-up line data: {pct, kg, workingKg, from, source} or {pct, pending: true}, or null for rows without a warm-up percentage. Rules: the main-set load is this week's entry, else today's target, else last week's load. The warm-up share is the one you actually used last time (last warm-up ÷ last main set, same unit), so your own choices carry forward; with no history, or a share outside CONFIG.warmupShareRange, it is the plan's percentage. Same main-set weight as last time → exactly last time's warm-up weight.
 
   2.18 App state shape
     freshSlot(weekStart) : Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
@@ -952,7 +952,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-11.2",
+ "appVersion": "2026-10-11.3",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -1280,6 +1280,10 @@ const CONFIG = {
    "d1-7",
    "d5-7"
   ]
+ ],
+ "warmupShareRange": [
+  0.3,
+  0.95
  ]
 };
 
@@ -4372,22 +4376,37 @@ function rowTarget(item, i, a){
 }
 
 // Heavy Duty. Takes an item, a row index and the same args as rowTarget. Returns the warm-up line data:
-// {pct, kg, workingKg, from} or {pct, pending: true}, or null for rows without a warm-up percentage.
-// Rule: the main-set load is this week's entry, else today's target, else last week's load.
+// {pct, kg, workingKg, from, source} or {pct, pending: true}, or null for rows without a warm-up percentage.
+// Rules: the main-set load is this week's entry, else today's target, else last week's load.
+// The warm-up share is the one you actually used last time (last warm-up ÷ last main set, same unit),
+// so your own choices carry forward; with no history, or a share outside CONFIG.warmupShareRange,
+// it is the plan's percentage. Same main-set weight as last time → exactly last time's warm-up weight.
 function hdWarmup(item, i, a){
   const row = item.rows[i];
   if (!row || row.role !== "warm" || !row.pct || row.pct >= 100) return null;
   const w = firstWorkRow(item);
+  const lastSets = a.last && a.last.sets ? a.last.sets.map(s => sameUnit(withUnit(s, a.last.unit), a.unit)) : null;
+  const lastWarm = lastSets && lastSets[i] && Number(lastSets[i].kg) > 0 ? Number(lastSets[i].kg) : 0;
+  const lastWork = lastSets && lastSets[w] && Number(lastSets[w].kg) > 0 ? Number(lastSets[w].kg) : 0;
   const now = a.entry && a.entry.sets[w] ? Number(a.entry.sets[w].kg) : 0;
   let workingKg = 0, from = "";
   if (now > 0){ workingKg = now; from = "this week"; }
   else {
     const t = rowTarget(item, w, a);
     if (t.kg){ workingKg = t.kg; from = "today's target"; }
-    else if (a.last && a.last.sets && a.last.sets[w] && Number(sameUnit(withUnit(a.last.sets[w], a.last.unit), a.unit).kg) > 0){ workingKg = Number(a.last.sets[w].kg); from = "last time"; }
+    else if (lastWork){ workingKg = lastWork; from = "last time"; }
   }
-  if (!workingKg) return {pct: row.pct, pending: true};
-  return {pct: row.pct, kg: warmupLoad(row.pct, workingKg, a.unit), workingKg: workingKg, from: from};
+  if (!workingKg){
+    if (lastWarm) return {pct: row.pct, kg: lastWarm, workingKg: 0, from: "", source: "last-only"};
+    return {pct: row.pct, pending: true};
+  }
+  const share = lastWarm && lastWork ? lastWarm / lastWork : 0;
+  const range = CONFIG.warmupShareRange;
+  if (share >= range[0] && share <= range[1]){
+    if (workingKg === lastWork) return {pct: Math.round(share * 100), kg: lastWarm, workingKg: workingKg, from: from, source: "same"};
+    return {pct: Math.round(share * 100), kg: roundTo(workingKg * share, a.unit), workingKg: workingKg, from: from, source: "yours", planPct: row.pct};
+  }
+  return {pct: row.pct, kg: warmupLoad(row.pct, workingKg, a.unit), workingKg: workingKg, from: from, source: "plan"};
 }
 
 /* ---------- 2.18 App state shape ---------- */
@@ -4816,9 +4835,16 @@ function setRowHTML(c, item, kind, i, s, a){
     if (wp) html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
       esc(wp.kg > 0 ? fmtLoad(wp.kg, wp.unit) + " × " + wp.reps : wp.reps + " reps") + ". " + (wp.day < item.day ? "Aim to hold this." : "Your baseline for the week.") + "</p>";
   }
-  if (w) html += '<p class="set-row__hint">' + (w.pending ? esc(w.pct + "% of your main-set weight. Enter that weight to see this in " + (unit === "plates" ? "plates." : "kg.")) :
-    "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of " + esc(fmtLoad(w.workingKg, unit)) + ", " + esc(w.from) + ".") + "</p>";
-  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, t.kg) + "</div>";
+  if (w){
+    let line;
+    if (w.pending) line = esc(w.pct + "% of your main-set weight. Enter that weight to see this in " + (unit === "plates" ? "plates." : "kg."));
+    else if (w.source === "last-only") line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: what you used last time.";
+    else if (w.source === "same") line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: what you used last time, with the same main-set weight.";
+    else if (w.source === "yours") line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: your own " + term("percent", w.pct + "%") + " from last time, of " + esc(fmtLoad(w.workingKg, unit)) + " (" + esc(w.from) + ")." + (w.pct !== w.planPct ? " Plan says " + w.planPct + "%." : "");
+    else line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of " + esc(fmtLoad(w.workingKg, unit)) + ", " + esc(w.from) + ".";
+    html += '<p class="set-row__hint">' + line + "</p>";
+  }
+  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, w && w.kg ? w.kg : t.kg) + "</div>";
   if (kind === "main" && (row.role === "top" || (row.role === "test" && i === 2)) && isLogged(s) && Number(s.kg) > 0){
     const em = estimatedMax(s.kg, s.reps, s.left);
     if (em) html += '<p class="set-row__hint">' + term("estmax", "Estimated max") + ": about " + esc(fmtLoad(em, unit)) + ".</p>";
