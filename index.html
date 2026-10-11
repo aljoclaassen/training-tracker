@@ -166,6 +166,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     compareToLast(set, last) : Takes this set and last time's same set. Returns {reps, kg}: true where this set beats last time.
     setText(s) : Takes a set. Returns how it reads: "8", or "8 + 2 RP" with rest-pause or forced reps.
     perfText(s, unit) : Takes a set and the unit. Returns "60 kg × 8, 2 left" style text.
+    weekPartner(slot, itemId) : Heavy Duty. Takes the slot and an exercise id. Returns this week's result on its partner day {day, kg, reps, unit} or null. Rule: only pairs in CONFIG.hdWeekPairs (same exercise, same place in the session, Days 1 and 5); only main sets count. It is a baseline to hold, not a progression target.
 
   2.10 Next targets
     nextTargetHd(item, i, last, unit, belowStreak, gapWeeks) : Heavy Duty. Takes an item, a row index, last week's same set, the unit, the below-range streak and the weeks away. Returns {text, kg}. Rules (clean reps only): top of range → add the small step; inside range → same weight, one more rep; rest-pause or forced reps → same weight, one more clean rep; stopped short → repeat; below range two weeks running → drop about 7.5%; 3+ weeks away → about 90%.
@@ -951,7 +952,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-11.1",
+ "appVersion": "2026-10-11.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -1236,7 +1237,8 @@ const CONFIG = {
   "shy": "Stop that many clean reps before you can't do another.",
   "makeup": "An exercise from a missed day, done on a later day.",
   "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
-  "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down."
+  "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
+  "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week."
  },
  "carryEffortScale": [
   {
@@ -1264,6 +1266,20 @@ const CONFIG = {
    "name": "Couldn't go on",
    "short": "Had to put it down before the end"
   }
+ ],
+ "hdWeekPairs": [
+  [
+   "d1-0",
+   "d5-0"
+  ],
+  [
+   "d1-6",
+   "d5-6"
+  ],
+  [
+   "d1-7",
+   "d5-7"
+  ]
  ]
 };
 
@@ -3740,6 +3756,21 @@ function perfText(s, unit){
   return load + setText(s) + (load ? "" : " reps") + left;
 }
 
+// Heavy Duty. Takes the slot and an exercise id. Returns this week's result on its partner day
+// {day, kg, reps, unit} or null. Rule: only pairs in CONFIG.hdWeekPairs (same exercise, same place in
+// the session, Days 1 and 5); only main sets count. It is a baseline to hold, not a progression target.
+function weekPartner(slot, itemId){
+  const pair = CONFIG.hdWeekPairs.filter(p => p.indexOf(itemId) >= 0)[0];
+  if (!pair) return null;
+  const otherId = pair[0] === itemId ? pair[1] : pair[0], meta = EXERCISES[otherId], e = slot.entries[otherId];
+  if (!meta || !e || e.replaced || isMissed(e)) return null;
+  const rows = meta.item.rows || parseRows(meta.item.sets);
+  const best = bestSet(e.sets.filter((s, i) => !/^Warm-up/.test(rows[i] || "")));
+  if (!best) return null;
+  const unit = (slot.units && slot.units[otherId]) || defaultUnit(meta.item);
+  return {day: meta.day, kg: best.kg, reps: best.reps, unit: unit};
+}
+
 /* ---------- 2.10 Next targets ---------- */
 
 // Heavy Duty. Takes an item, a row index, last week's same set, the unit, the below-range streak and the
@@ -4780,6 +4811,11 @@ function setRowHTML(c, item, kind, i, s, a){
   let html = '<div class="set-row' + (warm ? " is-warm" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
     '<div class="set-row__head"><span class="set-row__label">' + label + spec + '</span><span class="set-row__beat">Beat last time</span></div>';
   if (t.text) html += '<p class="set-row__hint">' + term("target", "Target") + ": " + esc(t.text) + "</p>";
+  if (kind === "main" && item.plan === "hd" && row.role === "work"){
+    const wp = weekPartner(c.slot, item.id);
+    if (wp) html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
+      esc(wp.kg > 0 ? fmtLoad(wp.kg, wp.unit) + " × " + wp.reps : wp.reps + " reps") + ". " + (wp.day < item.day ? "Aim to hold this." : "Your baseline for the week.") + "</p>";
+  }
   if (w) html += '<p class="set-row__hint">' + (w.pending ? esc(w.pct + "% of your main-set weight. Enter that weight to see this in " + (unit === "plates" ? "plates." : "kg.")) :
     "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of " + esc(fmtLoad(w.workingKg, unit)) + ", " + esc(w.from) + ".") + "</p>";
   html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, t.kg) + "</div>";
