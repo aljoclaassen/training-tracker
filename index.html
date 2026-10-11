@@ -43,7 +43,8 @@ DATA STRUCTURE (Layer 1)
               leftByWeek?, rest, notes, swap, pair? ("A1"), lift? (main lifts), top/backoff (main lifts),
               checklist? (stretching), rule? (nordic|carry)}
   Exercise ids never change. Heavy Duty: d1-0 ... d5-7 (plus d2-pec, d3-facepull,
-  d4-ohcable). Powerbuilding: pb-d1-squat ... pb-d5-sprints, plus pb-dN-warmup
+  d4-ohcable). Removed ids stay unused: d4-underpd (underhand pushdown), d3-9 (optional
+  deadlift, removed 11 October 2026); old logs for them are ignored. Powerbuilding: pb-d1-squat ... pb-d5-sprints, plus pb-dN-warmup
   for each day's warm-up checklist (new, not counted toward progress).
 
 STORAGE KEYS
@@ -950,7 +951,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-10.3",
+ "appVersion": "2026-10-11.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2016,16 +2017,6 @@ const PROGRAMME = {
          "reps": "6–8 @ 100%",
          "rest": "90 s",
          "notes": "Hold a plate."
-        },
-        {
-         "id": "d3-9",
-         "name": "Deadlift",
-         "equip": "Barbell",
-         "sets": "1W + 1",
-         "reps": "8 @ 60% → 6–8 @ 100%",
-         "rest": "3 min",
-         "notes": "Optional. Doesn't count toward the day's total.",
-         "optional": true
         }
        ]
       },
