@@ -231,7 +231,8 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
   2.18 Logging a set quickly
     restSeconds(text, role) : Takes the plan's rest text and the row's role. Returns seconds to rest after that set, or null. Rules: "None" → no rest (the first half of a pair); a range uses its lower end; "4 min after the top set, 3 min after back-offs" picks the part for the role; warm-ups and checklists → null, because the plan gives them no rest time.
     planRowReps(item, i) : Takes an item and a row index. Returns the planned reps for that row as a number, or null. Rules: Heavy Duty reads the row's part of the prescription ("15 @ 50%" → 15, "10–12 @ 100%" → 10); powerbuilding reads the row's reps ("10–12" → 10).
-    suggestedSet(set, suggestKg, lastSet, planReps) : Takes the set as typed, the suggested load (warm-up weight or target), last time's same set and the planned reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight takes the suggested load, else last time's; empty reps take last time's reps, else the planned reps.
+    suggestedSet(set, suggestKg, lastSet, planReps, targetReps) : Takes the set as typed, the suggested load (warm-up weight or target), last time's same set, the planned reps and the target's reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight takes the suggested load, else last time's; empty reps take the target's reps, else last time's, else the planned reps.
+    bestKnownLoad(item, i, a, history) : Takes an item, a row index and rowTarget's args. Returns {kg, from} for showing a weight even when no target rule applies, or null. Order: the target, then last time's same set, then last time's heaviest working set, then the latest history for this exercise name (same unit only).
     setsProgress(item, entry) : Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets, counting working sets only when the exercise has warm-ups.
     firstOpenRow(item, entry) : Takes an item and its entry. Returns the index of the first set not yet logged, or -1 when all are.
 
@@ -1743,7 +1744,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-11.5",
+ "appVersion": "2026-10-12.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -4580,20 +4581,20 @@ function nextTargetHd(item, i, last, unit, belowStreak, gapWeeks){
   const range = repRange(item); if (!range) return none;
   const r = Number(last.reps) || 0, kg = Number(last.kg) || 0;
   const assisted = (last.end === "rp" || last.end === "forced") && Number(last.extra) > 0;
-  if (kg === 0) return {text: "Aim for " + (r + 1) + " clean reps.", kg: null};
+  if (kg === 0) return {text: "Aim for " + (r + 1) + " clean reps.", kg: null, reps: r + 1};
   if (gapWeeks != null && gapWeeks >= CONFIG.longGapWeeks){
     const down = returnLoad(kg, unit);
-    return {text: "About " + fmtLoad(down, unit) + " × " + range.min + "+. That's 90% after a break. Rebuild over two sessions.", kg: down};
+    return {text: "About " + fmtLoad(down, unit) + " × " + range.min + "+. That's 90% after a break. Rebuild over two sessions.", kg: down, reps: range.min};
   }
-  if (r >= range.max){ const step = loadStep(kg, unit); return {text: "Add " + fmtLoad(step, unit) + ": " + fmtLoad(kg + step, unit) + " × " + range.min + "+ clean.", kg: kg + step}; }
-  if (last.end === "short") return {text: "Repeat " + fmtLoad(kg, unit) + " if it feels fine. Aim for " + range.min + "+ clean.", kg: kg};
-  if (assisted) return {text: fmtLoad(kg, unit) + " × " + (r + 1) + " clean, before any " + (last.end === "rp" ? "pauses." : "forced reps."), kg: kg};
-  if (r >= range.min) return {text: fmtLoad(kg, unit) + " × " + (r + 1) + " clean.", kg: kg};
+  if (r >= range.max){ const step = loadStep(kg, unit); return {text: "Add " + fmtLoad(step, unit) + ": " + fmtLoad(kg + step, unit) + " × " + range.min + "+ clean.", kg: kg + step, reps: range.min}; }
+  if (last.end === "short") return {text: "Repeat " + fmtLoad(kg, unit) + " if it feels fine. Aim for " + range.min + "+ clean.", kg: kg, reps: range.min};
+  if (assisted) return {text: fmtLoad(kg, unit) + " × " + (r + 1) + " clean, before any " + (last.end === "rp" ? "pauses." : "forced reps."), kg: kg, reps: r + 1};
+  if (r >= range.min) return {text: fmtLoad(kg, unit) + " × " + (r + 1) + " clean.", kg: kg, reps: r + 1};
   if (belowStreak >= CONFIG.belowStreakToDrop){
     const down = unit === "plates" ? Math.max(1, Math.min(kg - 1, Math.round(kg * CONFIG.dropPercent))) : roundKg(kg * CONFIG.dropPercent);
-    return {text: "Two weeks below " + range.min + " reps. Drop to " + fmtLoad(down, unit) + " and rebuild.", kg: down};
+    return {text: "Two weeks below " + range.min + " reps. Drop to " + fmtLoad(down, unit) + " and rebuild.", kg: down, reps: range.min};
   }
-  return {text: "Stay at " + fmtLoad(kg, unit) + " until you reach " + range.min + " clean reps.", kg: kg};
+  return {text: "Stay at " + fmtLoad(kg, unit) + " until you reach " + range.min + " clean reps.", kg: kg, reps: range.min};
 }
 
 // Powerbuilding top set. Takes the lift id, last top set, the reps left planned for it, this week's planned
@@ -4603,11 +4604,11 @@ function nextTopSet(lift, last, plannedLeft, reps, unit){
   if (!last || !isLogged(last) || !(Number(last.kg) > 0)) return {text: "", kg: null};
   const kg = Number(last.kg), planned = parseLeft(plannedLeft);
   const add = unit === "plates" ? 1 : PROGRAMME.plans.pb.mainLifts[lift].easyAddKg;
-  if (last.left === "" || last.left == null || !planned) return {text: fmtLoad(kg, unit) + " × " + reps + ". Note your reps left.", kg: kg};
+  if (last.left === "" || last.left == null || !planned) return {text: fmtLoad(kg, unit) + " × " + reps + ". Note your reps left.", kg: kg, reps: Number(reps)};
   const left = Number(last.left);
-  if (left >= planned.max + 1) return {text: "Felt easy last time. Add " + fmtLoad(add, unit) + ": " + fmtLoad(kg + add, unit) + " × " + reps + ".", kg: kg + add};
-  if (left <= planned.min - 1) return {text: "Last time was a grind. Keep " + fmtLoad(kg, unit) + " × " + reps + ".", kg: kg};
-  return {text: "Same weight: " + fmtLoad(kg, unit) + " × " + reps + ". Week B is harder on its own.", kg: kg};
+  if (left >= planned.max + 1) return {text: "Felt easy last time. Add " + fmtLoad(add, unit) + ": " + fmtLoad(kg + add, unit) + " × " + reps + ".", kg: kg + add, reps: Number(reps)};
+  if (left <= planned.min - 1) return {text: "Last time was a grind. Keep " + fmtLoad(kg, unit) + " × " + reps + ".", kg: kg, reps: Number(reps)};
+  return {text: "Same weight: " + fmtLoad(kg, unit) + " × " + reps + ". Week B is harder on its own.", kg: kg, reps: Number(reps)};
 }
 
 // Powerbuilding back-off. Takes today's top-set load, the percentage lighter and the unit. Returns {text, kg}.
@@ -4638,7 +4639,7 @@ function nextAccessory(item, i, lastSets, unit){
   if (allTop && kg > 0){ const step = loadStep(kg, unit); return {text: "Top of the range last time. Add " + fmtLoad(step, unit) + ": " + fmtLoad(kg + step, unit) + " × " + item.repMin + "+.", kg: kg + step}; }
   if (allTop) return {text: "Top of the range last time. Add a little weight.", kg: null};
   const aim = Math.min(item.repMax, reps + 1);
-  return kg > 0 ? {text: fmtLoad(kg, unit) + " × " + aim + ".", kg: kg} : {text: "Aim for " + aim + " reps.", kg: null};
+  return kg > 0 ? {text: fmtLoad(kg, unit) + " × " + aim + ".", kg: kg, reps: aim} : {text: "Aim for " + aim + " reps.", kg: null, reps: aim};
 }
 
 // Takes kg, reps done and reps left. Returns the estimated max for one rep, rounded to 0.5 kg.
@@ -5169,7 +5170,7 @@ function rowTarget(item, i, a){
   if (row.role === "backoff"){
     const todayTop = a.entry && a.entry.sets[0] ? Number(a.entry.sets[0].kg) : 0;
     const topKg = todayTop > 0 ? todayTop : rowTarget(item, 0, a).kg;
-    return backoffTarget(topKg, item.backoffPct, a.unit);
+    return Object.assign(backoffTarget(topKg, item.backoffPct, a.unit), {reps: Number(row.reps) || null});
   }
   if (row.role === "test" || row.role === "check" || row.role === "warm") return {text: "", kg: null};
   return nextAccessory(item, i, lastSets, a.unit);
@@ -5236,15 +5237,31 @@ function planRowReps(item, i){
   return m ? Number(m[1]) : null;
 }
 
-// Takes the set as typed, the suggested load (warm-up weight or target), last time's same set and the
-// planned reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight
-// takes the suggested load, else last time's; empty reps take last time's reps, else the planned reps.
-function suggestedSet(set, suggestKg, lastSet, planReps){
+// Takes the set as typed, the suggested load (warm-up weight or target), last time's same set, the
+// planned reps and the target's reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed
+// wins; an empty weight takes the suggested load, else last time's; empty reps take the target's reps,
+// else last time's, else the planned reps.
+function suggestedSet(set, suggestKg, lastSet, planReps, targetReps){
   const lastOk = lastSet && isLogged(lastSet);
-  const reps = set.reps !== "" && set.reps != null ? set.reps : (lastOk ? String(lastSet.reps) : (planReps ? String(planReps) : ""));
+  const reps = set.reps !== "" && set.reps != null ? set.reps : (targetReps ? String(targetReps) : (lastOk ? String(lastSet.reps) : (planReps ? String(planReps) : "")));
   let kg = set.kg;
   if (kg === "" || kg == null) kg = suggestKg ? fmtNum(suggestKg) : (lastOk && Number(lastSet.kg) > 0 ? fmtNum(lastSet.kg) : "");
   return {reps: reps, kg: kg};
+}
+
+// Takes an item, a row index and rowTarget's args. Returns {kg, from} for showing a weight even when no
+// target rule applies, or null. Order: the target, then last time's same set, then last time's heaviest
+// working set, then the latest history for this exercise name (same unit only).
+function bestKnownLoad(item, i, a, history){
+  const t = rowTarget(item, i, a);
+  if (t.kg) return {kg: t.kg, from: "target"};
+  const sets = a.last && a.last.sets ? a.last.sets.map(x => sameUnit(withUnit(x, a.last.unit), a.unit)) : [];
+  if (sets[i] && Number(sets[i].kg) > 0) return {kg: Number(sets[i].kg), from: "last"};
+  const best = bestSet(sets.filter((x, k) => isWorkingRow(item, k)));
+  if (best && best.kg > 0) return {kg: best.kg, from: "last"};
+  const h = history ? history[keyOf(item.name)] : null;
+  if (h && h.kg > 0 && (h.unit || "kg") === a.unit) return {kg: h.kg, from: "history"};
+  return null;
 }
 
 // Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets,
@@ -5583,8 +5600,9 @@ function summaryText(c, item){
     return parts.join(" · ");
   }
   if (hasWeight(item)){
-    const a = rowArgs(c, item), w = firstWorkRow(item), t = rowTarget(item, w, Object.assign(a, {entry: ensureEntryView(c, item)}));
-    if (t.kg) parts.push(fmtLoad(t.kg, a.unit));
+    const a = rowArgs(c, item), w = firstWorkRow(item), k = bestKnownLoad(item, w, Object.assign(a, {entry: ensureEntryView(c, item)}), c.slot.history);
+    if (k) parts.push((k.from === "target" ? "" : "last ") + fmtLoad(k.kg, a.unit));
+    else if (item.log !== "bw" && !(item.kind === "main" && item.lift)) parts.push("no weight logged yet");
     else if (item.kind === "main" && item.lift){ const g = topSetGuess(item.lift, item.variant, state); if (g.kg) parts.push("about " + fmtLoad(g.kg, "kg")); }
   }
   return parts.join(" · ");
@@ -5685,7 +5703,8 @@ function setRowHTML(c, item, kind, i, s, a){
   }
   const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : {text: "", kg: null};
   const w = kind === "main" && item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
-  const sug = suggestedSet(s, w && w.kg ? w.kg : t.kg, last, kind === "main" ? planRowReps(item, i) : null);
+  const known = kind === "main" && !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
+  const sug = suggestedSet(s, w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, kind === "main" ? planRowReps(item, i) : null, t.reps || null);
   const active = kind !== "main" || activeRowOf(item, e) === i;
   if (!active) return compactRowHTML(item, kind, i, s, row, sug, unit, beat);
   let label = plainRowLabel(row.label);
@@ -5731,7 +5750,7 @@ function compactRowHTML(item, kind, i, s, row, sug, unit, beat){
   const done = isLogged(s);
   const badge = done ? "✓" : row.role === "warm" ? "W" : String(i + 1);
   const value = done ? (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " × " : "") + setText(s) + (item.log === "carry" ? " m" : Number(s.kg) > 0 ? "" : " reps") + (s.left !== undefined && s.left !== "" ? ", " + leftPhrase(String(s.left), item.log) : "")
-    : (sug.kg || sug.reps ? "Aim: " + (sug.kg ? fmtLoad(sug.kg, unit) + " × " + (sug.reps || "?") : sug.reps + " reps") : "Not logged");
+    : (sug.kg || sug.reps ? "Aim: " + (sug.kg ? fmtLoad(sug.kg, unit) + " × " + (sug.reps || "?") : sug.reps + " reps" + (hasWeight(item) && item.log !== "bw" ? ", choose a weight" : "")) : "Not logged");
   return '<div class="set-row set-row--compact' + (done ? " is-done" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
     '<button type="button" class="set-row__compact" data-act="edit-set"><span class="set-row__badge" aria-hidden="true">' + badge + "</span>" +
     '<span class="set-row__name">' + esc(plainRowLabel(row.label)) + '</span><span class="set-row__value">' + esc(value) + "</span>" +
@@ -6368,7 +6387,8 @@ function logSet(c, item, e, exEl, i){
   const last = a.last && a.last.sets ? sameUnit(withUnit(a.last.sets[i], a.last.unit), unit) : null;
   const t = rowTarget(item, i, Object.assign({}, a, {entry: e}));
   const w = item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
-  const sug = suggestedSet(e.sets[i], w && w.kg ? w.kg : t.kg, last, planRowReps(item, i));
+  const known = !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
+  const sug = suggestedSet(e.sets[i], w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, planRowReps(item, i), t.reps || null);
   const repsOk = sanitize("reps", sug.reps), kgOk = sanitize("kg", sug.kg, unit);
   if (!(Number(repsOk.value) > 0)){ const err = $('[data-i="' + i + '"] .error-text', exEl); if (err) err.textContent = "Enter your reps first."; return; }
   e.sets[i].reps = repsOk.value; e.sets[i].kg = kgOk.value;
