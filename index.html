@@ -20,9 +20,9 @@ FILE LAYOUT
   <body>             Semantic markup, one commented block per section.
   <script>           Layer 0  compatibility fixes
                      Layer 1  DATA: CONFIG and PROGRAMME (pure JSON)
-                     Layer 2  LOGIC: pure functions (2.1 to 2.18)
+                     Layer 2  LOGIC: pure functions (2.1 to 2.21)
                      Layer 2b STORAGE: the only code that saves or loads
-                     Layer 3  DISPLAY: rendering and event handlers (3.1 to 3.15)
+                     Layer 3  DISPLAY: rendering and event handlers (3.1 to 3.16)
   Display never calculates; it calls logic. Logic never touches the page.
 
 DATA STRUCTURE (Layer 1)
@@ -53,14 +53,21 @@ STORAGE KEYS
   old saves load untouched) plus:
     cycle {start (Monday, YYYY-MM-DD), first ("hd"|"pb")}   set on first use
     pb    a second slot with the same shape, for powerbuilding
-    ui    {tab, day, openEx, theme, mode, cols, helpSeen, planView, finder,
-           varOpen, makeupDay, lastOpened, dismissedMiss}
+    ui    {tab ("train"|"plan"|"history"), day, openEx, openExtra, theme, mode, cols, helpSeen,
+           planView, finder, varOpen, makeupDay, lastOpened, dismissedMiss, histPlan, histWeek, histEx}
   Slot = {weekStart, entries{id: entry}, units{id or id:variant: "kg"|"plates"},
-          lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, ui{dismissedMiss}}
+          lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, ui{dismissedMiss},
+          extras{dayN: [{id, name, unit, sets[], doneAt}]},
+          savedSwaps{id: [{name, unit, sets[], date, regular}]}   newest first, at most CONFIG.maxSaved,
+          savedExtras{dayN: [{name, unit, sets[], date}]}}       kept per plan and per day, never shared}
   Entry = {sets[{reps, kg, end?, extra?, left?}], variant?, doneAt, replaced,
            repl{name, reason, date, unit?, sets[]}, missed{on, reason, date, madeUp{day,date}?, viaDay?}}
   "reps" holds the main count: reps, metres (carries), minutes (bike),
   rounds (sprints) or "1" for a ticked checklist line. "left" = reps left 0 to 4.
+  localStorage "training-tracker-archive": {hd: [week], pb: [week]}, newest first, the last
+    CONFIG.archiveWeeks finished weeks per plan. Week = {weekStart, entries (export shape), extras}.
+    Filled by Start new week, Load last week and Restore. Not part of the export file.
+  localStorage "training-tracker-theme": {palette, mode, contrast}. Not part of the export file.
   Offline copy: the browser's Cache Storage, cache "training-tracker-<appVersion>" (sw.js).
   "localStorage-test" is written and removed once to check saving works.
 
@@ -71,9 +78,9 @@ EXPORT FORMAT (unchanged from version 1, with additions)
    entries{id: {plan, day, exercise, rows[], sets[], unit, variant?, doneAt, replaced,
                 replacement|null, missed|null}},
    streaks{}, history{}, varHistory{}, variations[], missedDays[{day, title, date, reason,
-   total, madeUp[], note}],
+   total, madeUp[], note}], extras{dayN: [...]},
    backup{lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, units,
-          otherPlan: {plan, slot} | null}}
+          savedSwaps, savedExtras, otherPlan: {plan, slot} | null}}
   Version 1 files (no "plan") import as Heavy Duty. Every session is tagged with
   its plan, and comparisons only ever use the same plan's slot.
 
@@ -236,7 +243,24 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     setsProgress(item, entry) : Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets, counting working sets only when the exercise has warm-ups.
     firstOpenRow(item, entry) : Takes an item and its entry. Returns the index of the first set not yet logged, or -1 when all are.
 
-  2.19 App state shape
+  2.19 Saved swaps and extra exercises
+    cleanExtras(x) : Takes extras from a file or state. Returns clean extras: {dayN: [{id, name, unit, sets, doneAt}]}.
+    rememberNamed(list, rec) : Takes the saved list for one exercise or day and a new record {name, unit, sets, date}. Returns the list with that name moved to the front (newest first), keeping a regular flag already set, at most CONFIG.maxSaved.
+    harvestSaved(slot, entries, extras, date) : Takes a slot, a week's entries, that week's extras and the week's date. Remembers every named swap with logged sets (per exercise, so per day) and every extra exercise (per day). Changes slot in place. Rule: only the plan's own slot is touched, so Heavy Duty and Powerbuilding keep separate lists.
+    applyRegularSwaps(slot) : Takes a slot. For each exercise with a regular swap, starts this week's entry already swapped. Changes slot in place. Rule: only entries with nothing logged yet are touched.
+    setRegularSwap(slot, id, swap, on, today) : Takes a slot, an exercise id, the swap {name, unit, setCount}, on or off and today's date. Turns "do this instead every week" on or off for that swap. Changes slot in place. Rules: one regular swap per exercise; a new name is saved with empty sets, so it has no targets until a week with it logged is finished.
+    forgetSwap(slot, id, name) : Takes a slot, an exercise id and a swap name. Removes that saved swap. Changes slot in place.
+    savedSwapFor(list, name) : Takes the slot's saved list for an exercise and a swap name. Returns that saved record, or null.
+    swapTarget(item, i, savedSets, unit) : Takes an item, a row index, the saved sets from last time and the unit. Returns {text, kg, reps}: the target for a swapped exercise's set, using the original exercise's rep range and the plan's rules.
+    newExtra(name, unit, setCount, idSeed) : Takes a name, a unit and a set count. Returns a new extra exercise for a day.
+
+  2.20 History and progress
+    archiveAdd(archive, planId, exp, max) : Takes an archive {hd: [exports], pb: [exports]}, a plan id, an export and the most weeks to keep. Returns a new archive with that week added (replacing the same week if present), newest first.
+    weekView(entries, extras, planId) : Takes week entries {id: entry} in export or state shape, that week's extras and a plan id. Returns the week laid out by day: [{day, title, items:[{id, name, unit, sets:[{label, set, working}], swap:{name, unit, sets}|null, missed, madeUp}], extras:[{name, unit, sets}]}]. Unknown ids are ignored.
+    historyWeeks(slot, planId, sessions, archive, nowISO) : Takes the slot, plan id, this week's sessions, the archive and the time now. Returns every week there is to show, newest first: [{weekStart, source ("this"|"last"|"archive"), view}]. Rule: one entry per week; this week from the live log, then the archive, then last week if not archived.
+    exerciseProgress(weeks, id) : Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first: [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week. Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers.
+
+  2.21 App state shape
     freshSlot(weekStart) : Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
     slotOf(state, plan) : Takes the whole state and a plan id. Returns that plan's slot. Rule: Heavy Duty lives at the top level, exactly where version 1 kept it; powerbuilding lives in state.pb.
     normaliseState(raw, today) : Takes whatever was stored (or null) and today. Returns a complete, current state. Rules: version 1 data loads unchanged; moved calf ids are renamed; missing parts are added.
@@ -247,6 +271,8 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     storageLoad() : the saved state or null
     storageSave(state) : saves; true on success
     storageDownload(obj, filename) : promise of "saved" | "cancelled" | "busy" | "fallback"
+    archiveLoad() : {hd: [], pb: []}       archiveSave(archive) : true on success
+    themeLoad() / themeSave(t) : the theme choice
 
 FEATURES AND WHERE THEY LIVE
   First-use setup (start date, first plan) ...... #setup-panel; 3.9 button-setup-save; checkStartDate
@@ -289,6 +315,12 @@ FEATURES AND WHERE THEY LIVE
   "Log set" with grey suggested values ......... 3.11 logSet; 2.18 suggestedSet, planRowReps
   Sets done per exercise ("2/4 sets") .......... 3.4 exerciseHTML; 2.18 setsProgress
   Rest timer after each set ..................... 3.11b startRest; 2.18 restSeconds (memory only, not saved)
+  Saved swaps: "Swap again", quick picks,
+  "Do this instead every week", swap targets ..... 2.19 harvestSaved, setRegularSwap, applyRegularSwaps, swapTarget; 3.4 swapPanelHTML
+  Extra exercises with "Add again" reminder ...... 2.19 cleanExtras, newExtra; 3.4b renderExtras (not counted in progress)
+  History tab: any kept week, by day ............. 2.20 historyWeeks, weekView; 3.6b renderHistory
+  12-week archive on the phone ................... 2.20 archiveAdd; 2b archiveLoad/archiveSave; 3.14 archiveWeek
+  Progress per exercise .......................... 2.20 exerciseProgress; 3.6b progressHTML
   Offline copy and "Update now" bar .............. sw.js; 3.15 setupOffline; CONFIG.appVersion
 
 HOSTING AND UPDATES (GitHub Pages)
@@ -1333,7 +1365,7 @@ button, input, select, textarea{ font: inherit; color: inherit; }
 /* =====================================================================
    FLOATING: bottom navigation, next-set button, hazard card, toast
    ===================================================================== */
-.bottom-nav{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: grid; grid-template-columns: 1fr 1fr; height: calc(var(--size-nav) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--color-surface); border-top: var(--border-width) solid var(--color-border); }
+.bottom-nav{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: grid; grid-template-columns: 1fr 1fr 1fr; height: calc(var(--size-nav) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--color-surface); border-top: var(--border-width) solid var(--color-border); }
 .bottom-nav__button{ border: 0; background: none; font-weight: var(--font-weight-bold); color: var(--color-text-muted); cursor: pointer; }
 .bottom-nav__button[aria-current="page"]{ color: var(--color-accent-text); box-shadow: inset 0 3px 0 var(--color-accent); }
 .next-fab{ position: fixed; right: var(--space-4); bottom: calc(var(--size-nav) + var(--space-4) + env(safe-area-inset-bottom, 0px)); z-index: 30; box-shadow: 0 4px 12px var(--color-shadow); }
@@ -1391,6 +1423,29 @@ dialog:not([open]){ display: none; }
 .file-pick{ position: relative; }
 .file-pick input{ position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
 .file-pick input:focus-visible + .button{ outline: var(--focus-width) solid var(--color-focus); outline-offset: 2px; }
+
+/* ---------- History, saved swaps and extras ---------- */
+.remind{ margin: 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-base); background: var(--color-surface-alt); font-size: var(--font-size-small); }
+.chip-row{ display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.chip{ min-height: var(--size-tap); padding: 0 var(--space-3); border: var(--border-width) solid var(--color-border-control); border-radius: 999px; background: var(--color-surface); color: var(--color-text); font: inherit; font-weight: var(--font-weight-bold); cursor: pointer; }
+.chip:hover{ border-color: var(--color-accent); }
+.chip__tag{ font-size: var(--font-size-small); font-weight: normal; color: var(--color-text-muted); }
+.extras{ margin-top: var(--space-4); display: grid; gap: var(--space-2); }
+.extra .exercise__status{ border-style: dashed; }
+.hist{ display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.hist-day, .hist-progress{ padding: var(--space-3); background: var(--color-surface); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-large); display: grid; gap: var(--space-2); }
+.hist-day__title{ font-size: var(--font-size-base); }
+.hist-list{ margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-2); }
+.hist-list li{ display: grid; gap: 2px; padding-top: var(--space-2); border-top: var(--border-width) solid var(--color-border); }
+.hist-list li:first-child{ padding-top: 0; border-top: 0; }
+.hist-name{ font-weight: var(--font-weight-bold); }
+.hist-sets{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.hist-sets strong{ color: var(--color-text); }
+.hist-table{ width: 100%; border-collapse: collapse; font-size: var(--font-size-small); }
+.hist-table th, .hist-table td{ text-align: left; padding: var(--space-2) var(--space-1); border-bottom: var(--border-width) solid var(--color-border); vertical-align: top; }
+.hist-table th{ color: var(--color-text-muted); }
+.hist-table tr.is-swap td{ background: var(--color-surface-alt); }
+.empty-state{ padding: var(--space-4); text-align: center; background: var(--color-surface); border: var(--border-width) dashed var(--color-border); border-radius: var(--radius-large); display: grid; gap: var(--space-1); }
 </style>
 <script>
 /* Apply the saved theme before the page paints, so it never flashes the wrong colours.
@@ -1484,7 +1539,14 @@ dialog:not([open]){ display: none; }
       <section class="up-next" id="up-next" aria-live="polite" aria-label="Up next"></section>
       <div id="catchup"></div>
       <div class="exercise-list" id="exercise-list" role="tabpanel"></div>
+      <section class="extras" id="extras" aria-labelledby="extras-title"></section>
       <div id="swaps-log"></div>
+    </section>
+
+    <!-- HISTORY VIEW: past weeks (this, last and archived) and progress per exercise -->
+    <section id="view-hist" aria-labelledby="hist-title" hidden>
+      <h1 id="hist-title" tabindex="-1">History</h1>
+      <div id="hist-body" class="hist"></div>
     </section>
 
     <!-- PLAN VIEW: read-only plan for either programme -->
@@ -1508,6 +1570,7 @@ dialog:not([open]){ display: none; }
 <nav class="bottom-nav" aria-label="Pages">
   <button type="button" class="bottom-nav__button" data-tab="train"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Train</button>
   <button type="button" class="bottom-nav__button" data-tab="plan"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
+  <button type="button" class="bottom-nav__button" data-tab="history"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>History</button>
 </nav>
 <button type="button" class="button button--primary next-fab" id="next-fab" hidden>Next set</button>
 <button type="button" class="button to-top" id="to-top" hidden>Back to top</button>
@@ -1744,7 +1807,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-12.1",
+ "appVersion": "2026-10-19.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2030,7 +2093,9 @@ const CONFIG = {
   "makeup": "An exercise from a missed day, done on a later day.",
   "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
   "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
-  "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week."
+  "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week.",
+  "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
+  "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets."
  },
  "carryEffortScale": [
   {
@@ -2078,7 +2143,12 @@ const CONFIG = {
   0.95
  ],
  "themeStorageKey": "training-tracker-theme",
- "themeSwitchMs": 180
+ "themeSwitchMs": 180,
+ "archiveStorageKey": "training-tracker-archive",
+ "archiveWeeks": 12,
+ "maxSaved": 5,
+ "maxExtrasPerDay": 6,
+ "maxSetsPerExtra": 10
 };
 
 const PROGRAMME = {
@@ -4935,7 +5005,9 @@ function buildExport(slot, planId, sessions, otherSlotData, nowISO){
     weekStart: slot.weekStart, weekEnd: addDays(slot.weekStart, 6), entries: entries,
     streaks: exportStreaks(slot, sessions), history: mergedHistory(slot, sessions, unitFor), varHistory: mergedVarHistory(slot, sessions, unitFor),
     backup: {lastWeek: slot.lastWeek, history: slot.history || {}, varHistory: slot.varHistory || {}, loadedStreaks: slot.loadedStreaks || {},
-      pastVariations: slot.pastVariations || [], missedDays: slot.missedDays || {}, units: slot.units || {}, otherPlan: otherSlotData || null},
+      pastVariations: slot.pastVariations || [], missedDays: slot.missedDays || {}, units: slot.units || {}, otherPlan: otherSlotData || null,
+      savedSwaps: slot.savedSwaps || {}, savedExtras: slot.savedExtras || {}},
+    extras: slot.extras || {},
     variations: dedupeVariations((slot.pastVariations || []).concat(current)),
     missedDays: missedDays
   };
@@ -4944,7 +5016,7 @@ function buildExport(slot, planId, sessions, otherSlotData, nowISO){
 // for the other plan's backup inside an export file.
 function slotForExport(slot){
   const out = {};
-  ["weekStart", "entries", "units", "lastWeek", "history", "varHistory", "loadedStreaks", "pastVariations", "missedDays"].forEach(k => { if (slot[k] !== undefined) out[k] = JSON.parse(JSON.stringify(slot[k])); });
+  ["weekStart", "entries", "units", "lastWeek", "history", "varHistory", "loadedStreaks", "pastVariations", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (slot[k] !== undefined) out[k] = JSON.parse(JSON.stringify(slot[k])); });
   return out;
 }
 // Takes a plan id and a Monday. Returns the export file name.
@@ -4971,6 +5043,7 @@ function cleanLastEntry(id, x){
   const variants = item.variants ? PROGRAMME.plans[meta.plan].variants[item.variants] : null;
   return {
     sets: cleanSets(x.sets), unit: x.unit === "plates" || x.unit === "kg" ? x.unit : null,
+    rows: Array.isArray(x.rows) ? x.rows.slice(0, 20).map(str) : undefined,
     variant: variants && variants.some(v => v.id === x.variant) ? x.variant : undefined, doneAt: str(x.doneAt) || null, replaced: !!x.replaced,
     replacement: x.replaced && r ? {name: str(r.name), reason: CONFIG.reasons[r.reason] ? r.reason : "", date: str(r.date) || null, unit: r.unit === "plates" ? "plates" : "kg", sets: cleanSets(r.sets)} : null,
     missed: m && m.on ? {on: true, reason: CONFIG.missedReasons[m.reason] ? m.reason : "", date: str(m.date) || null,
@@ -4993,7 +5066,8 @@ function loadAsLastWeek(slot, planId, data){
     const n = Number(m && m.day);
     if (n >= 1 && n <= CONFIG.trainingDays && m.note) lwMissedDays[n] = {note: str(m.note).slice(0, 160), reason: CONFIG.dayMissReasons[m.reason] ? m.reason : "", date: str(m.date)};
   });
-  slot.lastWeek = {weekStart: parseISO(str(data.weekStart)) ? mondayOf(str(data.weekStart)) : null, exportedAt: str(data.exportedAt), entries: entries, missedDays: lwMissedDays};
+  slot.lastWeek = {weekStart: parseISO(str(data.weekStart)) ? mondayOf(str(data.weekStart)) : null, exportedAt: str(data.exportedAt), entries: entries, missedDays: lwMissedDays, extras: cleanExtras(data.extras)};
+  harvestSaved(slot, entries, slot.lastWeek.extras, slot.lastWeek.weekStart || "");
   slot.loadedStreaks = {};
   if (data.streaks && typeof data.streaks === "object") Object.keys(data.streaks).forEach(rawId => {
     const id = migrateId(rawId);
@@ -5043,10 +5117,12 @@ function startNewWeek(slot, planId, sessions, cycle, today, nowISO){
   const finished = buildExport(slot, planId, sessions, null, nowISO);
   slot.entries = {};
   slot.missedDays = {};
+  slot.extras = {};
   slot.ui = slot.ui || {};
   slot.ui.dismissedMiss = {};
   slot.weekStart = nextWeekForPlan(cycle, planId, laterOf(addDays(slot.weekStart, 7), mondayOf(today)));
   loadAsLastWeek(slot, planId, finished);
+  applyRegularSwaps(slot);
   return slot;
 }
 
@@ -5109,7 +5185,10 @@ function applyBackup(slot, p){
   slot.units = Object.assign({}, objOr(b && b.units, {}), p.units);
   slot.ui = slot.ui || {};
   slot.ui.dismissedMiss = {};
+  slot.extras = cleanExtras(p.data.extras);
   if (b){
+    slot.savedSwaps = objOr(b.savedSwaps, slot.savedSwaps || {});
+    slot.savedExtras = objOr(b.savedExtras, slot.savedExtras || {});
     slot.lastWeek = objOr(b.lastWeek, null);
     slot.history = objOr(b.history, {});
     slot.varHistory = objOr(b.varHistory, {});
@@ -5279,11 +5358,193 @@ function firstOpenRow(item, entry){
   return -1;
 }
 
-/* ---------- 2.19 App state shape ---------- */
+/* ---------- 2.19 Saved swaps and extra exercises ---------- */
+
+// Takes extras from a file or state. Returns clean extras: {dayN: [{id, name, unit, sets, doneAt}]}.
+function cleanExtras(x){
+  const out = {};
+  if (!x || typeof x !== "object") return out;
+  Object.keys(x).forEach(k => {
+    const n = Number(k);
+    if (!(n >= 1 && n <= CONFIG.trainingDays) || !Array.isArray(x[k])) return;
+    out[n] = x[k].slice(0, CONFIG.maxExtrasPerDay).map((e, i) => ({
+      id: str(e && e.id) || "x" + n + "-" + i, name: str(e && e.name).slice(0, 60), unit: e && e.unit === "plates" ? "plates" : "kg",
+      sets: cleanSets(e && e.sets).length ? cleanSets(e.sets) : [emptySet()], doneAt: parseISO(str(e && e.doneAt)) ? str(e.doneAt) : null
+    })).filter(e => e.name || e.sets.some(isLogged));
+  });
+  return out;
+}
+
+// Takes the saved list for one exercise or day and a new record {name, unit, sets, date}. Returns the list
+// with that name moved to the front (newest first), keeping a regular flag already set, at most CONFIG.maxSaved.
+function rememberNamed(list, rec){
+  const k = keyOf(rec.name), old = (list || []).filter(x => keyOf(x.name) === k)[0];
+  const merged = Object.assign({}, rec, {regular: !!(old && old.regular)});
+  return [merged].concat((list || []).filter(x => keyOf(x.name) !== k)).slice(0, CONFIG.maxSaved);
+}
+
+// Takes a slot, a week's entries, that week's extras and the week's date. Remembers every named swap with
+// logged sets (per exercise, so per day) and every extra exercise (per day). Changes slot in place.
+// Rule: only the plan's own slot is touched, so Heavy Duty and Powerbuilding keep separate lists.
+function harvestSaved(slot, entries, extras, date){
+  slot.savedSwaps = slot.savedSwaps || {}; slot.savedExtras = slot.savedExtras || {};
+  Object.keys(entries || {}).forEach(id => {
+    const e = entries[id], r = e && (e.replacement || (e.replaced ? e.repl : null));
+    if (!e || !e.replaced || !r || !str(r.name).trim()) return;
+    const sets = cleanSets(r.sets);
+    if (!sets.some(isLogged)) return;
+    slot.savedSwaps[id] = rememberNamed(slot.savedSwaps[id], {name: str(r.name).trim(), unit: r.unit === "plates" ? "plates" : "kg", sets: sets, date: str(r.date) || date});
+  });
+  Object.keys(extras || {}).forEach(d => (extras[d] || []).forEach(x => {
+    if (!x.name || !x.sets.some(isLogged)) return;
+    slot.savedExtras[d] = rememberNamed(slot.savedExtras[d], {name: x.name, unit: x.unit, sets: x.sets, date: x.doneAt || date});
+  }));
+  return slot;
+}
+
+// Takes a slot. For each exercise with a regular swap, starts this week's entry already swapped.
+// Changes slot in place. Rule: only entries with nothing logged yet are touched.
+function applyRegularSwaps(slot){
+  Object.keys(slot.savedSwaps || {}).forEach(id => {
+    const reg = (slot.savedSwaps[id] || []).filter(x => x.regular)[0];
+    if (!reg || !EXERCISES[id]) return;
+    const e = slot.entries[id];
+    if (e && ((e.sets || []).some(isLogged) || e.replaced)) return;
+    slot.entries[id] = {sets: [], replaced: true, doneAt: null, missed: {on: false, reason: "", date: null},
+      repl: {name: reg.name, reason: "other", date: slot.weekStart, unit: reg.unit, sets: reg.sets.map(emptySet)}};
+  });
+  return slot;
+}
+
+// Takes a slot, an exercise id, the swap {name, unit, setCount}, on or off and today's date.
+// Turns "do this instead every week" on or off for that swap. Changes slot in place.
+// Rules: one regular swap per exercise; a new name is saved with empty sets, so it has no targets
+// until a week with it logged is finished.
+function setRegularSwap(slot, id, swap, on, today){
+  slot.savedSwaps = slot.savedSwaps || {};
+  let list = (slot.savedSwaps[id] || []).map(x => Object.assign({}, x, {regular: false}));
+  const k = keyOf(swap.name);
+  if (!k) return slot;
+  if (!list.some(x => keyOf(x.name) === k)){
+    const n = Math.max(1, swap.setCount || 1), sets = [];
+    for (let i = 0; i < n; i++) sets.push(emptySet());
+    list = [{name: String(swap.name).trim().slice(0, 60), unit: swap.unit === "plates" ? "plates" : "kg", sets: sets, date: today, regular: false}].concat(list).slice(0, CONFIG.maxSaved);
+  }
+  list.forEach(x => { if (keyOf(x.name) === k) x.regular = !!on; });
+  slot.savedSwaps[id] = list;
+  return slot;
+}
+
+// Takes a slot, an exercise id and a swap name. Removes that saved swap. Changes slot in place.
+function forgetSwap(slot, id, name){
+  const k = keyOf(name);
+  slot.savedSwaps[id] = (slot.savedSwaps[id] || []).filter(x => keyOf(x.name) !== k);
+  if (!slot.savedSwaps[id].length) delete slot.savedSwaps[id];
+  return slot;
+}
+
+// Takes the slot's saved list for an exercise and a swap name. Returns that saved record, or null.
+function savedSwapFor(list, name){ return (list || []).filter(x => keyOf(x.name) === keyOf(name))[0] || null; }
+
+// Takes an item, a row index, the saved sets from last time and the unit. Returns {text, kg, reps}:
+// the target for a swapped exercise's set, using the original exercise's rep range and the plan's rules.
+function swapTarget(item, i, savedSets, unit){
+  if (!savedSets || !savedSets.length) return {text: "", kg: null};
+  const range = repRange(item) || {min: 6, max: 8};
+  const pseudo = {plan: item.plan, rows: savedSets.map(() => ({role: "work"})), repMin: range.min, repMax: range.max, leftText: item.leftText || "", log: "lift", rule: null, repsText: ""};
+  if (item.plan === "hd"){
+    // Heavy Duty has one all-out set: only the heaviest logged swap set gets a target
+    let top = -1, topKg = -1;
+    savedSets.forEach((st, k) => { if (isLogged(st) && (Number(st.kg) || 0) >= topKg){ top = k; topKg = Number(st.kg) || 0; } });
+    if (i !== top) return {text: "", kg: null};
+    return nextTargetHd(pseudo, i, withUnit(savedSets[i], unit), unit, 0, null);
+  }
+  if (i >= savedSets.length) return {text: "", kg: null};
+  return nextAccessory(pseudo, i, savedSets, unit);
+}
+
+// Takes a name, a unit and a set count. Returns a new extra exercise for a day.
+function newExtra(name, unit, setCount, idSeed){
+  const n = Math.max(1, Math.min(CONFIG.maxSetsPerExtra, setCount || 1)), sets = [];
+  for (let i = 0; i < n; i++) sets.push(emptySet());
+  return {id: "x-" + idSeed, name: String(name || "").slice(0, 60), unit: unit === "plates" ? "plates" : "kg", sets: sets, doneAt: null};
+}
+
+/* ---------- 2.20 History and progress ---------- */
+
+// Takes an archive {hd: [exports], pb: [exports]}, a plan id, an export and the most weeks to keep.
+// Returns a new archive with that week added (replacing the same week if present), newest first.
+function archiveAdd(archive, planId, exp, max){
+  const out = {hd: (archive && archive.hd) || [], pb: (archive && archive.pb) || []};
+  if (!exp || !exp.weekStart) return out;
+  const slim = {weekStart: exp.weekStart, entries: exp.entries || {}, extras: cleanExtras(exp.extras)};
+  out[planId] = [slim].concat(out[planId].filter(w => w.weekStart !== exp.weekStart))
+    .sort((a, b) => (b.weekStart || "").localeCompare(a.weekStart || "")).slice(0, max);
+  return out;
+}
+
+// Takes week entries {id: entry} in export or state shape, that week's extras and a plan id.
+// Returns the week laid out by day: [{day, title, items:[{id, name, unit, sets:[{label, set, working}],
+// swap:{name, unit, sets}|null, missed, madeUp}], extras:[{name, unit, sets}]}]. Unknown ids are ignored.
+function weekView(entries, extras, planId){
+  const plan = PROGRAMME.plans[planId], days = [];
+  plan.days.forEach(d => {
+    const items = [];
+    Object.keys(entries || {}).forEach(id => {
+      const meta = EXERCISES[id];
+      if (!meta || meta.plan !== planId || meta.day !== d.n || meta.item.kind === "warmup") return;
+      const e = entries[id] || {}, item = meta.item;
+      const labels = planId === "hd" ? (item.rows || parseRows(item.sets)) : null;
+      const sets = (e.sets || []).map((st, i) => {
+        const label = e.rows && e.rows[i] ? e.rows[i] : (labels && labels[i]) || "Set " + (i + 1);
+        return {label: label, set: st, working: !/^Warm-up/.test(label) && !/warm-up/i.test(item.name)};
+      }).filter(x => isLogged(x.set));
+      const r = e.replacement || (e.replaced ? e.repl : null);
+      const swap = e.replaced && r && (r.sets || []).some(isLogged) ? {name: str(r.name) || "Unnamed swap", unit: r.unit || "kg", sets: (r.sets || []).filter(isLogged)} : null;
+      const missed = !!(e.missed && e.missed.on && !e.missed.madeUp);
+      if (!sets.length && !swap && !missed) return;
+      items.push({id: id, name: item.name, unit: e.unit || "kg", sets: sets, swap: swap, missed: missed, madeUp: !!(e.missed && e.missed.madeUp), order: Object.keys(EXERCISES).indexOf(id)});
+    });
+    items.sort((a, b) => a.order - b.order);
+    const ex = ((extras || {})[d.n] || []).filter(x => x.sets.some(isLogged)).map(x => ({name: x.name, unit: x.unit, sets: x.sets.filter(isLogged)}));
+    if (items.length || ex.length) days.push({day: d.n, title: d.title, items: items, extras: ex});
+  });
+  return days;
+}
+
+// Takes the slot, plan id, this week's sessions, the archive and the time now.
+// Returns every week there is to show, newest first: [{weekStart, source ("this"|"last"|"archive"), view}].
+// Rule: one entry per week; this week from the live log, then the archive, then last week if not archived.
+function historyWeeks(slot, planId, sessions, archive, nowISO){
+  const out = [], seen = {};
+  const push = (ws, source, view) => { if (!ws || seen[ws] || !view.length) return; seen[ws] = true; out.push({weekStart: ws, source: source, view: view}); };
+  const cur = buildExport(slot, planId, sessions, null, nowISO);
+  push(cur.weekStart, "this", weekView(cur.entries, cur.extras, planId));
+  ((archive && archive[planId]) || []).forEach(w => push(w.weekStart, "archive", weekView(w.entries, cleanExtras(w.extras), planId)));
+  if (slot.lastWeek && slot.lastWeek.weekStart) push(slot.lastWeek.weekStart, "last", weekView(slot.lastWeek.entries, slot.lastWeek.extras, planId));
+  return out.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
+}
+
+// Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first:
+// [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week.
+// Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers.
+function exerciseProgress(weeks, id){
+  const out = [];
+  weeks.slice().reverse().forEach(w => w.view.forEach(d => d.items.forEach(it => {
+    if (it.id !== id) return;
+    const b = bestSet(it.sets.filter(x => x.working).map(x => x.set));
+    if (b) out.push({weekStart: w.weekStart, kind: "planned", name: it.name, kg: b.kg, reps: b.reps, unit: it.unit});
+    if (it.swap){ const sb = bestSet(it.swap.sets); if (sb) out.push({weekStart: w.weekStart, kind: "swap", name: it.swap.name, kg: sb.kg, reps: sb.reps, unit: it.swap.unit}); }
+  })));
+  return out;
+}
+
+/* ---------- 2.21 App state shape ---------- */
 
 // Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
 function freshSlot(weekStart){
-  return {weekStart: weekStart, entries: {}, units: {}, lastWeek: null, history: {}, varHistory: {}, loadedStreaks: {}, pastVariations: [], missedDays: {}, ui: {dismissedMiss: {}}};
+  return {weekStart: weekStart, entries: {}, units: {}, lastWeek: null, history: {}, varHistory: {}, loadedStreaks: {}, pastVariations: [], missedDays: {},
+    extras: {}, savedSwaps: {}, savedExtras: {}, ui: {dismissedMiss: {}}};
 }
 // Takes the whole state and a plan id. Returns that plan's slot.
 // Rule: Heavy Duty lives at the top level, exactly where version 1 kept it; powerbuilding lives in state.pb.
@@ -5309,7 +5570,7 @@ function normaliseState(raw, today){
   });
   (st.pastVariations || []).forEach(v => { if (v.day === 2 && isCalf(v.original)) v.day = 3; });
   st.weekStart = mondayOf(parseISO(st.weekStart) ? st.weekStart : today);
-  ["units", "history", "varHistory", "loadedStreaks", "missedDays"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
+  ["units", "history", "varHistory", "loadedStreaks", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
   if (!Array.isArray(st.pastVariations)) st.pastVariations = [];
   if (st.cycle && !(parseISO(st.cycle.start) && PLAN_IDS.indexOf(st.cycle.first) >= 0)) st.cycle = null;
   if (st.pb && typeof st.pb === "object"){
@@ -5354,6 +5615,18 @@ function themeLoad(){
 // Takes {palette, mode, contrast}. Saves it. Returns true on success.
 function themeSave(t){
   try { window.localStorage.setItem(CONFIG.themeStorageKey, JSON.stringify(t)); return true; }
+  catch (e){ return false; }
+}
+// History archive: its own key, the last CONFIG.archiveWeeks finished weeks per plan.
+// Returns {hd: [weeks], pb: [weeks]}, empty lists when nothing is saved.
+function archiveLoad(){
+  try { const raw = window.localStorage.getItem(CONFIG.archiveStorageKey), a = raw ? JSON.parse(raw) : null;
+    return {hd: a && Array.isArray(a.hd) ? a.hd : [], pb: a && Array.isArray(a.pb) ? a.pb : []}; }
+  catch (e){ return {hd: [], pb: []}; }
+}
+// Takes the archive. Saves it. Returns true on success.
+function archiveSave(a){
+  try { window.localStorage.setItem(CONFIG.archiveStorageKey, JSON.stringify(a)); return true; }
   catch (e){ return false; }
 }
 // Takes the export object and a file name. Hands the file to the user. Returns a promise of
@@ -5482,6 +5755,7 @@ function renderTrain(c){
   renderUpNext(c, day);
   renderCatchup(c, day);
   $("#exercise-list").innerHTML = sessionListHTML(c, day);
+  renderExtras(c, day);
   renderSwapsLog(c, day);
   renderFab(c);
 }
@@ -5599,6 +5873,7 @@ function summaryText(c, item){
     if (best) parts.push("logged " + (best.kg > 0 ? fmtLoad(best.kg, e.replaced ? (e.repl.unit || "kg") : unitOf(c.slot.units, item)) + " × " + best.reps : best.reps + (item.log === "time" ? " min" : item.log === "check" ? " done" : "")));
     return parts.join(" · ");
   }
+  if (e && e.replaced && e.repl && e.repl.name.trim()){ parts.push("swapping for " + e.repl.name.trim()); return parts.join(" · "); }
   if (hasWeight(item)){
     const a = rowArgs(c, item), w = firstWorkRow(item), k = bestKnownLoad(item, w, Object.assign(a, {entry: ensureEntryView(c, item)}), c.slot.history);
     if (k) parts.push((k.from === "target" ? "" : "last ") + fmtLoad(k.kg, a.unit));
@@ -5620,7 +5895,7 @@ function exerciseHTML(c, item){
     '<span class="exercise__status" aria-hidden="true">' + esc(status) + "</span>" +
     '<span class="exercise__main"><span class="exercise__name">' + esc(item.name) + tags + "</span>" +
     '<span class="exercise__target">' + esc(item.skipped ? "Not this week." : summaryText(c, item)) + "</span>" +
-    (item.skipped || item.kind === "warmup" || missed ? "" : (function(){ const p = setsProgress(item, e); return p.total ? '<span class="exercise__count">' + p.done + "/" + p.total + " sets</span>" : ""; })()) +
+    (item.skipped || item.kind === "warmup" || missed ? "" : (function(){ const p = e && e.replaced ? {done: e.repl.sets.filter(isLogged).length, total: e.repl.sets.length} : setsProgress(item, e); return p.total ? '<span class="exercise__count">' + p.done + "/" + p.total + " sets</span>" : ""; })()) +
     '<span class="visually-hidden">' + (done ? "Done." : missed ? "Missed." : "Not done yet.") + "</span></span>" +
     '<span class="exercise__chevron" aria-hidden="true"></span></button>' +
     '<div class="exercise__panel" id="ex-' + item.id + '-panel"' + (open ? "" : " hidden") + ">" + (open ? panelHTML(c, item) : "") + "</div></article>";
@@ -5645,6 +5920,11 @@ function panelHTML(c, item){
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
     if (item.log !== "check" && item.log !== "time" && item.log !== "rounds") html += setActionsHTML("main", e.sets.length, item.name);
+  }
+  if (!madeUp && item.kind !== "warmup" && !e.replaced && !missed && !e.sets.some(isLogged)){
+    const sv = ((c.slot.savedSwaps || {})[item.id] || [])[0];
+    if (sv) html += '<p class="remind">Last time you did <strong>' + esc(sv.name) + "</strong> instead" + (sv.date && parseISO(sv.date) ? ", " + esc(fmtDate(sv.date)) : "") +
+      '. <button type="button" class="link-button" data-act="swap-again">Swap again</button></p>';
   }
   if (!madeUp && item.kind !== "warmup"){
     html += '<div class="exercise__actions">' +
@@ -5696,12 +5976,14 @@ function setRowHTML(c, item, kind, i, s, a){
   let last = null;
   if (kind === "main" && a.last && a.last.sets) last = sameUnit(withUnit(a.last.sets[i], a.last.unit), unit);
   if (kind === "repl" && a.last && a.last.replaced && a.last.replacement && keyOf(a.last.replacement.name) === keyOf(e.repl.name) && e.repl.name.trim()) last = sameUnit(withUnit((a.last.replacement.sets || [])[i], a.last.replacement.unit || "kg"), unit);
+  const savedRec = kind === "repl" && e.repl.name.trim() ? savedSwapFor((c.slot.savedSwaps || {})[item.id], e.repl.name) : null;
+  if (kind === "repl" && !last && savedRec) last = sameUnit(withUnit(savedRec.sets[i], savedRec.unit), unit);
   const beat = compareToLast(s, last);
   const warm = row.role === "warm";
   if (row.role === "check"){
     return '<div class="set-row" data-kind="' + kind + '" data-i="' + i + '"><label class="check-row"><input type="checkbox" data-check' + (isLogged(s) ? " checked" : "") + "><span>" + esc(row.label) + "</span></label></div>";
   }
-  const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : {text: "", kg: null};
+  const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : (savedRec && savedRec.unit === unit ? swapTarget(item, i, savedRec.sets, unit) : {text: "", kg: null});
   const w = kind === "main" && item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
   const known = kind === "main" && !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
   const sug = suggestedSet(s, w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, kind === "main" ? planRowReps(item, i) : null, t.reps || null);
@@ -5834,15 +6116,22 @@ function adviceHTML(c, item, e, mode){
 function swapPanelHTML(c, item, e, lw){
   const base = item.id + "-repl";
   const a = rowArgs(c, item);
+  const saved = (c.slot.savedSwaps || {})[item.id] || [], cur = keyOf(e.repl.name);
+  const chips = saved.filter(x => keyOf(x.name) !== cur).map((x, k) => '<button type="button" class="chip" data-act="pick-swap" data-k="' + saved.indexOf(x) + '">' + esc(x.name) + "</button>").join("") +
+    (item.swap && keyOf(item.swap) !== cur && !saved.some(x => keyOf(x.name) === keyOf(item.swap)) ? '<button type="button" class="chip" data-act="use-swap">' + esc(item.swap.charAt(0).toUpperCase() + item.swap.slice(1)) + ' <span class="chip__tag">plan</span></button>' : "");
+  const rec = cur ? savedSwapFor(saved, e.repl.name) : null;
   return '<div class="sub-panel"><h4>' + term("swap", "Swap exercise") + "</h4>" +
-    (item.swap ? '<p class="small">The plan suggests: <strong>' + esc(item.swap) + '</strong>. <button type="button" class="link-button" data-act="use-swap">Use this swap</button></p>' : "") +
+    (chips ? '<p class="small" id="' + base + '-picks">' + (saved.length ? "Your swaps for this day" + (item.swap ? ", and the plan's" : "") : "The plan suggests") + ':</p><div class="chip-row" role="group" aria-labelledby="' + base + '-picks">' + chips + "</div>" : "") +
     (item.swapNote ? '<p class="small">' + esc(item.swapNote) + "</p>" : "") +
     '<div class="field"><label class="field__label" for="' + base + '-name">What did you do instead?</label><input class="text-input" id="' + base + '-name" data-repl="name" type="text" maxlength="60" autocomplete="off" placeholder="For example, Smith machine squat" value="' + esc(e.repl.name) + '"></div>' +
     '<div class="field"><label class="field__label" for="' + base + '-reason">Why?</label><select class="select-input" id="' + base + '-reason" data-repl="reason"><option value="">Choose a reason</option>' +
     Object.keys(CONFIG.reasons).map(k => '<option value="' + k + '"' + (e.repl.reason === k ? " selected" : "") + ">" + esc(CONFIG.reasons[k]) + "</option>").join("") + "</select></div>" +
     unitToggleHTML(item, "repl", e.repl.unit || "kg") +
     '<div class="set-rows" data-kind="repl">' + e.repl.sets.map((s, i) => setRowHTML(c, item, "repl", i, s, a)).join("") + "</div>" +
-    setActionsHTML("repl", e.repl.sets.length, item.name) + '<div data-advice="replaced">' + adviceHTML(c, item, e, "replaced") + "</div></div>";
+    setActionsHTML("repl", e.repl.sets.length, item.name) +
+    (cur ? '<label class="check-row"><input type="checkbox" data-regular' + (rec && rec.regular ? " checked" : "") + "><span>Do this instead every week on Day " + item.day + " (" + term("regularswap", "what this does") + ")</span></label>" : "") +
+    (rec ? '<p class="small muted">Saved for Day ' + item.day + ' only. <button type="button" class="link-button" data-act="forget-swap">Remove from my swaps</button></p>' : "") +
+    '<div data-advice="replaced">' + adviceHTML(c, item, e, "replaced") + "</div></div>";
 }
 function missedPanelHTML(c, item, e){
   if (e.missed.viaDay) return '<p class="small">Part of missed Day ' + item.day + ". Make it up from the yellow card.</p>";
@@ -5861,6 +6150,119 @@ function renderSwapsLog(c, day){
   }).join("") + "</ul>" : '<p class="small muted">Swaps and skips you log for this day show here.</p>';
   $("#swaps-log").innerHTML = '<details class="swaps-log" id="swaps-details"' + (state.ui.varOpen ? " open" : "") + "><summary>Swaps and skips log (" + items.length + ')</summary><div class="swaps-log__body">' + body + "</div></details>";
 }
+
+/* ---------- 3.4b Extra exercises (not counted in progress) ---------- */
+function extrasOf(c, n){ c.slot.extras = c.slot.extras || {}; return c.slot.extras[n] || (c.slot.extras[n] = []); }
+// Last time's record for an extra with this name on this day, or null
+function savedExtraFor(c, n, name){ return name.trim() ? ((c.slot.savedExtras || {})[n] || []).filter(x => keyOf(x.name) === keyOf(name))[0] || null : null; }
+function renderExtras(c, day){
+  const box = $("#extras");
+  if (day.rest){ box.innerHTML = ""; return; }
+  const list = (c.slot.extras || {})[day.n] || [], here = list.map(x => keyOf(x.name));
+  const reminders = ((c.slot.savedExtras || {})[day.n] || []).filter(x => here.indexOf(keyOf(x.name)) < 0);
+  let html = '<h3 class="group-title" id="extras-title">' + term("extra", "Extra exercises") + "</h3>";
+  html += reminders.map(x => {
+    const b = bestSet(x.sets);
+    return '<p class="remind">Last time you added <strong>' + esc(x.name) + "</strong>" + (b ? " (" + esc(perfText(b, x.unit)) + ")" : "") +
+      '. <button type="button" class="link-button" data-act="extra-again" data-name="' + esc(x.name) + '">Add again<span class="visually-hidden">: ' + esc(x.name) + "</span></button></p>";
+  }).join("");
+  html += list.map(x => extraHTML(c, day.n, x)).join("");
+  html += (list.length < CONFIG.maxExtrasPerDay ? '<button type="button" class="button button--full" data-act="extra-add">Add extra exercise</button>' : "") +
+    (list.length || reminders.length ? "" : '<p class="small muted">For a burnout set or anything else you add. It won’t change your progress or targets.</p>');
+  box.innerHTML = html;
+}
+function extraHTML(c, n, x){
+  const open = state.ui.openExtra === x.id, done = x.sets.filter(isLogged).length, rec = savedExtraFor(c, n, x.name);
+  const base = "extra-" + x.id;
+  let html = '<article class="exercise extra' + (open ? " is-open" : "") + (done ? " is-done" : "") + '" id="' + base + '" data-xid="' + esc(x.id) + '">' +
+    '<button type="button" class="exercise__summary" data-act="extra-toggle" aria-expanded="' + open + '" aria-controls="' + base + '-panel">' +
+    '<span class="exercise__status" aria-hidden="true">' + (done ? "✓" : "+") + "</span>" +
+    '<span class="exercise__main"><span class="exercise__name">' + esc(x.name || "New extra exercise") + '<span class="exercise__tag">Extra</span></span>' +
+    '<span class="exercise__target">' + (done ? done + (done === 1 ? " set" : " sets") + " logged" : "Nothing logged yet") + "</span></span>" +
+    '<span class="exercise__chevron" aria-hidden="true"></span></button>' +
+    '<div class="exercise__panel" id="' + base + '-panel"' + (open ? "" : " hidden") + ">";
+  if (open){
+    html += '<div class="field"><label class="field__label" for="' + base + '-name">Exercise</label><input class="text-input" id="' + base + '-name" data-xname type="text" maxlength="60" autocomplete="off" placeholder="For example, Push-ups to failure" value="' + esc(x.name) + '"></div>';
+    const b = (u, t) => '<button type="button" class="button" data-act="extra-unit" data-unit="' + u + '" aria-pressed="' + (x.unit === u) + '">' + t + "</button>";
+    html += '<div class="field"><span class="field__label" id="' + base + '-unit">Log weight in kg or ' + term("plates", "plates") + '</span><div class="segmented" role="group" aria-labelledby="' + base + '-unit">' + b("kg", "kg") + b("plates", "Plates") + "</div></div>";
+    html += '<div class="set-rows">' + x.sets.map((s, i) => {
+      const last = rec && rec.unit === x.unit ? rec.sets[i] : null, lb = last && isLogged(last) ? last : null;
+      return '<div class="set-row" data-i="' + i + '"><div class="set-row__head"><span class="set-row__label">Set ' + (i + 1) + "</span></div>" +
+        '<div class="set-row__fields">' + stepperHTML(base + "-" + i, "reps", "Reps", s.reps, "numeric", lb ? Number(lb.reps) : null) +
+        stepperHTML(base + "-" + i, "kg", x.unit === "plates" ? "Plates" : "Weight (kg)", s.kg, "decimal", lb && Number(lb.kg) > 0 ? Number(lb.kg) : null) + "</div>" +
+        '<p class="set-row__last">' + (lb ? "Last time: " + esc(perfText(lb, x.unit)) : "") + '</p><p class="error-text" role="alert"></p></div>';
+    }).join("") + "</div>";
+    html += '<div class="button-row"><button type="button" class="button" data-act="extra-set-add"' + (x.sets.length >= CONFIG.maxSetsPerExtra ? " disabled" : "") + ">Add set</button>" +
+      '<button type="button" class="button" data-act="extra-set-remove"' + (x.sets.length <= 1 ? " disabled" : "") + ">Remove last set</button></div>" +
+      '<div class="button-row"><button type="button" class="button button--primary" data-act="extra-close">Save and close</button>' +
+      '<button type="button" class="button" data-act="extra-delete">Remove this exercise</button></div>';
+  }
+  return html + "</div></article>";
+}
+function rerenderExtras(focusSel){
+  const c = ctx(), day = sessionOf(c, state.ui.day); if (!day) return;
+  renderExtras(c, day);
+  if (focusSel){ const f = $("#extras " + focusSel); if (f) f.focus(); }
+}
+let extraTimer = null;
+(function(){
+  const root = $("#extras");
+  const find = el => { const art = el.closest("[data-xid]"); if (!art) return null; const c = ctx(), list = extrasOf(c, state.ui.day), x = list.filter(v => v.id === art.dataset.xid)[0]; return x ? {c: c, list: list, x: x, art: art} : null; };
+  function setValue(h, row, input, raw){
+    const r = sanitize(input.dataset.f, raw, h.x.unit), i = +row.dataset.i;
+    if (input.value !== r.value) input.value = r.value;
+    $(".error-text", row).textContent = r.error;
+    h.x.sets[i][input.dataset.f] = r.value;
+    if (!h.x.doneAt && h.x.sets.some(isLogged)) h.x.doneAt = h.c.today;
+    save();
+  }
+  root.addEventListener("click", ev => {
+    clearTimeout(extraTimer);
+    const btn = ev.target.closest("[data-act]"); if (!btn) return;
+    const act = btn.dataset.act;
+    if (act === "extra-add" || act === "extra-again"){
+      const c = ctx(), list = extrasOf(c, state.ui.day), rec = act === "extra-again" ? savedExtraFor(c, state.ui.day, btn.dataset.name) : null;
+      const x = newExtra(rec ? rec.name : "", rec ? rec.unit : "kg", rec ? rec.sets.length : 1, Date.now().toString(36));
+      list.push(x); state.ui.openExtra = x.id; save();
+      rerenderExtras(rec ? "#extra-" + x.id + "-0-reps" : "#extra-" + x.id + "-name");
+      if (rec) toast(rec.name + " added. Last time's numbers are in grey.");
+      return;
+    }
+    const h = find(btn); if (!h) return;
+    if (act === "extra-toggle"){ state.ui.openExtra = state.ui.openExtra === h.x.id ? null : h.x.id; save(); rerenderExtras("#extra-" + h.x.id + " .exercise__summary"); }
+    else if (act === "extra-close"){ state.ui.openExtra = null; save(); rerenderExtras("#extra-" + h.x.id + " .exercise__summary"); if (h.x.sets.some(isLogged)) toast((h.x.name || "Extra exercise") + " saved."); }
+    else if (act === "extra-unit"){ h.x.unit = btn.dataset.unit === "plates" ? "plates" : "kg"; save(); rerenderExtras('[data-act="extra-unit"][data-unit="' + h.x.unit + '"]'); }
+    else if (act === "extra-set-add"){ if (h.x.sets.length < CONFIG.maxSetsPerExtra){ h.x.sets.push(emptySet()); save(); rerenderExtras("#extra-" + h.x.id + "-" + (h.x.sets.length - 1) + "-reps"); } }
+    else if (act === "extra-set-remove"){ if (h.x.sets.length > 1){ h.x.sets.pop(); save(); rerenderExtras('#extra-' + h.x.id + ' [data-act="extra-set-add"]'); } }
+    else if (act === "extra-delete"){
+      h.list.splice(h.list.indexOf(h.x), 1); if (state.ui.openExtra === h.x.id) state.ui.openExtra = null;
+      save(); rerenderExtras('[data-act="extra-add"]'); toast((h.x.name || "Extra exercise") + " removed.");
+    }
+    else if (act === "inc" || act === "dec"){
+      const row = btn.closest(".set-row"), f = btn.dataset.f, input = $('input[data-f="' + f + '"]', row);
+      const step = f !== "kg" ? CONFIG.repsStep : h.x.unit === "plates" ? CONFIG.plateStep : CONFIG.kgStep;
+      const suggest = Number(input.dataset.suggest) || 0;
+      if (input.value === "" && suggest > 0){ setValue(h, row, input, fmtNum(suggest)); }
+      else {
+        const next = Math.max(0, Math.round(((Number(input.value) || 0) + (act === "inc" ? step : -step)) * 100) / 100);
+        setValue(h, row, input, next === 0 && act === "dec" && f !== "kg" ? "" : fmtNum(next));
+      }
+      const t = $(".exercise__target", h.art), n = h.x.sets.filter(isLogged).length;
+      t.textContent = n ? n + (n === 1 ? " set" : " sets") + " logged" : "Nothing logged yet";
+    }
+  });
+  root.addEventListener("input", ev => {
+    const t = ev.target, h = find(t); if (!h) return;
+    if (t.matches("input[data-xname]")){ h.x.name = t.value.slice(0, 60); save(); return; }
+    if (t.matches("input[data-f]")) setValue(h, t.closest(".set-row"), t, t.value);
+  });
+  // Redraw after leaving a field, late enough that a tap on a button wins (see deferRefresh)
+  root.addEventListener("change", ev => {
+    if (!find(ev.target)) return;
+    clearTimeout(extraTimer);
+    extraTimer = setTimeout(() => { const a = document.activeElement; rerenderExtras(a && a.id && a.closest("#extras") ? "#" + CSS.escape(a.id) : null); }, 300);
+  });
+})();
 
 /* ---------- 3.5 Floating controls: next-set button, hazard card ---------- */
 let upNextVisible = true;
@@ -5961,6 +6363,89 @@ function pbDayTableHTML(d, current){
     }).join("") + "</tbody></table></div></section>";
 }
 
+/* ---------- 3.6b History and progress ---------- */
+function histSetText(meta, s, unit){
+  const log = meta ? meta.item.log : "lift";
+  if (log === "check") return "done";
+  if (log === "time") return s.reps + " min";
+  if (log === "rounds") return s.reps + " rounds";
+  if (log === "carry") return (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " for " : "") + s.reps + " m";
+  return (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " × " : "") + setText(s) + (Number(s.kg) > 0 ? "" : " reps");
+}
+function histWeeks(c, plan){
+  const slot = slotOf(state, plan);
+  if (!slot) return [];
+  return historyWeeks(slot, plan, sessionsFor(plan, slot, c.cycle), archiveLoad(), new Date().toISOString());
+}
+function renderHistory(c){
+  const plan = state.ui.histPlan === "hd" || state.ui.histPlan === "pb" ? state.ui.histPlan : c.plan;
+  const slot = slotOf(state, plan), weeks = histWeeks(c, plan);
+  const seg = p => '<button type="button" class="button" data-hist-plan="' + p + '" aria-pressed="' + (p === plan) + '">' + esc(PLAN_NAMES[p]) + "</button>";
+  let html = '<div class="field"><span class="field__label" id="hist-plan-label">Plan</span><div class="segmented" role="group" aria-labelledby="hist-plan-label">' + seg("hd") + seg("pb") + "</div></div>";
+  if (!weeks.length){
+    $("#hist-body").innerHTML = html + '<div class="empty-state"><p><strong>Nothing logged on ' + esc(PLAN_NAMES[plan]) + " yet.</strong></p><p class=\"small muted\">Every week you log shows here. The app keeps the last " + CONFIG.archiveWeeks + " weeks of each plan on this phone.</p></div>";
+    return;
+  }
+  const ws = weeks.some(w => w.weekStart === state.ui.histWeek) ? state.ui.histWeek : weeks[0].weekStart;
+  const week = weeks.filter(w => w.weekStart === ws)[0];
+  const label = w => (w.source === "this" ? "This week: " : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? "Last week: " : "") + fmtRange(w.weekStart);
+  html += '<div class="field"><label class="field__label" for="hist-week">Week</label><select class="select-input" id="hist-week">' +
+    weeks.map(w => '<option value="' + w.weekStart + '"' + (w.weekStart === ws ? " selected" : "") + ">" + esc(label(w)) + "</option>").join("") + "</select></div>";
+  html += '<p class="small muted">Working sets are in bold. This phone keeps your last ' + CONFIG.archiveWeeks + " finished weeks of each plan.</p>";
+  html += week.view.map(d => '<article class="hist-day"><h3 class="hist-day__title">Day ' + d.day + ": " + esc(d.title) + "</h3><ul class=\"hist-list\">" +
+    d.items.map(it => {
+      const meta = EXERCISES[it.id];
+      const sets = it.sets.map(x => x.working ? "<strong>" + esc(histSetText(meta, x.set, it.unit)) + "</strong>" : esc(histSetText(meta, x.set, it.unit))).join(", ");
+      let line = '<li><span class="hist-name">' + esc(it.name) + (it.madeUp ? ' <span class="exercise__tag">Made up</span>' : "") + "</span>";
+      if (it.missed) line += '<span class="hist-sets muted">Skipped</span>';
+      if (sets) line += '<span class="hist-sets">' + sets + "</span>";
+      if (it.swap) line += '<span class="hist-sets">Swapped for ' + esc(it.swap.name) + (it.swap.sets.length ? ": <strong>" + it.swap.sets.map(s => esc(histSetText(null, s, it.swap.unit))).join(", ") + "</strong>" : "") + "</span>";
+      return line + "</li>";
+    }).join("") +
+    d.extras.map(x => '<li><span class="hist-name">' + esc(x.name || "Extra") + ' <span class="exercise__tag">Extra</span></span><span class="hist-sets">' + x.sets.map(s => esc(histSetText(null, s, x.unit))).join(", ") + "</span></li>").join("") +
+    "</ul></article>").join("");
+  html += progressHTML(weeks, plan);
+  $("#hist-body").innerHTML = html;
+}
+function progressHTML(weeks, plan){
+  const ids = [], names = {};
+  weeks.forEach(w => w.view.forEach(d => d.items.forEach(it => {
+    if (ids.indexOf(it.id) < 0 && (it.sets.some(x => x.working) || (it.swap && it.swap.sets.length))){ ids.push(it.id); names[it.id] = "Day " + d.day + ": " + it.name; }
+  })));
+  ids.sort((a, b) => Object.keys(EXERCISES).indexOf(a) - Object.keys(EXERCISES).indexOf(b));
+  let html = '<section class="hist-progress" aria-labelledby="hist-progress-title"><h3 class="hist-day__title" id="hist-progress-title">Progress per exercise</h3>';
+  if (!ids.length) return html + '<p class="small muted">Log a working set to see your progress here.</p></section>';
+  const id = ids.indexOf(state.ui.histEx) >= 0 ? state.ui.histEx : ids[0];
+  html += '<div class="field"><label class="field__label" for="hist-ex">Exercise</label><select class="select-input" id="hist-ex">' +
+    ids.map(x => '<option value="' + x + '"' + (x === id ? " selected" : "") + ">" + esc(names[x]) + "</option>").join("") + "</select></div>";
+  const rows = exerciseProgress(weeks, id), prev = {};
+  if (rows.length < 2) html += '<p class="small muted">One week so far. Next week shows the change.</p>';
+  html += '<table class="hist-table"><caption class="visually-hidden">Best working set per week</caption><thead><tr><th scope="col">Week of</th><th scope="col">Best set</th><th scope="col">Change</th></tr></thead><tbody>' +
+    rows.slice().reverse().map((r, k, all) => {
+      // change against the previous week of the same exercise (swaps compare only with the same swap)
+      const older = all.slice(k + 1).filter(o => o.kind === r.kind && keyOf(o.name) === keyOf(r.name) && o.unit === r.unit)[0];
+      let ch = "–";
+      if (older){
+        const dk = Math.round((r.kg - older.kg) * 100) / 100, dr = r.reps - older.reps;
+        ch = dk ? (dk > 0 ? "+" : "−") + fmtLoad(Math.abs(dk), r.unit) : dr ? (dr > 0 ? "+" : "−") + Math.abs(dr) + (Math.abs(dr) === 1 ? " rep" : " reps") : "Same";
+      }
+      const best = (r.kg > 0 ? fmtLoad(r.kg, r.unit) + " × " : "") + r.reps + (r.kg > 0 ? "" : " reps");
+      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + "</td><td>" + esc(ch) + "</td></tr>";
+    }).join("") + "</tbody></table></section>";
+  return html;
+}
+$("#view-hist").addEventListener("click", ev => {
+  const p = ev.target.closest("[data-hist-plan]"); if (!p) return;
+  state.ui.histPlan = p.dataset.histPlan; state.ui.histWeek = null; state.ui.histEx = null; save(); renderAll();
+  const f = $('[data-hist-plan="' + state.ui.histPlan + '"]'); if (f) f.focus();
+});
+$("#view-hist").addEventListener("change", ev => {
+  if (ev.target.id === "hist-week") state.ui.histWeek = ev.target.value;
+  else if (ev.target.id === "hist-ex") state.ui.histEx = ev.target.value;
+  else return;
+  const id = ev.target.id; save(); renderAll(); const f = $("#" + id); if (f) f.focus();
+});
+
 /* ---------- 3.7 Render everything ---------- */
 // Replacing a focused field fires blur and change events mid-render; this guard stops a second render
 // starting inside the first (the outer render already draws the latest state).
@@ -5983,9 +6468,11 @@ function renderAllInner(){
   const ready = !!state.cycle;
   $("#view-train").hidden = !ready || state.ui.tab !== "train";
   $("#view-plan").hidden = !ready || state.ui.tab !== "plan";
+  $("#view-hist").hidden = !ready || state.ui.tab !== "history";
   $$(".bottom-nav__button").forEach(b => { if (b.dataset.tab === state.ui.tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
   if (ready && state.ui.tab === "train") renderTrain(c);
   if (ready && state.ui.tab === "plan") renderPlanView(c);
+  if (ready && state.ui.tab === "history") renderHistory(c);
   renderHazard(c);
   renderFab(c);
   updateToTop();
@@ -6136,7 +6623,7 @@ $("#layout-options").addEventListener("change", ev => { if (ev.target.name === "
 
 /* ---------- 3.10 Navigation ---------- */
 function showTab(tab){
-  state.ui.tab = tab === "plan" ? "plan" : "train";
+  state.ui.tab = tab === "plan" || tab === "history" ? tab : "train";
   save(); renderAll();
   window.scrollTo(0, 0);
 }
@@ -6272,6 +6759,21 @@ function listHandler(root){
       e.missed = {on: on, reason: "", date: on ? c.today : null, madeUp: null};
       if (on) e.replaced = false;
       save(); rerenderExercise(item.id, '[data-act="toggle-missed"]');
+    } else if (act === "swap-again"){
+      const sv = ((c.slot.savedSwaps || {})[item.id] || [])[0]; if (!sv) return;
+      e.replaced = true; e.missed = {on: false, reason: "", date: null};
+      e.repl = {name: sv.name, reason: e.repl.reason || "", date: c.today, unit: sv.unit, sets: sv.sets.map(emptySet)};
+      save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
+      toast("Swapped for " + sv.name + ". Targets come from last time.");
+    } else if (act === "pick-swap"){
+      const sv = ((c.slot.savedSwaps || {})[item.id] || [])[+btn.dataset.k]; if (!sv) return;
+      e.repl.name = sv.name; e.repl.unit = sv.unit;
+      if (!e.repl.sets.some(isLogged)) e.repl.sets = sv.sets.map(emptySet);
+      save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
+    } else if (act === "forget-swap"){
+      const name = e.repl.name;
+      forgetSwap(c.slot, item.id, name); save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-name"));
+      toast(name + " removed from your swaps.");
     } else if (act === "use-swap"){
       e.repl.name = item.swap.charAt(0).toUpperCase() + item.swap.slice(1); save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
     } else if (act === "unit"){
@@ -6314,6 +6816,13 @@ function listHandler(root){
     const c = ctx(), item = itemOf(c, exEl.dataset.id); if (!item) return;
     const e = ensureEntry(c.slot, item);
     if (t.matches("input[data-f]") && t.closest(".set-row")){ deferRefresh(item.id); return; }
+    if (t.dataset.repl === "name"){ deferRefresh(item.id); return; }
+    if (t.matches("input[data-regular]")){
+      setRegularSwap(c.slot, item.id, {name: e.repl.name, unit: e.repl.unit || "kg", setCount: e.repl.sets.length}, t.checked, c.today);
+      save(); rerenderExercise(item.id, "input[data-regular]");
+      toast(t.checked ? e.repl.name.trim() + " will be swapped in every week on Day " + item.day + "." : "Back to " + item.name + " from next week.");
+      return;
+    }
     if (t.matches("select[data-variant]")){
       e.variant = t.value;
       const fresh = itemOf(ctx(), item.id);
@@ -6515,6 +7024,13 @@ $("#dialog-makeup").addEventListener("click", ev => {
 $("#dialog-makeup").addEventListener("close", () => { sheetOpen = false; renderAll(); });
 
 /* ---------- 3.14 Week options: export, load, new week, restore ---------- */
+// Takes a plan id and a finished week (export or last-week shape). Keeps it in the history archive.
+function archiveWeek(plan, week){
+  if (!week || !week.weekStart || !week.entries) return;
+  if (!archiveSave(archiveAdd(archiveLoad(), plan, week, CONFIG.archiveWeeks))){ storageOK = false; renderStorageWarning(); }
+}
+// First run with history: keep the week already loaded as last week, so it doesn't drop out later.
+PLAN_IDS.forEach(p => { const sl = slotOf(state, p); if (sl && sl.lastWeek && sl.lastWeek.weekStart && !archiveLoad()[p].some(w => w.weekStart === sl.lastWeek.weekStart)) archiveWeek(p, sl.lastWeek); });
 $("#button-week-options").addEventListener("click", () => {
   const c = ctx();
   $("#dialog-week-note").textContent = PLAN_NAMES[c.plan] + ", " + fmtRange(c.slot.weekStart) + ". Each plan keeps its own weeks.";
@@ -6543,8 +7059,9 @@ $("#button-new-week").addEventListener("click", () => {
   closeDialog($("#dialog-week")); openDialog($("#dialog-new-week"));
 });
 $("#button-new-week-confirm").addEventListener("click", () => {
-  const c = ctx();
-  startNewWeek(c.slot, c.plan, c.sessions, c.cycle, c.today, new Date().toISOString());
+  const c = ctx(), nowISO = new Date().toISOString();
+  archiveWeek(c.plan, buildExport(c.slot, c.plan, c.sessions, null, nowISO));
+  startNewWeek(c.slot, c.plan, c.sessions, c.cycle, c.today, nowISO);
   closeDialog($("#dialog-new-week"));
   openToday(); save(); renderAll();
   toast("New week started. Last week's numbers are your targets.");
@@ -6557,6 +7074,7 @@ function doLoad(text){
     const r = readExportFile(text), slot = slotOf(state, r.plan);
     if (!slot) throw new Error("Set up your plans first.");
     loadAsLastWeek(slot, r.plan, r.data);
+    archiveWeek(r.plan, r.data);
     save(); closeDialog($("#dialog-load")); renderAll();
     toast("Loaded into " + PLAN_NAMES[r.plan] + (slot.lastWeek.weekStart ? ": " + fmtRange(slot.lastWeek.weekStart) : "") + ".");
   } catch (err){ $("#load-error").textContent = err.message; }
@@ -6602,9 +7120,11 @@ $("#button-restore-go").addEventListener("click", () => {
   if (p.other && $("#restore-other").checked){
     const target = slotOf(state, p.other.plan), src = p.other.slot;
     const keep = p.other.plan === "hd" ? {cycle: state.cycle, pb: state.pb, ui: state.ui} : null;
-    ["weekStart", "entries", "units", "lastWeek", "history", "varHistory", "loadedStreaks", "pastVariations", "missedDays"].forEach(k => { if (src[k] !== undefined) target[k] = JSON.parse(JSON.stringify(src[k])); });
+    ["weekStart", "entries", "units", "lastWeek", "history", "varHistory", "loadedStreaks", "pastVariations", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (src[k] !== undefined) target[k] = JSON.parse(JSON.stringify(src[k])); });
     if (keep) Object.assign(state, keep);
+    if (target.lastWeek) archiveWeek(p.other.plan, target.lastWeek);
   }
+  { const sl = slotOf(state, p.plan); if (sl.lastWeek) archiveWeek(p.plan, sl.lastWeek); }
   state.ui.openEx = null;
   save(); closeDialog($("#dialog-restore")); state.ui.tab = "train"; renderAll();
   toast("Backup restored: " + fmtRange(p.weekStart) + ".");
