@@ -61,7 +61,7 @@ STORAGE KEYS
           savedSwaps{id: [{name, unit, sets[], date, regular}]}   newest first, at most CONFIG.maxSaved,
           savedExtras{dayN: [{name, unit, sets[], date}]}}       kept per plan and per day, never shared}
   Entry = {sets[{reps, kg, end?, extra?, left?}], variant?, doneAt, replaced,
-           repl{name, reason, date, unit?, sets[]}, missed{on, reason, date, madeUp{day,date}?, viaDay?}}
+           repl{name, reason, date, unit?, measure? ("reps"|"time": seconds held), sets[]}, missed{on, reason, date, madeUp{day,date}?, viaDay?}}
   "reps" holds the main count: reps, metres (carries), minutes (bike),
   rounds (sprints) or "1" for a ticked checklist line. "left" = reps left 0 to 4.
   localStorage "training-tracker-archive": {hd: [week], pb: [week]}, newest first, the last
@@ -251,7 +251,12 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     setRegularSwap(slot, id, swap, on, today) : Takes a slot, an exercise id, the swap {name, unit, setCount}, on or off and today's date. Turns "do this instead every week" on or off for that swap. Changes slot in place. Rules: one regular swap per exercise; a new name is saved with empty sets, so it has no targets until a week with it logged is finished.
     forgetSwap(slot, id, name) : Takes a slot, an exercise id and a swap name. Removes that saved swap. Changes slot in place.
     savedSwapFor(list, name) : Takes the slot's saved list for an exercise and a swap name. Returns that saved record, or null.
-    swapTarget(item, i, savedSets, unit) : Takes an item, a row index, the saved sets from last time and the unit. Returns {text, kg, reps}: the target for a swapped exercise's set, using the original exercise's rep range and the plan's rules.
+    measureFor(name) : Takes a swap name. Returns "time" when it's a hold measured in seconds (plank, hang, wall sit), else "reps".
+    planSwapName(text) : Takes the plan's swap text, e.g. "plank, 3 × 30–45 s". Returns the exercise name only: "Plank".
+    startSwap(e, item, rec, today) : Takes an exercise entry, its session item, a saved swap (or null) and today's date. Turns the swap on with one set row per planned row, so the swap is logged exactly like the exercise it replaces. Changes e in place. Rule: sets already logged on the swap are kept.
+    swapTarget(item, i, savedSets, unit, measure) : Takes an item, a row index, the saved sets from last time, the unit and "reps" or "time". Returns {text, kg, reps}: the target for a swapped exercise's set, using the replaced exercise's rep range and the plan's rules. Rules: Heavy Duty targets only its main set (from your heaviest swap set); Powerbuilding targets every working set; holds add CONFIG.holdStepSeconds at the same weight.
+    swapWarmup(item, i, savedSets, unit, measure) : Heavy Duty swaps. Takes an item, a warm-up row index, the saved sets, the unit and the measure. Returns {kg, pct, workKg} from the plan's percentage of the swap's main-set target, or null.
+    swapSetText(s, unit, measure) : Takes a set, the unit and "reps" or "time". Returns "60 kg × 10", "12 reps" or "45 s, 10 kg added".
     newExtra(name, unit, setCount, idSeed) : Takes a name, a unit and a set count. Returns a new extra exercise for a day.
 
   2.20 History and progress
@@ -316,6 +321,9 @@ FEATURES AND WHERE THEY LIVE
   Sets done per exercise ("2/4 sets") .......... 3.4 exerciseHTML; 2.18 setsProgress
   Rest timer after each set ..................... 3.11b startRest; 2.18 restSeconds (memory only, not saved)
   Saved swaps: "Swap again", quick picks,
+  Swaps log in the replaced exercise's own set rows
+  (same count, labels, targets, Log set, rest) ..... 2.19 startSwap; 3.4 swapPanelHTML, setRowHTML
+  Holds in seconds plus added weight (plank) ...... 2.19 measureFor, swapSetText; CONFIG.holdWords
   "Do this instead every week", swap targets ..... 2.19 harvestSaved, setRegularSwap, applyRegularSwaps, swapTarget; 3.4 swapPanelHTML
   Extra exercises with "Add again" reminder ...... 2.19 cleanExtras, newExtra; 3.4b renderExtras (not counted in progress)
   History tab: any kept week, by day ............. 2.20 historyWeeks, weekView; 3.6b renderHistory
@@ -1446,6 +1454,7 @@ dialog:not([open]){ display: none; }
 .hist-table th{ color: var(--color-text-muted); }
 .hist-table tr.is-swap td{ background: var(--color-surface-alt); }
 .empty-state{ padding: var(--space-4); text-align: center; background: var(--color-surface); border: var(--border-width) dashed var(--color-border); border-radius: var(--radius-large); display: grid; gap: var(--space-1); }
+.swap-foot{ display: grid; gap: var(--space-2); }
 </style>
 <script>
 /* Apply the saved theme before the page paints, so it never flashes the wrong colours.
@@ -1807,7 +1816,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-19.1",
+ "appVersion": "2026-10-19.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2095,7 +2104,8 @@ const CONFIG = {
   "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
   "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week.",
   "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
-  "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets."
+  "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
+  "hold": "For holds like a plank: log the seconds you held and any weight added. Next time, aim 5 seconds longer."
  },
  "carryEffortScale": [
   {
@@ -2148,7 +2158,16 @@ const CONFIG = {
  "archiveWeeks": 12,
  "maxSaved": 5,
  "maxExtrasPerDay": 6,
- "maxSetsPerExtra": 10
+ "maxSetsPerExtra": 10,
+ "holdWords": [
+  "plank",
+  "hold",
+  "hang",
+  "wall sit",
+  "l-sit",
+  "hollow"
+ ],
+ "holdStepSeconds": 5
 };
 
 const PROGRAMME = {
@@ -4494,6 +4513,7 @@ function ensureEntry(slot, item){
   if (!e.repl) e.repl = {name: "", reason: "", sets: [emptySet()], date: null};
   if (!e.missed) e.missed = {on: false, reason: "", date: null};
   if (!e.sets.some(isLogged) && e.sets.length !== item.rows.length) e.sets = item.rows.map(emptySet);
+  if (e.replaced && !e.repl.sets.some(isLogged) && e.repl.sets.length !== item.rows.length) e.repl.sets = item.rows.map(emptySet);
   return e;
 }
 
@@ -4514,9 +4534,11 @@ function nextSet(slot, session, skipId){
   const items = sessionItems(session).filter(it => it.counted && it.id !== skipId);
   for (let k = 0; k < items.length; k++){
     const it = items[k], e = slot.entries[it.id];
-    if (!e || e.replaced || isMissed(e) || !e.sets.some(isLogged)) continue;
-    const i = e.sets.findIndex((s, j) => isWorkingRow(it, j) && !isLogged(s));
-    if (i >= 0) return {item: it, kind: "main", i: i};
+    if (!e || isMissed(e)) continue;
+    const kind = e.replaced ? "repl" : "main", sets = e.replaced ? e.repl.sets : e.sets;
+    if (!sets.some(isLogged)) continue;
+    const i = sets.findIndex((s, j) => isWorkingRow(it, j) && !isLogged(s));
+    if (i >= 0) return {item: it, kind: kind, i: i};
   }
   for (let k = 0; k < items.length; k++){
     const it = items[k], e = slot.entries[it.id];
@@ -4991,7 +5013,7 @@ function buildExport(slot, planId, sessions, otherSlotData, nowISO){
     entries[it.id] = {
       plan: planId, day: s.n, exercise: it.name, rows: e.sets.map((x, i) => it.rows[i] ? it.rows[i].label : "Extra set " + (i - it.rows.length + 1)),
       sets: e.sets, unit: unitFor(it), variant: it.variants ? it.variant : undefined, doneAt: e.doneAt, replaced: e.replaced,
-      replacement: e.replaced ? {name: e.repl.name, reason: e.repl.reason, date: e.repl.date, unit: e.repl.unit || "kg", sets: e.repl.sets} : null,
+      replacement: e.replaced ? {name: e.repl.name, reason: e.repl.reason, date: e.repl.date, unit: e.repl.unit || "kg", measure: e.repl.measure === "time" ? "time" : "reps", sets: e.repl.sets} : null,
       missed: e.missed && e.missed.on ? {on: true, reason: e.missed.reason, date: e.missed.date, madeUp: e.missed.madeUp || null, viaDay: !!e.missed.viaDay} : null
     };
   }));
@@ -5045,7 +5067,7 @@ function cleanLastEntry(id, x){
     sets: cleanSets(x.sets), unit: x.unit === "plates" || x.unit === "kg" ? x.unit : null,
     rows: Array.isArray(x.rows) ? x.rows.slice(0, 20).map(str) : undefined,
     variant: variants && variants.some(v => v.id === x.variant) ? x.variant : undefined, doneAt: str(x.doneAt) || null, replaced: !!x.replaced,
-    replacement: x.replaced && r ? {name: str(r.name), reason: CONFIG.reasons[r.reason] ? r.reason : "", date: str(r.date) || null, unit: r.unit === "plates" ? "plates" : "kg", sets: cleanSets(r.sets)} : null,
+    replacement: x.replaced && r ? {name: str(r.name), reason: CONFIG.reasons[r.reason] ? r.reason : "", date: str(r.date) || null, unit: r.unit === "plates" ? "plates" : "kg", measure: r.measure === "time" ? "time" : "reps", sets: cleanSets(r.sets)} : null,
     missed: m && m.on ? {on: true, reason: CONFIG.missedReasons[m.reason] ? m.reason : "", date: str(m.date) || null,
       madeUp: m.madeUp && Number(m.madeUp.day) >= 1 && Number(m.madeUp.day) <= 7 ? {day: Number(m.madeUp.day), date: str(m.madeUp.date) || null} : null} : null
   };
@@ -5145,6 +5167,7 @@ function cleanEntry(id, x){
       madeUp: m.madeUp && Number(m.madeUp.day) >= 1 && Number(m.madeUp.day) <= 7 ? {day: Number(m.madeUp.day), date: str(m.madeUp.date) || null} : null, viaDay: !!m.viaDay} : {on: false, reason: "", date: null}
   };
   if (r && (r.unit === "plates" || r.unit === "kg")) e.repl.unit = r.unit;
+  if (r && r.measure === "time") e.repl.measure = "time";
   if (variants && variants.some(v => v.id === x.variant)) e.variant = x.variant;
   return e;
 }
@@ -5393,7 +5416,7 @@ function harvestSaved(slot, entries, extras, date){
     if (!e || !e.replaced || !r || !str(r.name).trim()) return;
     const sets = cleanSets(r.sets);
     if (!sets.some(isLogged)) return;
-    slot.savedSwaps[id] = rememberNamed(slot.savedSwaps[id], {name: str(r.name).trim(), unit: r.unit === "plates" ? "plates" : "kg", sets: sets, date: str(r.date) || date});
+    slot.savedSwaps[id] = rememberNamed(slot.savedSwaps[id], {name: str(r.name).trim(), unit: r.unit === "plates" ? "plates" : "kg", measure: r.measure === "time" ? "time" : "reps", sets: sets, date: str(r.date) || date});
   });
   Object.keys(extras || {}).forEach(d => (extras[d] || []).forEach(x => {
     if (!x.name || !x.sets.some(isLogged)) return;
@@ -5411,7 +5434,7 @@ function applyRegularSwaps(slot){
     const e = slot.entries[id];
     if (e && ((e.sets || []).some(isLogged) || e.replaced)) return;
     slot.entries[id] = {sets: [], replaced: true, doneAt: null, missed: {on: false, reason: "", date: null},
-      repl: {name: reg.name, reason: "other", date: slot.weekStart, unit: reg.unit, sets: reg.sets.map(emptySet)}};
+      repl: {name: reg.name, reason: "other", date: slot.weekStart, unit: reg.unit, measure: reg.measure === "time" ? "time" : "reps", sets: reg.sets.map(emptySet)}};
   });
   return slot;
 }
@@ -5428,7 +5451,7 @@ function setRegularSwap(slot, id, swap, on, today){
   if (!list.some(x => keyOf(x.name) === k)){
     const n = Math.max(1, swap.setCount || 1), sets = [];
     for (let i = 0; i < n; i++) sets.push(emptySet());
-    list = [{name: String(swap.name).trim().slice(0, 60), unit: swap.unit === "plates" ? "plates" : "kg", sets: sets, date: today, regular: false}].concat(list).slice(0, CONFIG.maxSaved);
+    list = [{name: String(swap.name).trim().slice(0, 60), unit: swap.unit === "plates" ? "plates" : "kg", measure: swap.measure === "time" ? "time" : "reps", sets: sets, date: today, regular: false}].concat(list).slice(0, CONFIG.maxSaved);
   }
   list.forEach(x => { if (keyOf(x.name) === k) x.regular = !!on; });
   slot.savedSwaps[id] = list;
@@ -5446,21 +5469,66 @@ function forgetSwap(slot, id, name){
 // Takes the slot's saved list for an exercise and a swap name. Returns that saved record, or null.
 function savedSwapFor(list, name){ return (list || []).filter(x => keyOf(x.name) === keyOf(name))[0] || null; }
 
-// Takes an item, a row index, the saved sets from last time and the unit. Returns {text, kg, reps}:
-// the target for a swapped exercise's set, using the original exercise's rep range and the plan's rules.
-function swapTarget(item, i, savedSets, unit){
-  if (!savedSets || !savedSets.length) return {text: "", kg: null};
-  const range = repRange(item) || {min: 6, max: 8};
-  const pseudo = {plan: item.plan, rows: savedSets.map(() => ({role: "work"})), repMin: range.min, repMax: range.max, leftText: item.leftText || "", log: "lift", rule: null, repsText: ""};
-  if (item.plan === "hd"){
-    // Heavy Duty has one all-out set: only the heaviest logged swap set gets a target
-    let top = -1, topKg = -1;
-    savedSets.forEach((st, k) => { if (isLogged(st) && (Number(st.kg) || 0) >= topKg){ top = k; topKg = Number(st.kg) || 0; } });
-    if (i !== top) return {text: "", kg: null};
-    return nextTargetHd(pseudo, i, withUnit(savedSets[i], unit), unit, 0, null);
+// Takes a swap name. Returns "time" when it's a hold measured in seconds (plank, hang, wall sit), else "reps".
+function measureFor(name){ return new RegExp(CONFIG.holdWords.join("|"), "i").test(String(name || "")) ? "time" : "reps"; }
+
+// Takes the plan's swap text, e.g. "plank, 3 × 30–45 s". Returns the exercise name only: "Plank".
+function planSwapName(text){
+  const n = String(text || "").split(/,\s*(?=\d)/)[0].trim();
+  return n.charAt(0).toUpperCase() + n.slice(1);
+}
+
+// Takes an exercise entry, its session item, a saved swap (or null) and today's date. Turns the swap on
+// with one set row per planned row, so the swap is logged exactly like the exercise it replaces.
+// Changes e in place. Rule: sets already logged on the swap are kept.
+function startSwap(e, item, rec, today){
+  e.replaced = true;
+  e.missed = {on: false, reason: "", date: null};
+  e.repl = Object.assign({name: "", reason: "", date: null, unit: "kg", sets: []}, e.repl || {});
+  if (!e.repl.date) e.repl.date = today;
+  if (rec){ e.repl.name = rec.name; e.repl.unit = rec.unit; e.repl.measure = rec.measure === "time" ? "time" : measureFor(rec.name); }
+  if (!(e.repl.sets || []).some(isLogged)) e.repl.sets = item.rows.map(emptySet);
+  return e;
+}
+
+// Takes an item, a row index, the saved sets from last time, the unit and "reps" or "time".
+// Returns {text, kg, reps}: the target for a swapped exercise's set, using the replaced exercise's
+// rep range and the plan's rules. Rules: Heavy Duty targets only its main set (from your heaviest swap
+// set); Powerbuilding targets every working set; holds add CONFIG.holdStepSeconds at the same weight.
+function swapTarget(item, i, savedSets, unit, measure){
+  const none = {text: "", kg: null};
+  if (!savedSets || !savedSets.some(isLogged) || !isWorkingRow(item, i)) return none;
+  const logged = savedSets.filter(isLogged);
+  if (measure === "time"){
+    const last = isLogged(savedSets[i]) ? savedSets[i] : logged.reduce((m, x) => Number(x.reps) > Number(m.reps) ? x : m);
+    const kg = Number(last.kg) || 0, secs = Number(last.reps) + CONFIG.holdStepSeconds;
+    return {text: "Hold " + secs + " s" + (kg > 0 ? " with " + fmtLoad(kg, unit) + " added." : "."), kg: kg > 0 ? kg : null, reps: secs};
   }
-  if (i >= savedSets.length) return {text: "", kg: null};
-  return nextAccessory(pseudo, i, savedSets, unit);
+  const range = repRange(item) || {min: 6, max: 8};
+  if (item.plan === "hd"){
+    if (item.rows[i] && item.rows[i].role !== "work") return none;
+    const top = bestSet(savedSets);
+    const pseudo = {plan: "hd", rows: [{role: "work"}], repMin: range.min, repMax: range.max};
+    return nextTargetHd(pseudo, 0, Object.assign({unit: unit}, logged.filter(x => Number(x.kg || 0) === top.kg && Number(x.reps) === top.reps)[0]), unit, 0, null);
+  }
+  const pseudo = {plan: "pb", rows: item.rows.map(() => ({role: "work"})), repMin: range.min, repMax: range.max, leftText: item.leftText || "", log: "lift", rule: null};
+  return nextAccessory(pseudo, Math.min(i, savedSets.length - 1), savedSets, unit);
+}
+
+// Heavy Duty swaps. Takes an item, a warm-up row index, the saved sets, the unit and the measure.
+// Returns {kg, pct, workKg} from the plan's percentage of the swap's main-set target, or null.
+function swapWarmup(item, i, savedSets, unit, measure){
+  const row = item.rows[i];
+  if (item.plan !== "hd" || measure === "time" || !row || row.role !== "warm" || !row.pct) return null;
+  const w = item.rows.findIndex(r => r.role === "work"), t = w >= 0 ? swapTarget(item, w, savedSets, unit, measure) : null;
+  return t && t.kg ? {kg: warmupLoad(row.pct, t.kg, unit), pct: row.pct, workKg: t.kg} : null;
+}
+
+// Takes a set, the unit and "reps" or "time". Returns "60 kg × 10", "12 reps" or "45 s, 10 kg added".
+function swapSetText(s, unit, measure){
+  if (!s || !isLogged(s)) return "";
+  if (measure === "time") return s.reps + " s" + (Number(s.kg) > 0 ? ", " + fmtLoad(s.kg, unit) + " added" : "");
+  return perfText(s, unit);
 }
 
 // Takes a name, a unit and a set count. Returns a new extra exercise for a day.
@@ -5500,7 +5568,7 @@ function weekView(entries, extras, planId){
         return {label: label, set: st, working: !/^Warm-up/.test(label) && !/warm-up/i.test(item.name)};
       }).filter(x => isLogged(x.set));
       const r = e.replacement || (e.replaced ? e.repl : null);
-      const swap = e.replaced && r && (r.sets || []).some(isLogged) ? {name: str(r.name) || "Unnamed swap", unit: r.unit || "kg", sets: (r.sets || []).filter(isLogged)} : null;
+      const swap = e.replaced && r && (r.sets || []).some(isLogged) ? {name: str(r.name) || "Unnamed swap", unit: r.unit || "kg", measure: r.measure === "time" ? "time" : "reps", sets: (r.sets || []).filter(isLogged)} : null;
       const missed = !!(e.missed && e.missed.on && !e.missed.madeUp);
       if (!sets.length && !swap && !missed) return;
       items.push({id: id, name: item.name, unit: e.unit || "kg", sets: sets, swap: swap, missed: missed, madeUp: !!(e.missed && e.missed.madeUp), order: Object.keys(EXERCISES).indexOf(id)});
@@ -5534,7 +5602,7 @@ function exerciseProgress(weeks, id){
     if (it.id !== id) return;
     const b = bestSet(it.sets.filter(x => x.working).map(x => x.set));
     if (b) out.push({weekStart: w.weekStart, kind: "planned", name: it.name, kg: b.kg, reps: b.reps, unit: it.unit});
-    if (it.swap){ const sb = bestSet(it.swap.sets); if (sb) out.push({weekStart: w.weekStart, kind: "swap", name: it.swap.name, kg: sb.kg, reps: sb.reps, unit: it.swap.unit}); }
+    if (it.swap){ const sb = bestSet(it.swap.sets); if (sb) out.push({weekStart: w.weekStart, kind: "swap", name: it.swap.name, kg: sb.kg, reps: sb.reps, unit: it.swap.unit, measure: it.swap.measure}); }
   })));
   return out;
 }
@@ -5819,17 +5887,29 @@ function renderUpNext(c, day){
     box.innerHTML = ring + '<div class="up-next__body"><p class="up-next__kicker">Day ' + day.n + ' done</p><p class="up-next__title">Every exercise is logged or accounted for.</p>' +
       (next && !next.rest ? '<button type="button" class="button button--primary" data-goto-day="' + next.n + '">Open Day ' + next.n + ": " + esc(next.title) + "</button>" : '<button type="button" class="button button--primary" data-export>Export this week</button>') + "</div>";
   } else {
-    const a = rowArgs(c, n.item), t = n.kind === "main" ? rowTarget(n.item, n.i, Object.assign(a, {entry: ensureEntryView(c, n.item)})) : {text: ""};
-    const label = n.kind === "repl" ? "Swap set " + (n.i + 1) : plainRowLabel((n.item.rows[n.i] || {label: "Extra set"}).label);
+    const a = rowArgs(c, n.item), ev = ensureEntryView(c, n.item);
+    const t = n.kind === "main" ? rowTarget(n.item, n.i, Object.assign(a, {entry: ev})) : replGuide(c, n.item, ev, n.i, ev.repl.unit || "kg").t;
+    const label = plainRowLabel((n.item.rows[n.i] || {label: "Extra set"}).label);
     box.className = "up-next";
-    box.innerHTML = ring + '<div class="up-next__body"><p class="up-next__kicker">Up next</p><p class="up-next__title">' + esc(n.item.name) + "</p>" +
+    box.innerHTML = ring + '<div class="up-next__body"><p class="up-next__kicker">Up next</p><p class="up-next__title">' + esc(n.kind === "repl" && ev.repl.name.trim() ? ev.repl.name.trim() : n.item.name) + "</p>" +
       '<p class="small">' + esc(label) + (t.text ? ". " + esc(t.text) : "") + "</p>" +
       '<div class="button-row"><button type="button" class="button button--primary" data-next-set>Log this set</button>' +
       '<button type="button" class="link-button" data-miss-day="' + day.n + '">Missed this day?</button></div></div>';
   }
 }
 // Entry as stored, without creating one (display must not change state while drawing)
-function ensureEntryView(c, item){ return c.slot.entries[item.id] || {sets: item.rows.map(emptySet), replaced: false, repl: {name: "", reason: "", sets: [emptySet()]}, missed: {on: false}}; }
+function ensureEntryView(c, item){
+  const e = c.slot.entries[item.id];
+  if (!e) return {sets: item.rows.map(emptySet), replaced: false, repl: {name: "", reason: "", sets: [emptySet()]}, missed: {on: false}};
+  if (e.replaced && e.repl && !e.repl.sets.some(isLogged) && e.repl.sets.length !== item.rows.length) e.repl.sets = item.rows.map(emptySet);
+  return e;
+}
+// For a swapped exercise: last time's saved swap with this name, its target and Heavy Duty warm-up for row i
+function replGuide(c, item, e, i, unit){
+  const rec = e.repl.name.trim() ? savedSwapFor((c.slot.savedSwaps || {})[item.id], e.repl.name) : null;
+  const ok = rec && rec.unit === unit && (rec.measure || "reps") === (e.repl.measure || "reps");
+  return {rec: rec, t: ok ? swapTarget(item, i, rec.sets, unit, e.repl.measure) : {text: "", kg: null}, w: ok ? swapWarmup(item, i, rec.sets, unit, e.repl.measure) : null};
+}
 
 function renderCatchup(c, day){
   const others = c.sessions.filter(s => s.n !== day.n);
@@ -5870,7 +5950,8 @@ function summaryText(c, item){
   const e = c.slot.entries[item.id];
   if (isComplete(e)){
     const best = bestSet(e.replaced ? e.repl.sets : e.sets);
-    if (best) parts.push("logged " + (best.kg > 0 ? fmtLoad(best.kg, e.replaced ? (e.repl.unit || "kg") : unitOf(c.slot.units, item)) + " × " + best.reps : best.reps + (item.log === "time" ? " min" : item.log === "check" ? " done" : "")));
+    if (best && e.replaced) parts.push((e.repl.name.trim() ? e.repl.name.trim() + ", " : "") + "logged " + swapSetText(best, e.repl.unit || "kg", e.repl.measure));
+    else if (best) parts.push("logged " + (best.kg > 0 ? fmtLoad(best.kg, e.replaced ? (e.repl.unit || "kg") : unitOf(c.slot.units, item)) + " × " + best.reps : best.reps + (item.log === "time" ? " min" : item.log === "check" ? " done" : "")));
     return parts.join(" · ");
   }
   if (e && e.replaced && e.repl && e.repl.name.trim()){ parts.push("swapping for " + e.repl.name.trim()); return parts.join(" · "); }
@@ -5912,10 +5993,12 @@ function panelHTML(c, item){
   html += "</div>";
   html += lastNoteHTML(lw, item);
   if (madeUp) html += makeupNoteHTML(c, item, e);
-  if (!missed && item.variants) html += variantHTML(item, lw);
-  if (!missed && hasWeight(item)) html += unitToggleHTML(item, "main", unit);
-  if (!missed && item.kind === "main" && !item.rows.some(r => r.role === "test")) html += finderHTML(c, item);
-  if (!missed){
+  const swapped = !madeUp && item.kind !== "warmup" && e.replaced && !missed;
+  if (swapped) html += swapPanelHTML(c, item, e, lw);
+  if (!missed && !swapped && item.variants) html += variantHTML(item, lw);
+  if (!missed && !swapped && hasWeight(item)) html += unitToggleHTML(item, "main", unit);
+  if (!missed && !swapped && item.kind === "main" && !item.rows.some(r => r.role === "test")) html += finderHTML(c, item);
+  if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
@@ -5928,9 +6011,8 @@ function panelHTML(c, item){
   }
   if (!madeUp && item.kind !== "warmup"){
     html += '<div class="exercise__actions">' +
-      '<button type="button" class="button" data-act="toggle-swap" aria-pressed="' + !!e.replaced + '">Swap exercise</button>' +
+      '<button type="button" class="button" data-act="toggle-swap" aria-pressed="' + !!e.replaced + '">' + (e.replaced ? "Back to " + esc(item.name) : "Swap exercise") + "</button>" +
       '<button type="button" class="button" data-act="toggle-missed" aria-pressed="' + missed + '">Skip exercise</button></div>';
-    if (e.replaced) html += swapPanelHTML(c, item, e, lw);
     if (missed) html += missedPanelHTML(c, item, e);
   }
   html += '<button type="button" class="button button--primary button--full" data-act="close">Save and close</button>';
@@ -5962,7 +6044,7 @@ function unitToggleHTML(item, kind, unit){
   return '<div class="field"><span class="field__label" id="unit-' + item.id + "-" + kind + '">Log weight in kg or ' + term("plates", "plates") + '</span><div class="segmented" role="group" aria-labelledby="unit-' + item.id + "-" + kind + '">' + b("kg", "kg") + b("plates", "Plates") + "</div></div>";
 }
 function setActionsHTML(kind, count, name){
-  const what = kind === "repl" ? "swap set" : "set";
+  const what = "set";
   return '<div class="button-row"><button type="button" class="button" data-act="add" data-kind="' + kind + '">Add ' + what + '<span class="visually-hidden"> to ' + esc(name) + "</span></button>" +
     '<button type="button" class="button" data-act="remove" data-kind="' + kind + '"' + (count <= 1 ? " disabled" : "") + ">Remove last " + what + '<span class="visually-hidden"> from ' + esc(name) + "</span></button></div>";
 }
@@ -5970,41 +6052,43 @@ function setActionsHTML(kind, count, name){
 // One set: label, target, warm-up weight, inputs, last time
 function setRowHTML(c, item, kind, i, s, a){
   const base = item.id + "-" + kind + "-" + i;
-  const row = kind === "main" ? (item.rows[i] || {label: "Extra set " + (i - item.rows.length + 1), role: "set"}) : {label: "Swap set " + (i + 1), role: "set"};
+  const row = item.rows[i] || {label: "Extra set " + (i - item.rows.length + 1), role: "set"};
   const e = a.entry || ensureEntryView(c, item);
   const unit = kind === "repl" ? (e.repl.unit || "kg") : a.unit;
   let last = null;
   if (kind === "main" && a.last && a.last.sets) last = sameUnit(withUnit(a.last.sets[i], a.last.unit), unit);
   if (kind === "repl" && a.last && a.last.replaced && a.last.replacement && keyOf(a.last.replacement.name) === keyOf(e.repl.name) && e.repl.name.trim()) last = sameUnit(withUnit((a.last.replacement.sets || [])[i], a.last.replacement.unit || "kg"), unit);
-  const savedRec = kind === "repl" && e.repl.name.trim() ? savedSwapFor((c.slot.savedSwaps || {})[item.id], e.repl.name) : null;
-  if (kind === "repl" && !last && savedRec) last = sameUnit(withUnit(savedRec.sets[i], savedRec.unit), unit);
+  const measure = kind === "repl" ? (e.repl.measure || "reps") : null;
+  const rg = kind === "repl" ? replGuide(c, item, e, i, unit) : null, savedRec = rg ? rg.rec : null;
+  if (kind === "repl" && !last && savedRec && (savedRec.measure || "reps") === measure) last = sameUnit(withUnit(savedRec.sets[i], savedRec.unit), unit);
   const beat = compareToLast(s, last);
   const warm = row.role === "warm";
   if (row.role === "check"){
     return '<div class="set-row" data-kind="' + kind + '" data-i="' + i + '"><label class="check-row"><input type="checkbox" data-check' + (isLogged(s) ? " checked" : "") + "><span>" + esc(row.label) + "</span></label></div>";
   }
-  const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : (savedRec && savedRec.unit === unit ? swapTarget(item, i, savedRec.sets, unit) : {text: "", kg: null});
-  const w = kind === "main" && item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
+  const t = kind === "main" ? rowTarget(item, i, Object.assign({}, a, {entry: e})) : rg.t;
+  const w = kind === "main" && item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : (rg && rg.w ? Object.assign({source: "swap"}, rg.w) : null);
   const known = kind === "main" && !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
-  const sug = suggestedSet(s, w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, kind === "main" ? planRowReps(item, i) : null, t.reps || null);
-  const active = kind !== "main" || activeRowOf(item, e) === i;
-  if (!active) return compactRowHTML(item, kind, i, s, row, sug, unit, beat);
+  const sug = suggestedSet(s, w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, measure === "time" ? null : planRowReps(item, i), t.reps || null);
+  const active = activeRowOf(item, kind === "repl" ? {sets: e.repl.sets} : e) === i;
+  if (!active) return compactRowHTML(item, kind, i, s, row, sug, unit, beat, measure);
   let label = plainRowLabel(row.label);
   if (row.role === "warm") label = term("warmup", label);
   else if (row.role === "work") label = term("mainset", label);
   else if (row.role === "top") label = term("topset", label);
   else if (row.role === "backoff") label = term("backoff", label);
   else label = esc(label);
-  const spec = row.reps ? " · " + esc(row.reps) + (row.reps === "1" ? " rep" : " reps") + (row.left && parseLeft(row.left) ? ", " + esc(leftPhrase(row.left, item.log)) : "") : "";
+  const spec = row.reps && measure !== "time" ? " · " + esc(row.reps) + (row.reps === "1" ? " rep" : " reps") + (row.left && parseLeft(row.left) ? ", " + esc(leftPhrase(row.left, item.log)) : "") : "";
   let html = '<div class="set-row' + (warm ? " is-warm" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
     '<div class="set-row__head"><span class="set-row__label">' + label + spec + '</span><span class="set-row__beat">Beat last time</span></div>';
   if (t.text) html += '<p class="set-row__hint">' + term("target", "Target") + ": " + esc(t.text) + "</p>";
+  if (kind === "repl" && w) html += '<p class="set-row__hint">Use <strong>' + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of your target " + esc(fmtLoad(w.workKg, unit)) + ".</p>";
   if (kind === "main" && item.plan === "hd" && row.role === "work"){
     const wp = weekPartner(c.slot, item.id);
     if (wp) html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
       esc(wp.kg > 0 ? fmtLoad(wp.kg, wp.unit) + " × " + wp.reps : wp.reps + " reps") + ". " + (wp.day < item.day ? "Aim to hold this." : "Your baseline for the week.") + "</p>";
   }
-  if (w){
+  if (w && kind === "main"){
     let line;
     if (w.pending) line = esc(w.pct + "% of your main-set weight. Enter that weight to see this in " + (unit === "plates" ? "plates." : "kg."));
     else if (w.source === "last-only") line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: what you used last time.";
@@ -6013,14 +6097,14 @@ function setRowHTML(c, item, kind, i, s, a){
     else line = "Use <strong>" + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of " + esc(fmtLoad(w.workingKg, unit)) + ", " + esc(w.from) + ".";
     html += '<p class="set-row__hint">' + line + "</p>";
   }
-  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, sug.kg ? Number(sug.kg) : null, sug.reps) + "</div>";
+  html += '<div class="set-row__fields">' + fieldsHTML(item, kind, row, s, base, unit, warm, sug.kg ? Number(sug.kg) : null, sug.reps, measure) + "</div>";
   if (kind === "main" && (row.role === "top" || (row.role === "test" && i === 2)) && isLogged(s) && Number(s.kg) > 0){
     const em = estimatedMax(s.kg, s.reps, s.left);
     if (em) html += '<p class="set-row__hint">' + term("estmax", "Estimated max") + ": about " + esc(fmtLoad(em, unit)) + ".</p>";
   }
-  const lastText = last && isLogged(last) ? (item.log === "carry" && kind === "main" ? (Number(last.kg) > 0 ? fmtLoad(last.kg, unit) + " for " : "") + last.reps + " m" + (last.left !== undefined && last.left !== "" ? ", " + leftPhrase(String(last.left), "carry") : "") : perfText(last, unit)) : "";
+  const lastText = last && isLogged(last) ? (kind === "repl" ? swapSetText(last, unit, measure) : item.log === "carry" ? (Number(last.kg) > 0 ? fmtLoad(last.kg, unit) + " for " : "") + last.reps + " m" + (last.left !== undefined && last.left !== "" ? ", " + leftPhrase(String(last.left), "carry") : "") : perfText(last, unit)) : "";
   html += '<p class="set-row__last">' + (lastText ? "Last time: " + esc(lastText) : "") + "</p>";
-  if (kind === "main" && item.log !== "time" && item.log !== "rounds"){
+  if (kind === "repl" || (item.log !== "time" && item.log !== "rounds")){
     if (!anyLogged() && !isLogged(s)) html += '<p class="small muted">Grey numbers are filled in for you. Change them, or just tap the button.</p>';
     html += '<button type="button" class="button button--primary button--full set-row__log" data-act="log-set">' + (isLogged(s) ? "Update set" : "Log set") + "</button>";
   }
@@ -6028,10 +6112,11 @@ function setRowHTML(c, item, kind, i, s, a){
   return html;
 }
 // Sets you aren't on: one line each, tap to edit
-function compactRowHTML(item, kind, i, s, row, sug, unit, beat){
+function compactRowHTML(item, kind, i, s, row, sug, unit, beat, measure){
   const done = isLogged(s);
   const badge = done ? "✓" : row.role === "warm" ? "W" : String(i + 1);
-  const value = done ? (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " × " : "") + setText(s) + (item.log === "carry" ? " m" : Number(s.kg) > 0 ? "" : " reps") + (s.left !== undefined && s.left !== "" ? ", " + leftPhrase(String(s.left), item.log) : "")
+  const value = measure === "time" ? (done ? swapSetText(s, unit, "time") : sug.reps || sug.kg ? "Aim: " + (sug.reps ? sug.reps + " s" : "") + (sug.kg ? (sug.reps ? ", " : "") + fmtLoad(sug.kg, unit) + " added" : "") : "Not logged")
+    : done ? (Number(s.kg) > 0 ? fmtLoad(s.kg, unit) + " × " : "") + setText(s) + (item.log === "carry" ? " m" : Number(s.kg) > 0 ? "" : " reps") + (s.left !== undefined && s.left !== "" ? ", " + leftPhrase(String(s.left), item.log) : "")
     : (sug.kg || sug.reps ? "Aim: " + (sug.kg ? fmtLoad(sug.kg, unit) + " × " + (sug.reps || "?") : sug.reps + " reps" + (hasWeight(item) && item.log !== "bw" ? ", choose a weight" : "")) : "Not logged");
   return '<div class="set-row set-row--compact' + (done ? " is-done" : "") + (beat.reps || beat.kg ? " is-beat" : "") + '" data-kind="' + kind + '" data-i="' + i + '">' +
     '<button type="button" class="set-row__compact" data-act="edit-set"><span class="set-row__badge" aria-hidden="true">' + badge + "</span>" +
@@ -6048,21 +6133,23 @@ function stepperHTML(base, f, labelText, value, mode, suggestion){
     '<input class="stepper__input" id="' + base + "-" + f + '" data-f="' + f + '" type="text" inputmode="' + mode + '" autocomplete="off" value="' + esc(value) + '"' + (suggestion ? ' placeholder="' + esc(fmtNum(suggestion)) + '" data-suggest="' + esc(suggestion) + '"' : "") + ">" +
     '<button type="button" class="stepper__button" data-act="inc" data-f="' + f + '" aria-label="More">+</button></div></div>';
 }
-function fieldsHTML(item, kind, row, s, base, unit, warm, suggestKg, suggestReps){
-  const weightLabel = unit === "plates" ? "Plates" : (item.log === "bw" ? "Added kg" : "Weight (kg)");
-  const log = kind === "repl" ? "lift" : item.log;
+function fieldsHTML(item, kind, row, s, base, unit, warm, suggestKg, suggestReps, measure){
+  if (measure === "time") return stepperHTML(base, "reps", "Seconds held", s.reps, "numeric", suggestReps ? Number(suggestReps) : null) +
+    stepperHTML(base, "kg", unit === "plates" ? "Added plates" : "Added kg", s.kg, "decimal", suggestKg);
+  const weightLabel = unit === "plates" ? "Plates" : (item.log === "bw" && kind === "main" ? "Added kg" : "Weight (kg)");
+  const log = kind === "repl" ? (item.log === "carry" ? "carry" : "lift") : item.log;
   if (log === "time") return stepperHTML(base, "reps", "Minutes", s.reps, "numeric");
   if (log === "rounds") return stepperHTML(base, "reps", "Rounds", s.reps, "numeric");
-  let html = stepperHTML(base, "reps", log === "carry" ? "Metres" : (item.plan === "hd" && !warm && kind === "main" ? "Clean reps" : "Reps"), s.reps, "numeric", suggestReps ? Number(suggestReps) : null);
+  let html = stepperHTML(base, "reps", log === "carry" ? "Metres" : (item.plan === "hd" && !warm ? "Clean reps" : "Reps"), s.reps, "numeric", suggestReps ? Number(suggestReps) : null);
   html += stepperHTML(base, "kg", weightLabel, s.kg, "decimal", suggestKg);
-  if (item.plan === "pb" && kind === "main" && log !== "time" && log !== "rounds"){
+  if (item.plan === "pb" && log !== "time" && log !== "rounds"){
     const carry = log === "carry";
     html += '<div class="select-field"><label class="field__label" for="' + base + '-left">' + (carry ? "How hard was it?" : "Reps left") + "</label>" +
       '<select class="select-input" id="' + base + '-left" data-left><option value="">Choose</option>' +
       (carry ? CONFIG.carryEffortScale.map(r => '<option value="' + r.left + '"' + (String(s.left) === String(r.left) ? " selected" : "") + ">" + r.left + " " + esc(r.name) + ": " + esc(r.short) + "</option>").join("")
         : CONFIG.repsLeftScale.map(r => '<option value="' + r.left + '"' + (String(s.left) === String(r.left) ? " selected" : "") + ">" + r.left + " left: " + esc(r.short) + "</option>").join("")) + "</select></div>";
   }
-  if (item.plan === "hd" && kind === "main" && !warm){
+  if (item.plan === "hd" && !warm){
     const end = s.end || "clean";
     html += '<div class="select-field"><label class="field__label" for="' + base + '-end">How did the set end?</label><select class="select-input" id="' + base + '-end" data-end>' +
       Object.keys(CONFIG.setEnds).map(k => '<option value="' + k + '"' + (end === k ? " selected" : "") + ">" + esc(CONFIG.setEnds[k]) + "</option>").join("") + "</select></div>";
@@ -6118,20 +6205,26 @@ function swapPanelHTML(c, item, e, lw){
   const a = rowArgs(c, item);
   const saved = (c.slot.savedSwaps || {})[item.id] || [], cur = keyOf(e.repl.name);
   const chips = saved.filter(x => keyOf(x.name) !== cur).map((x, k) => '<button type="button" class="chip" data-act="pick-swap" data-k="' + saved.indexOf(x) + '">' + esc(x.name) + "</button>").join("") +
-    (item.swap && keyOf(item.swap) !== cur && !saved.some(x => keyOf(x.name) === keyOf(item.swap)) ? '<button type="button" class="chip" data-act="use-swap">' + esc(item.swap.charAt(0).toUpperCase() + item.swap.slice(1)) + ' <span class="chip__tag">plan</span></button>' : "");
+    (item.swap && keyOf(planSwapName(item.swap)) !== cur && !saved.some(x => keyOf(x.name) === keyOf(planSwapName(item.swap))) ? '<button type="button" class="chip" data-act="use-swap">' + esc(planSwapName(item.swap)) + ' <span class="chip__tag">plan</span></button>' : "");
   const rec = cur ? savedSwapFor(saved, e.repl.name) : null;
-  return '<div class="sub-panel"><h4>' + term("swap", "Swap exercise") + "</h4>" +
+  return '<div class="sub-panel"><h4>' + term("swap", "Swap") + ": instead of " + esc(item.name) + "</h4>" +
     (chips ? '<p class="small" id="' + base + '-picks">' + (saved.length ? "Your swaps for this day" + (item.swap ? ", and the plan's" : "") : "The plan suggests") + ':</p><div class="chip-row" role="group" aria-labelledby="' + base + '-picks">' + chips + "</div>" : "") +
     (item.swapNote ? '<p class="small">' + esc(item.swapNote) + "</p>" : "") +
     '<div class="field"><label class="field__label" for="' + base + '-name">What did you do instead?</label><input class="text-input" id="' + base + '-name" data-repl="name" type="text" maxlength="60" autocomplete="off" placeholder="For example, Smith machine squat" value="' + esc(e.repl.name) + '"></div>' +
     '<div class="field"><label class="field__label" for="' + base + '-reason">Why?</label><select class="select-input" id="' + base + '-reason" data-repl="reason"><option value="">Choose a reason</option>' +
     Object.keys(CONFIG.reasons).map(k => '<option value="' + k + '"' + (e.repl.reason === k ? " selected" : "") + ">" + esc(CONFIG.reasons[k]) + "</option>").join("") + "</select></div>" +
-    unitToggleHTML(item, "repl", e.repl.unit || "kg") +
+    unitToggleHTML(item, "repl", e.repl.unit || "kg") + measureToggleHTML(item, e.repl.measure || "reps") +
+    "</div>" +
     '<div class="set-rows" data-kind="repl">' + e.repl.sets.map((s, i) => setRowHTML(c, item, "repl", i, s, a)).join("") + "</div>" +
-    setActionsHTML("repl", e.repl.sets.length, item.name) +
+    setActionsHTML("repl", e.repl.sets.length, e.repl.name || item.name) +
+    '<div class="swap-foot">' +
     (cur ? '<label class="check-row"><input type="checkbox" data-regular' + (rec && rec.regular ? " checked" : "") + "><span>Do this instead every week on Day " + item.day + " (" + term("regularswap", "what this does") + ")</span></label>" : "") +
     (rec ? '<p class="small muted">Saved for Day ' + item.day + ' only. <button type="button" class="link-button" data-act="forget-swap">Remove from my swaps</button></p>' : "") +
     '<div data-advice="replaced">' + adviceHTML(c, item, e, "replaced") + "</div></div>";
+}
+function measureToggleHTML(item, measure){
+  const b = (m, t) => '<button type="button" class="button" data-act="measure" data-measure="' + m + '" aria-pressed="' + (measure === m) + '">' + t + "</button>";
+  return '<div class="field"><span class="field__label" id="measure-' + item.id + '">Count reps or ' + term("hold", "seconds") + '</span><div class="segmented" role="group" aria-labelledby="measure-' + item.id + '">' + b("reps", "Reps") + b("time", "Seconds") + "</div></div>";
 }
 function missedPanelHTML(c, item, e){
   if (e.missed.viaDay) return '<p class="small">Part of missed Day ' + item.day + ". Make it up from the yellow card.</p>";
@@ -6399,7 +6492,7 @@ function renderHistory(c){
       let line = '<li><span class="hist-name">' + esc(it.name) + (it.madeUp ? ' <span class="exercise__tag">Made up</span>' : "") + "</span>";
       if (it.missed) line += '<span class="hist-sets muted">Skipped</span>';
       if (sets) line += '<span class="hist-sets">' + sets + "</span>";
-      if (it.swap) line += '<span class="hist-sets">Swapped for ' + esc(it.swap.name) + (it.swap.sets.length ? ": <strong>" + it.swap.sets.map(s => esc(histSetText(null, s, it.swap.unit))).join(", ") + "</strong>" : "") + "</span>";
+      if (it.swap) line += '<span class="hist-sets">Swapped for ' + esc(it.swap.name) + (it.swap.sets.length ? ": <strong>" + it.swap.sets.map(s => esc(it.swap.measure === "time" ? swapSetText(s, it.swap.unit, "time") : histSetText(null, s, it.swap.unit))).join(", ") + "</strong>" : "") + "</span>";
       return line + "</li>";
     }).join("") +
     d.extras.map(x => '<li><span class="hist-name">' + esc(x.name || "Extra") + ' <span class="exercise__tag">Extra</span></span><span class="hist-sets">' + x.sets.map(s => esc(histSetText(null, s, x.unit))).join(", ") + "</span></li>").join("") +
@@ -6427,9 +6520,9 @@ function progressHTML(weeks, plan){
       let ch = "–";
       if (older){
         const dk = Math.round((r.kg - older.kg) * 100) / 100, dr = r.reps - older.reps;
-        ch = dk ? (dk > 0 ? "+" : "−") + fmtLoad(Math.abs(dk), r.unit) : dr ? (dr > 0 ? "+" : "−") + Math.abs(dr) + (Math.abs(dr) === 1 ? " rep" : " reps") : "Same";
+        ch = dk ? (dk > 0 ? "+" : "−") + fmtLoad(Math.abs(dk), r.unit) : dr ? (dr > 0 ? "+" : "−") + Math.abs(dr) + (r.measure === "time" ? " s" : Math.abs(dr) === 1 ? " rep" : " reps") : "Same";
       }
-      const best = (r.kg > 0 ? fmtLoad(r.kg, r.unit) + " × " : "") + r.reps + (r.kg > 0 ? "" : " reps");
+      const best = r.measure === "time" ? swapSetText({reps: r.reps, kg: r.kg}, r.unit, "time") : (r.kg > 0 ? fmtLoad(r.kg, r.unit) + " × " : "") + r.reps + (r.kg > 0 ? "" : " reps");
       return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + "</td><td>" + esc(ch) + "</td></tr>";
     }).join("") + "</tbody></table></section>";
   return html;
@@ -6666,7 +6759,7 @@ function setsFor(e, kind){ return kind === "repl" ? e.repl.sets : e.sets; }
 function goToNextSet(){
   const c = ctx(), day = sessionOf(c, state.ui.day), n = day ? nextSet(c.slot, day) : null;
   if (!n) return;
-  if (n.kind === "main") activeRows[n.item.id] = n.i;
+  activeRows[n.item.id] = n.i;
   state.ui.openEx = n.item.id; save(); renderAll();
   const input = $("#" + n.item.id + "-" + n.kind + "-" + n.i + "-reps") || $("#ex-" + n.item.id + ' [data-kind="' + n.kind + '"][data-i="' + n.i + '"] input');
   if (!input) return;
@@ -6682,8 +6775,8 @@ function applyValue(exEl, rowEl, input, raw, typing){
   if (input.value !== r.value) input.value = r.value;
   $(".error-text", rowEl).textContent = r.error;
   setsFor(e, kind)[i][f] = r.value;
-  if (kind === "main") activeRows[item.id] = i;   // keep this set open until "Log set" or another set is tapped
-  if (kind === "main" && !e.doneAt && e.sets.some(isLogged)) e.doneAt = c.today;
+  activeRows[item.id] = i;   // keep this set open until "Log set" or another set is tapped
+  if (!e.doneAt && setsFor(e, kind).some(isLogged)) e.doneAt = c.today;
   save();
   if (!typing){ refreshExercise(item.id, "#" + CSS.escape(input.id)); return; }
   // While typing: update highlights in place, so the keyboard stays open
@@ -6741,19 +6834,20 @@ function listHandler(root){
       const next = Math.max(0, Math.round((cur + (act === "inc" ? step : -step)) * 100) / 100);
       applyValue(exEl, row, input, next === 0 && act === "dec" && f !== "kg" ? "" : fmtNum(next));
     } else if (act === "log-set"){
-      logSet(c, item, e, exEl, +btn.closest(".set-row").dataset.i);
+      const row = btn.closest(".set-row");
+      logSet(c, item, e, exEl, +row.dataset.i, row.dataset.kind);
     } else if (act === "edit-set"){
       activeRows[item.id] = +btn.closest(".set-row").dataset.i;
       rerenderExercise(item.id, '[data-i="' + activeRows[item.id] + '"] input[data-f="reps"]');
     } else if (act === "add"){
-      setsFor(e, btn.dataset.kind).push(emptySet()); if (btn.dataset.kind === "main") activeRows[item.id] = e.sets.length - 1; save(); rerenderExercise(item.id, '[data-act="add"][data-kind="' + btn.dataset.kind + '"]');
+      setsFor(e, btn.dataset.kind).push(emptySet()); activeRows[item.id] = setsFor(e, btn.dataset.kind).length - 1; save(); rerenderExercise(item.id, '[data-act="add"][data-kind="' + btn.dataset.kind + '"]');
     } else if (act === "remove"){
       const sets = setsFor(e, btn.dataset.kind);
       if (sets.length > 1){ sets.pop(); save(); rerenderExercise(item.id, '[data-act="' + (sets.length > 1 ? "remove" : "add") + '"][data-kind="' + btn.dataset.kind + '"]'); }
     } else if (act === "toggle-swap"){
-      e.replaced = !e.replaced;
-      if (e.replaced){ if (!e.repl.date) e.repl.date = c.today; e.missed = {on: false, reason: "", date: null}; }
-      save(); rerenderExercise(item.id, '[data-act="toggle-swap"]');
+      if (e.replaced) e.replaced = false; else startSwap(e, item, null, c.today);
+      delete activeRows[item.id];
+      save(); rerenderExercise(item.id, e.replaced ? "#" + CSS.escape(item.id + "-repl-name") : '[data-act="toggle-swap"]');
     } else if (act === "toggle-missed"){
       const on = !(e.missed && e.missed.on);
       e.missed = {on: on, reason: "", date: on ? c.today : null, madeUp: null};
@@ -6761,21 +6855,22 @@ function listHandler(root){
       save(); rerenderExercise(item.id, '[data-act="toggle-missed"]');
     } else if (act === "swap-again"){
       const sv = ((c.slot.savedSwaps || {})[item.id] || [])[0]; if (!sv) return;
-      e.replaced = true; e.missed = {on: false, reason: "", date: null};
-      e.repl = {name: sv.name, reason: e.repl.reason || "", date: c.today, unit: sv.unit, sets: sv.sets.map(emptySet)};
+      startSwap(e, item, sv, c.today); delete activeRows[item.id];
       save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
       toast("Swapped for " + sv.name + ". Targets come from last time.");
     } else if (act === "pick-swap"){
       const sv = ((c.slot.savedSwaps || {})[item.id] || [])[+btn.dataset.k]; if (!sv) return;
-      e.repl.name = sv.name; e.repl.unit = sv.unit;
-      if (!e.repl.sets.some(isLogged)) e.repl.sets = sv.sets.map(emptySet);
+      startSwap(e, item, sv, c.today);
       save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
     } else if (act === "forget-swap"){
       const name = e.repl.name;
       forgetSwap(c.slot, item.id, name); save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-name"));
       toast(name + " removed from your swaps.");
+    } else if (act === "measure"){
+      e.repl.measure = btn.dataset.measure === "time" ? "time" : "reps"; e.repl.measureChosen = true;
+      save(); rerenderExercise(item.id, '[data-act="measure"][data-measure="' + e.repl.measure + '"]');
     } else if (act === "use-swap"){
-      e.repl.name = item.swap.charAt(0).toUpperCase() + item.swap.slice(1); save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
+      e.repl.name = planSwapName(item.swap); if (!e.repl.measureChosen) e.repl.measure = measureFor(e.repl.name); save(); rerenderExercise(item.id, "#" + CSS.escape(item.id + "-repl-reason"));
     } else if (act === "unit"){
       const u = btn.dataset.unit === "plates" ? "plates" : "kg";
       if (btn.dataset.kind === "repl") e.repl.unit = u; else c.slot.units[unitKey(item)] = u;
@@ -6816,9 +6911,12 @@ function listHandler(root){
     const c = ctx(), item = itemOf(c, exEl.dataset.id); if (!item) return;
     const e = ensureEntry(c.slot, item);
     if (t.matches("input[data-f]") && t.closest(".set-row")){ deferRefresh(item.id); return; }
-    if (t.dataset.repl === "name"){ deferRefresh(item.id); return; }
+    if (t.dataset.repl === "name"){
+      if (!e.repl.measureChosen && !e.repl.sets.some(isLogged)) e.repl.measure = measureFor(e.repl.name);
+      deferRefresh(item.id); return;
+    }
     if (t.matches("input[data-regular]")){
-      setRegularSwap(c.slot, item.id, {name: e.repl.name, unit: e.repl.unit || "kg", setCount: e.repl.sets.length}, t.checked, c.today);
+      setRegularSwap(c.slot, item.id, {name: e.repl.name, unit: e.repl.unit || "kg", measure: e.repl.measure, setCount: e.repl.sets.length}, t.checked, c.today);
       save(); rerenderExercise(item.id, "input[data-regular]");
       toast(t.checked ? e.repl.name.trim() + " will be swapped in every week on Day " + item.day + "." : "Back to " + item.name + " from next week.");
       return;
@@ -6890,27 +6988,37 @@ function closeAndOpenNext(c, item){
   if (isComplete(c.slot.entries[item.id])) toast(item.name + " saved.");
 }
 // "Log set": fill empty fields with the grey suggestions, save, confirm, start the rest timer, move on
-function logSet(c, item, e, exEl, i){
-  const a = rowArgs(c, item), row = item.rows[i] || {role: "set"};
-  const unit = unitOf(c.slot.units, item);
-  const last = a.last && a.last.sets ? sameUnit(withUnit(a.last.sets[i], a.last.unit), unit) : null;
-  const t = rowTarget(item, i, Object.assign({}, a, {entry: e}));
-  const w = item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
-  const known = !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
-  const sug = suggestedSet(e.sets[i], w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, planRowReps(item, i), t.reps || null);
+function logSet(c, item, e, exEl, i, kind){
+  kind = kind === "repl" ? "repl" : "main";
+  const a = rowArgs(c, item), row = item.rows[i] || {role: "set"}, sets = setsFor(e, kind);
+  const unit = kind === "repl" ? (e.repl.unit || "kg") : unitOf(c.slot.units, item);
+  let last = null, t, w, known = null;
+  if (kind === "main"){
+    last = a.last && a.last.sets ? sameUnit(withUnit(a.last.sets[i], a.last.unit), unit) : null;
+    t = rowTarget(item, i, Object.assign({}, a, {entry: e}));
+    w = item.plan === "hd" ? hdWarmup(item, i, Object.assign({}, a, {entry: e})) : null;
+    known = !(w && w.kg) && !t.kg && isWorkingRow(item, i) ? bestKnownLoad(item, i, Object.assign({}, a, {entry: e}), c.slot.history) : null;
+  } else {
+    const g = replGuide(c, item, e, i, unit); t = g.t; w = g.w;
+    if (a.last && a.last.replaced && a.last.replacement && keyOf(a.last.replacement.name) === keyOf(e.repl.name)) last = sameUnit(withUnit((a.last.replacement.sets || [])[i], a.last.replacement.unit || "kg"), unit);
+    if (!last && g.rec && (g.rec.measure || "reps") === (e.repl.measure || "reps")) last = sameUnit(withUnit(g.rec.sets[i], g.rec.unit), unit);
+  }
+  const timed = kind === "repl" && e.repl.measure === "time";
+  const sug = suggestedSet(sets[i], w && w.kg ? w.kg : (t.kg || (known ? known.kg : null)), last, timed ? null : planRowReps(item, i), t.reps || null);
   const repsOk = sanitize("reps", sug.reps), kgOk = sanitize("kg", sug.kg, unit);
-  if (!(Number(repsOk.value) > 0)){ const err = $('[data-i="' + i + '"] .error-text', exEl); if (err) err.textContent = "Enter your reps first."; return; }
-  e.sets[i].reps = repsOk.value; e.sets[i].kg = kgOk.value;
+  if (!(Number(repsOk.value) > 0)){ const err = $('[data-kind="' + kind + '"][data-i="' + i + '"] .error-text', exEl); if (err) err.textContent = timed ? "Enter the seconds you held first." : "Enter your reps first."; return; }
+  sets[i].reps = repsOk.value; sets[i].kg = kgOk.value;
   if (!e.doneAt) e.doneAt = c.today;
   save();
   if (navigator.vibrate) try { navigator.vibrate(15); } catch (err){}
-  const next = e.sets.findIndex((s, k) => k > i && !isLogged(s));
+  const next = sets.findIndex((s, k) => k > i && !isLogged(s));
   activeRows[item.id] = next >= 0 ? next : -1;
-  rerenderExercise(item.id, next >= 0 ? '[data-i="' + next + '"] [data-act="log-set"]' : '[data-act="close"]');
-  const el = $("#ex-" + item.id + ' [data-i="' + i + '"]'); if (el){ el.classList.add("is-just-logged"); }
+  rerenderExercise(item.id, next >= 0 ? '[data-kind="' + kind + '"][data-i="' + next + '"] [data-act="log-set"]' : '[data-act="close"]');
+  const el = $("#ex-" + item.id + ' [data-kind="' + kind + '"][data-i="' + i + '"]'); if (el){ el.classList.add("is-just-logged"); }
   const secs = restSeconds(item.rest, row.role);
+  const name = kind === "repl" && e.repl.name.trim() ? e.repl.name.trim() : item.name;
   const day = sessionOf(c, state.ui.day), after = next < 0 && day ? nextSet(c.slot, day, item.id) : null;
-  if (secs) startRest(secs, next >= 0 ? item.name + ", " + plainRowLabel((item.rows[next] || {label: "next set"}).label) : (after ? after.item.name : "you're done for today"));
+  if (secs) startRest(secs, next >= 0 ? name + ", " + plainRowLabel((item.rows[next] || {label: "next set"}).label) : (after ? after.item.name : "you're done for today"));
   else toast(plainRowLabel(row.label || "Set") + " logged.");
 }
 
@@ -7062,6 +7170,7 @@ $("#button-new-week-confirm").addEventListener("click", () => {
   const c = ctx(), nowISO = new Date().toISOString();
   archiveWeek(c.plan, buildExport(c.slot, c.plan, c.sessions, null, nowISO));
   startNewWeek(c.slot, c.plan, c.sessions, c.cycle, c.today, nowISO);
+  Object.keys(activeRows).forEach(k => { delete activeRows[k]; });
   closeDialog($("#dialog-new-week"));
   openToday(); save(); renderAll();
   toast("New week started. Last week's numbers are your targets.");
