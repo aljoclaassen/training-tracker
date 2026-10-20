@@ -369,6 +369,9 @@ HOSTING AND UPDATES (GitHub Pages)
   --font-size-timer: 28px;
   --font-weight-normal: 400;
   --font-weight-bold: 600;
+  --font-weight-heavy: 700;          /* big numbers and large titles */
+  --font-family-numeral: ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-size-large-title: 28px;     /* one per view: Plans, History */
   --line-height-base: 1.45;
   --line-height-tight: 1.2;
   /* Spacing (4px base) */
@@ -397,9 +400,18 @@ HOSTING AND UPDATES (GitHub Pages)
   --radius-base: 8px;
   --radius-large: 12px;
   --radius-pill: 999px;
+  --radius-card: 16px;               /* cards and grouped panels */
+  --stroke-ring: 6px;
   /* Motion */
   --duration-fast: 150ms;
   --duration-flash: 180ms;
+  /* Role tokens for the Apple Fitness-inspired layer. They point at theme colours, so every palette
+     gets them. Dark mode sets --color-card-border to transparent: depth comes from a near-black base
+     under lighter cards instead of outlines. */
+  --color-card-border: var(--color-border);
+  --color-metric: var(--color-accent-text);
+  --color-trend-up-bg: var(--color-success-soft);
+  --color-trend-flat-bg: var(--color-surface-alt);
 }
 /* =====================================================================
    THEME TOKENS
@@ -452,7 +464,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --color-bg: #0B1117;
+    --color-bg: #06080C;   /* base, darker for depth: was #0B1117 */
+    --color-card-border: transparent;
     --color-surface: #141C25;
     --color-surface-alt: #1A242F;
     --color-surface-raised: #1D2936;
@@ -483,7 +496,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-theme="dark"]{
-  --color-bg: #0B1117;
+  --color-bg: #06080C;   /* base, darker for depth: was #0B1117 */
+  --color-card-border: transparent;
   --color-surface: #141C25;
   --color-surface-alt: #1A242F;
   --color-surface-raised: #1D2936;
@@ -545,7 +559,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="bush"]:not([data-theme="light"]){
-    --color-bg: #0F130B;
+    --color-bg: #080A06;   /* base, darker for depth: was #0F130B */
+    --color-card-border: transparent;
     --color-surface: #181F13;
     --color-surface-alt: #1F2719;
     --color-surface-raised: #242F1D;
@@ -576,7 +591,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="bush"][data-theme="dark"]{
-  --color-bg: #0F130B;
+  --color-bg: #080A06;   /* base, darker for depth: was #0F130B */
+  --color-card-border: transparent;
   --color-surface: #181F13;
   --color-surface-alt: #1F2719;
   --color-surface-raised: #242F1D;
@@ -638,7 +654,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="ember"]:not([data-theme="light"]){
-    --color-bg: #160E0B;
+    --color-bg: #0B0706;   /* base, darker for depth: was #160E0B */
+    --color-card-border: transparent;
     --color-surface: #221714;
     --color-surface-alt: #2B1E1A;
     --color-surface-raised: #32221D;
@@ -669,7 +686,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="ember"][data-theme="dark"]{
-  --color-bg: #160E0B;
+  --color-bg: #0B0706;   /* base, darker for depth: was #160E0B */
+  --color-card-border: transparent;
   --color-surface: #221714;
   --color-surface-alt: #2B1E1A;
   --color-surface-raised: #32221D;
@@ -731,7 +749,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="iron"]:not([data-theme="light"]){
-    --color-bg: #0A0E10;
+    --color-bg: #050708;   /* base, darker for depth: was #0A0E10 */
+    --color-card-border: transparent;
     --color-surface: #13191C;
     --color-surface-alt: #192024;
     --color-surface-raised: #1D272B;
@@ -762,7 +781,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="iron"][data-theme="dark"]{
-  --color-bg: #0A0E10;
+  --color-bg: #050708;   /* base, darker for depth: was #0A0E10 */
+  --color-card-border: transparent;
   --color-surface: #13191C;
   --color-surface-alt: #192024;
   --color-surface-raised: #1D272B;
@@ -824,7 +844,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="volt"]:not([data-theme="light"]){
-    --color-bg: #0C0E09;
+    --color-bg: #060704;   /* base, darker for depth: was #0C0E09 */
+    --color-card-border: transparent;
     --color-surface: #161A11;
     --color-surface-alt: #1C2116;
     --color-surface-raised: #23291B;
@@ -855,7 +876,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="volt"][data-theme="dark"]{
-  --color-bg: #0C0E09;
+  --color-bg: #060704;   /* base, darker for depth: was #0C0E09 */
+  --color-card-border: transparent;
   --color-surface: #161A11;
   --color-surface-alt: #1C2116;
   --color-surface-raised: #23291B;
@@ -917,7 +939,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="ultraviolet"]:not([data-theme="light"]){
-    --color-bg: #0F0B19;
+    --color-bg: #08060C;   /* base, darker for depth: was #0F0B19 */
+    --color-card-border: transparent;
     --color-surface: #191427;
     --color-surface-alt: #201A30;
     --color-surface-raised: #241D38;
@@ -948,7 +971,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="ultraviolet"][data-theme="dark"]{
-  --color-bg: #0F0B19;
+  --color-bg: #08060C;   /* base, darker for depth: was #0F0B19 */
+  --color-card-border: transparent;
   --color-surface: #191427;
   --color-surface-alt: #201A30;
   --color-surface-raised: #241D38;
@@ -1010,7 +1034,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="tide"]:not([data-theme="light"]){
-    --color-bg: #07141A;
+    --color-bg: #040A0D;   /* base, darker for depth: was #07141A */
+    --color-card-border: transparent;
     --color-surface: #0F1F28;
     --color-surface-alt: #142732;
     --color-surface-raised: #162D3B;
@@ -1041,7 +1066,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="tide"][data-theme="dark"]{
-  --color-bg: #07141A;
+  --color-bg: #040A0D;   /* base, darker for depth: was #07141A */
+  --color-card-border: transparent;
   --color-surface: #0F1F28;
   --color-surface-alt: #142732;
   --color-surface-raised: #162D3B;
@@ -1103,7 +1129,8 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 @media (prefers-color-scheme: dark){
   :root[data-palette="mono"]:not([data-theme="light"]){
-    --color-bg: #0B0B0B;
+    --color-bg: #060606;   /* base, darker for depth: was #0B0B0B */
+    --color-card-border: transparent;
     --color-surface: #161616;
     --color-surface-alt: #1D1D1D;
     --color-surface-raised: #232323;
@@ -1134,7 +1161,8 @@ HOSTING AND UPDATES (GitHub Pages)
   }
 }
 :root[data-palette="mono"][data-theme="dark"]{
-  --color-bg: #0B0B0B;
+  --color-bg: #060606;   /* base, darker for depth: was #0B0B0B */
+  --color-card-border: transparent;
   --color-surface: #161616;
   --color-surface-alt: #1D1D1D;
   --color-surface-raised: #232323;
@@ -1165,9 +1193,9 @@ HOSTING AND UPDATES (GitHub Pages)
 }
 /* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength. */
 @media (prefers-contrast: more){
-  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); }
+  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 }
-:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); }
+:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 /* Theme switch: a short cross-fade, off when motion is reduced */
 :root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after{ transition: background-color var(--duration-fast), color var(--duration-fast), border-color var(--duration-fast), fill var(--duration-fast), stroke var(--duration-fast) !important; }
 
@@ -1457,6 +1485,36 @@ dialog:not([open]){ display: none; }
 .hist-table tr.is-swap td{ background: var(--color-surface-alt); }
 .empty-state{ padding: var(--space-4); text-align: center; background: var(--color-surface); border: var(--border-width) dashed var(--color-border); border-radius: var(--radius-large); display: grid; gap: var(--space-1); }
 .swap-foot{ display: grid; gap: var(--space-2); }
+
+/* =====================================================================
+   APPLE FITNESS-INSPIRED LAYER (20 October 2026)
+   Style reference only, no Apple assets: near-black base with lighter
+   cards in dark mode, rounded heavy numerals, large view titles,
+   title-case section headers, softer card corners, a translucent tab bar.
+   Every value comes from the tokens at the top.
+   ===================================================================== */
+.exercise, .up-next, .today-card, .hist-day, .hist-progress, .swaps-log, .empty-state{ border-radius: var(--radius-card); }
+.exercise, .hist-day, .hist-progress, .swaps-log{ border-color: var(--color-card-border); }
+.exercise.is-open{ border-color: var(--color-accent); }
+.exercise__summary{ border-radius: var(--radius-card); }
+#plan-title, #hist-title{ font-size: var(--font-size-large-title); font-weight: var(--font-weight-heavy); letter-spacing: -.01em; }
+.session-head__title{ font-weight: var(--font-weight-heavy); }
+.group-title{ font-size: var(--font-size-base); font-weight: var(--font-weight-heavy); text-transform: none; letter-spacing: 0; color: var(--color-text); }
+.stepper__input, .rest-bar__time, .ring__text, .exercise__count, .day-tab__count, .hist-table td:nth-child(2), .finder-table strong{ font-family: var(--font-family-numeral); font-variant-numeric: tabular-nums; }
+.stepper__input, .rest-bar__time{ font-weight: var(--font-weight-heavy); }
+.ring__track{ stroke: var(--color-surface-alt); stroke-width: var(--stroke-ring); }
+.ring__fill{ stroke-width: var(--stroke-ring); }
+.progress__rail{ border-color: transparent; }
+.hist-table td:nth-child(2){ color: var(--color-metric); font-weight: var(--font-weight-heavy); }
+.trend{ display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--color-trend-flat-bg); color: var(--color-text); font-weight: var(--font-weight-bold); white-space: nowrap; }
+.trend--up{ background: var(--color-trend-up-bg); }
+.bottom-nav{ border-top-color: var(--color-card-border); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red 50%, transparent)){
+  .bottom-nav{ background: color-mix(in srgb, var(--color-surface) 90%, transparent); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); }
+}
+:root[data-contrast="more"] .bottom-nav{ background: var(--color-surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (prefers-contrast: more){ .bottom-nav{ background: var(--color-surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+:root[data-contrast="more"] .progress__rail{ border-color: var(--color-border); }
 </style>
 <script>
 /* Apply the saved theme before the page paints, so it never flashes the wrong colours.
@@ -1818,7 +1876,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-20.1",
+ "appVersion": "2026-10-20.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -6563,7 +6621,10 @@ function progressHTML(weeks, plan){
         ch = dk ? (dk > 0 ? "+" : "−") + fmtLoad(Math.abs(dk), r.unit) : dr ? (dr > 0 ? "+" : "−") + Math.abs(dr) + (r.measure === "time" ? " s" : r.measure === "distance" || (r.kind !== "swap" && EXERCISES[id].item.log === "carry") ? " m" : Math.abs(dr) === 1 ? " rep" : " reps") : "Same";
       }
       const best = r.kind === "swap" ? swapSetText({reps: r.reps, kg: r.kg}, r.unit, r.measure) : histSetText(EXERCISES[id], {reps: r.reps, kg: r.kg}, r.unit);
-      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + "</td><td>" + esc(ch) + "</td></tr>";
+      // Trend pill: arrow plus words, so the direction never relies on colour alone
+      const dir = !older ? "" : ch.charAt(0) === "+" ? "up" : ch.charAt(0) === "−" ? "down" : "flat";
+      const pill = dir ? '<span class="trend trend--' + dir + '"><span aria-hidden="true">' + (dir === "up" ? "▲" : dir === "down" ? "▼" : "•") + "</span>" + esc(ch) + "</span>" : esc(ch);
+      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + "</td><td>" + pill + "</td></tr>";
     }).join("") + "</tbody></table></section>";
   return html;
 }
