@@ -54,7 +54,8 @@ STORAGE KEYS
   localStorage "heavy-duty-tracker-v1": the whole state, JSON. Unchanged key.
   State = the Heavy Duty slot at the top level (exactly the version 1 shape, so
   old saves load untouched) plus:
-    cycle {start (Monday, YYYY-MM-DD), first ("hd"|"pb")}   set on first use
+    cycle {start (Monday, YYYY-MM-DD), first ("hd"|"pb"), lengths [weeks per block, 0 to 12]}   set on first use;
+          missing lengths mean two weeks, so older saves load unchanged
     pb    a second slot with the same shape, for powerbuilding
     ui    {tab ("train"|"plan"|"history"), day, openEx, openExtra, theme, mode, cols, helpSeen,
            planView, finder, varOpen, makeupDay, lastOpened, dismissedMiss, histPlan, histWeek, histEx}
@@ -117,10 +118,20 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     keyOf(name)
     otherPlan(plan)
 
-  2.3 The two-week cycle
-    weekInfo(cycle, iso) : Takes the cycle {start, first} and any date. Returns where that date sits: {before, weekStart, weekIndex, blockIndex, plan, blockWeek (1 or 2), weekLetter ("A" or "B"), fortnight (powerbuilding only: 1, 2 or 3), heavyWeek, testWeek}. Rule: blocks of CONFIG.blockWeeks weeks alternate, starting with cycle.first on cycle.start. Powerbuilding blocks count 1, 2, 3 and then repeat; the third block's second week is test week.
+  2.3 The block calendar
+    blockLength(cycle, b) : Takes the cycle and a block index. Returns the block's length in weeks.
+    blockPlan(cycle, b) : Takes the cycle and a block index. Returns the block's plan id.
+    blockOffset(cycle, b) : Takes the cycle and a block index. Returns {at, pbWeeks}: weeks before the block, and how many were powerbuilding.
+    blockAtWeek(cycle, weekIndex) : Takes the cycle and a week number counted from the start. Returns {b, at, len, pbWeeks} for the block holding it.
+    weekInfo(cycle, iso) : Takes the cycle and any date. Returns where that date sits: {before, weekStart, weekIndex, blockIndex, blockStart, blockWeeks, plan, blockWeek (1 to blockWeeks), weekLetter ("A" or "B"), pbWeek, fortnight (powerbuilding only: 1, 2 or 3), heavyWeek, testWeek}. Rules: Heavy Duty weeks are all the same, numbered within the block. Powerbuilding weeks count on across every powerbuilding block, so a longer block moves on through the programme: weeks pair into A and B, pairs count blocks 1, 2 and 3, then repeat. Block 3's Week A is the heavy week and its Week B is test week.
     nextSwap(cycle, iso) : Takes the cycle and a date. Returns {date, plan}: the Monday the plan next changes, and the plan it changes to.
     nextWeekForPlan(cycle, plan, fromISO) : Takes the cycle, a plan id and a date. Returns the first Monday on or after that date scheduled for the plan.
+    calendarBlocks(cycle, fromIndex, count) : Takes the cycle, the first block index and how many blocks. Returns those blocks for the calendar: [{index, plan, start, weeks, list: [weekInfo for each week]}]. Blocks of 0 weeks are left out.
+    blockLimits(cycle, b, today) : Takes the cycle, a block index and today. Returns what may change on that block: {locked, step, min, max, why}. Rules: past blocks are fixed. Heavy Duty moves a week at a time, powerbuilding two at a time so Weeks A and B stay paired. The block you're in can't end before this week.
+    withBlockLength(cycle, b, weeks) : Takes the cycle, a block index and a length in weeks. Returns a new cycle with that block's length set.
+    switchCycleNow(cycle, today) : Takes the cycle and today. Returns a new cycle where the other plan starts this week. Rule: weeks already done stay where they are, so labels and powerbuilding progress don't jump.
+    resetUpcomingBlocks(cycle, today) : Takes the cycle and today. Returns a new cycle with every block after the current one back to the default length.
+    hasUpcomingChanges(cycle, today) : Takes the cycle and today. Returns true when a block after the current one has a non-default length.
     planWeeksBetween(cycle, plan, fromISO, toISO) : Takes the cycle, a plan id and two dates. Returns the whole weeks between them, not counting weeks scheduled for the other plan. Rule: time spent on the other plan doesn't count as a break.
     dayOfWeek(iso) : Takes a date. Returns its place in the week: 1 (Monday) to 7 (Sunday).
 
@@ -291,7 +302,10 @@ FEATURES AND WHERE THEY LIVE
   First-use setup (start date, first plan) ...... #setup-panel; 3.9 button-setup-save; checkStartDate
   "How this works" 3 steps, reopen from Help ..... #help-panel; 3.3 renderHelp; 3.9
   Current plan, block week, next swap ............ .app-header; 3.3 renderHeader; weekInfo, nextSwap
-  Two-week alternation, manual switch ............ 2.3 weekInfo; Settings: 3.9 button-switch-confirm
+  Block alternation, longer blocks ................ 2.3 weekInfo, blockLimits, withBlockLength, switchCycleNow
+  Calendar on the Plans page ...................... 3.5b renderCalendar, calBlockNotes, changeBlock, realignSlots
+    Heavy Duty blocks change a week at a time; powerbuilding two at a time and counts its weeks across
+    every powerbuilding block, so a longer block moves through blocks 1, 2, 3 and test week.
   Opens on today's session ....................... 3.10 openToday; 3.15 start
   Day tabs, one day at a time ................... 3.4 renderDayTabs; 3.10 selectDay
   Compact exercise rows; the open one is a sheet .. 3.4 exerciseHTML, panelHTML; 3.7 syncExerciseSheet; 3.11 closeAndOpenNext
@@ -1504,6 +1518,35 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .pair-group.is-open .stepper-field, .pair-group.is-open .select-field{ flex: none; }
 .pair-group.is-open .exercise__actions{ grid-template-columns: 1fr; }
 .pair-group.is-open .button-row{ flex-direction: column; }
+/* ---------- CALENDAR (Plans page) ---------- */
+.calendar{ margin-top: var(--space-1-5); display: grid; gap: var(--space-1-5); }
+.calendar__head{ display: grid; gap: var(--space-0-5); }
+.calendar__head h2{ margin: 0; }
+.cal-blocks{ list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-1-5); }
+.cal-block{ position: relative; display: grid; gap: var(--space-1); padding: var(--space-2); padding-left: calc(var(--space-2) + 6px); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); overflow: hidden; }
+.cal-block.is-current{ border: var(--border-width-strong) solid var(--color-accent); box-shadow: var(--shadow-2); }
+.cal-block__bar{ position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: var(--cal-colour); }
+.cal-block--hd{ --cal-colour: var(--color-metric-1); }
+.cal-block--pb{ --cal-colour: var(--color-metric-3); }
+.cal-block__head{ display: flex; gap: var(--space-1); align-items: flex-start; }
+.cal-block__head p{ margin: 2px 0 0; }
+.cal-block__title{ margin: 0; font-size: var(--font-size-large); display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.cal-tag{ display: inline-block; padding: 2px var(--space-1); border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-text); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
+.cal-weeks{ list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.cal-week{ display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-1); align-items: center; min-height: 48px; padding: var(--space-0-5) var(--space-1-5); border-radius: var(--radius-sm); background: var(--color-surface-alt); font-size: var(--font-size-small); overflow-wrap: anywhere; }
+.cal-week__date{ grid-column: 1; grid-row: 1; font-weight: var(--font-weight-bold); }
+.cal-week__label{ grid-column: 1; grid-row: 2; color: var(--color-text-muted); }
+.cal-week__state{ grid-column: 2; grid-row: 1 / span 2; color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: right; }
+.cal-week.is-past{ background: transparent; }
+.cal-week.is-past .cal-week__date, .cal-week.is-past .cal-week__label{ color: var(--color-text-muted); }
+.cal-week.is-now{ background: var(--color-accent-soft); }
+.cal-week.is-now .cal-week__state{ color: var(--color-accent-text); font-weight: var(--font-weight-bold); }
+.cal-week.is-test .cal-week__label, .cal-week.is-now .cal-week__label{ color: var(--color-text); font-weight: var(--font-weight-bold); }
+.cal-notes{ margin: 0; padding-left: var(--space-2); display: grid; gap: var(--space-0-5); color: var(--color-text-muted); }
+.cal-block__actions .button{ flex: 1 1 140px; }
+.cal-block p.small.muted{ margin: 0; }
+.plan-switch__title{ margin: var(--space-2) 0 0; }
+
 /* Done and upcoming sets: badge on the left, set name above its numbers, so nothing collides in a narrow column */
 .pair-group.is-open .set-row__compact{ display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "badge name" "badge value"; column-gap: var(--space-1); row-gap: 0; align-items: center; padding: var(--space-0-5) var(--space-1); min-height: var(--size-input-height); }
 .pair-group.is-open .set-row__badge{ grid-area: badge; width: 26px; height: 26px; }
@@ -1580,7 +1623,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
     <!-- FIRST-USE SETUP: start date and which plan comes first -->
     <section class="panel panel--accent" id="setup-panel" aria-labelledby="setup-title" hidden>
       <h1 id="setup-title">Set up your plans</h1>
-      <p>You swap between two plans every two weeks. Tell us where to start.</p>
+      <p>You swap between two plans, two weeks each to start with. You can stay longer on either plan later, in the calendar on the Plans page. Tell us where to start.</p>
       <div class="field">
         <label class="field__label" for="setup-start">Start date (weeks start on Monday)</label>
         <input class="text-input" type="date" id="setup-start">
@@ -1649,8 +1692,11 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 
     <!-- PLAN VIEW: read-only plan for either programme -->
     <section id="view-plan" aria-labelledby="plan-title" hidden>
+      <h1 class="page-title" id="plan-title" tabindex="-1">Plans</h1>
+      <!-- CALENDAR: blocks of each plan; add or remove weeks to stay on a plan longer -->
+      <section class="calendar" id="calendar" aria-labelledby="calendar-title"></section>
       <div class="plan-switch">
-        <h1 class="page-title" id="plan-title" tabindex="-1">Plans</h1>
+        <h2 class="plan-switch__title">Plan details</h2>
         <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
         <p class="small muted" id="plan-switch-note"></p>
       </div>
@@ -1736,7 +1782,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
       </fieldset>
       <button type="button" class="button" id="button-schedule-save">Save schedule</button>
       <button type="button" class="button" id="button-switch-now"></button>
-      <p class="small muted">Switching starts a new two-week block from this Monday.</p>
+      <p class="small muted">Switching starts the other plan this Monday. To stay longer on a plan, add weeks in the calendar on the Plans page.</p>
     </section>
     <section class="dialog__section" aria-labelledby="settings-mode-title">
       <h3 id="settings-mode-title">Light or dark</h3>
@@ -1911,7 +1957,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-22.4",
+ "appVersion": "2026-10-22.5",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -1921,6 +1967,17 @@ const CONFIG = {
  "defaultCycleStart": "2026-10-05",
  "defaultFirstPlan": "hd",
  "blockWeeks": 2,
+ "maxBlockWeeks": 12,
+ "blockStep": {
+  "hd": 1,
+  "pb": 2
+ },
+ "minBlockWeeks": {
+  "hd": 1,
+  "pb": 2
+ },
+ "longRunWeeks": 4,
+ "calendarBlocks": 4,
  "trainingDays": 5,
  "kgStep": 2.5,
  "repsStep": 1,
@@ -2203,7 +2260,7 @@ const CONFIG = {
   "short": "You stopped before you couldn't do another rep.",
   "plates": "How many plates you pin on a machine's weight stack.",
   "weekab": "Week A and Week B: the two weeks of a powerbuilding block. Week B is a bit harder.",
-  "block": "Two weeks on one plan. Then you swap to the other plan.",
+  "block": "A run of weeks on one plan, two by default. Then you swap to the other plan. Change it in the calendar on the Plans page.",
   "estmax": "A rough guess at the most you could lift for one rep.",
   "target": "What to aim for today, worked out from last time.",
   "swap": "Do a different exercise when yours isn't possible today.",
@@ -4326,26 +4383,59 @@ function weekWord(n){ return n === 1 ? "one week" : n === 2 ? "two weeks" : n + 
 function keyOf(name){ return String(name || "").trim().toLowerCase(); }
 function otherPlan(plan){ return plan === "hd" ? "pb" : "hd"; }
 
-/* ---------- 2.3 The two-week cycle ---------- */
+/* ---------- 2.3 The block calendar ---------- */
 
-// Takes the cycle {start, first} and any date.
-// Returns where that date sits: {before, weekStart, weekIndex, blockIndex, plan, blockWeek (1 or 2),
-//   weekLetter ("A" or "B"), fortnight (powerbuilding only: 1, 2 or 3), heavyWeek, testWeek}.
-// Rule: blocks of CONFIG.blockWeeks weeks alternate, starting with cycle.first on cycle.start.
-//   Powerbuilding blocks count 1, 2, 3 and then repeat; the third block's second week is test week.
+// The cycle is {start, first, lengths}. Blocks alternate between the two plans, starting with cycle.first
+// on cycle.start. lengths[i] is block i's length in weeks; a missing entry means CONFIG.blockWeeks.
+// A length of 0 skips that block (used when you switch plans in the first week of a block).
+
+// Takes the cycle and a block index. Returns the block's length in weeks.
+function blockLength(cycle, b){
+  const L = cycle.lengths, n = Array.isArray(L) && L[b] != null ? Number(L[b]) : CONFIG.blockWeeks;
+  return n >= 0 && n <= CONFIG.maxBlockWeeks ? n : CONFIG.blockWeeks;
+}
+// Takes the cycle and a block index. Returns the block's plan id.
+function blockPlan(cycle, b){ return b % 2 === 0 ? cycle.first : otherPlan(cycle.first); }
+// Takes the cycle and a block index. Returns {at, pbWeeks}: weeks before the block, and how many were powerbuilding.
+function blockOffset(cycle, b){
+  let at = 0, pbWeeks = 0;
+  for (let i = 0; i < b; i++){ const len = blockLength(cycle, i); at += len; if (blockPlan(cycle, i) === "pb") pbWeeks += len; }
+  return {at: at, pbWeeks: pbWeeks};
+}
+// Takes the cycle and a week number counted from the start. Returns {b, at, len, pbWeeks} for the block holding it.
+function blockAtWeek(cycle, weekIndex){
+  let b = 0, at = 0, pbWeeks = 0;
+  for (;;){
+    const len = blockLength(cycle, b);
+    if (weekIndex < at + len || b > 5000) return {b: b, at: at, len: len, pbWeeks: pbWeeks};
+    if (blockPlan(cycle, b) === "pb") pbWeeks += len;
+    at += len; b++;
+  }
+}
+
+// Takes the cycle and any date.
+// Returns where that date sits: {before, weekStart, weekIndex, blockIndex, blockStart, blockWeeks, plan,
+//   blockWeek (1 to blockWeeks), weekLetter ("A" or "B"), pbWeek, fortnight (powerbuilding only: 1, 2 or 3),
+//   heavyWeek, testWeek}.
+// Rules: Heavy Duty weeks are all the same, numbered within the block. Powerbuilding weeks count on across
+//   every powerbuilding block, so a longer block moves on through the programme: weeks pair into A and B,
+//   pairs count blocks 1, 2 and 3, then repeat. Block 3's Week A is the heavy week and its Week B is test week.
 function weekInfo(cycle, iso){
   const start = mondayOf(cycle.start), week = mondayOf(iso);
   const before = daysBetween(start, week) < 0;
   const weekIndex = before ? 0 : Math.floor(daysBetween(start, week) / 7);
-  const blockIndex = Math.floor(weekIndex / CONFIG.blockWeeks);
-  const plan = blockIndex % 2 === 0 ? cycle.first : otherPlan(cycle.first);
-  const blockWeek = (weekIndex % CONFIG.blockWeeks) + 1;
-  const info = {before: before, weekStart: before ? start : week, weekIndex: weekIndex, blockIndex: blockIndex, plan: plan,
-    blockWeek: blockWeek, weekLetter: blockWeek === 1 ? "A" : "B", fortnight: null, heavyWeek: false, testWeek: false};
+  const k = blockAtWeek(cycle, weekIndex);
+  const plan = blockPlan(cycle, k.b), blockWeek = weekIndex - k.at + 1;
+  const info = {before: before, weekStart: before ? start : week, weekIndex: weekIndex, blockIndex: k.b, blockStart: addDays(start, 7 * k.at),
+    blockWeeks: k.len, plan: plan, blockWeek: blockWeek, weekLetter: blockWeek % 2 === 1 ? "A" : "B", pbWeek: null,
+    fortnight: null, heavyWeek: false, testWeek: false};
   if (plan === "pb"){
-    info.fortnight = (Math.floor(blockIndex / 2) % PROGRAMME.plans.pb.fortnights.length) + 1;
-    info.heavyWeek = info.fortnight === 3 && blockWeek === 1;
-    info.testWeek = info.fortnight === 3 && blockWeek === 2;
+    const n = k.pbWeeks + blockWeek - 1;
+    info.pbWeek = n;
+    info.weekLetter = n % 2 === 0 ? "A" : "B";
+    info.fortnight = (Math.floor(n / 2) % PROGRAMME.plans.pb.fortnights.length) + 1;
+    info.heavyWeek = info.fortnight === 3 && info.weekLetter === "A";
+    info.testWeek = info.fortnight === 3 && info.weekLetter === "B";
   }
   return info;
 }
@@ -4354,17 +4444,77 @@ function weekInfo(cycle, iso){
 function nextSwap(cycle, iso){
   const w = weekInfo(cycle, iso);
   if (w.before) return {date: mondayOf(cycle.start), plan: cycle.first};
-  return {date: addDays(mondayOf(cycle.start), 7 * (w.blockIndex + 1) * CONFIG.blockWeeks), plan: otherPlan(w.plan)};
+  let d = addDays(w.blockStart, 7 * w.blockWeeks);
+  for (let i = 0; i < 200; i++){
+    const x = weekInfo(cycle, d);
+    if (x.plan !== w.plan) return {date: d, plan: x.plan};
+    d = addDays(x.blockStart, 7 * Math.max(1, x.blockWeeks));
+  }
+  return {date: d, plan: otherPlan(w.plan)};
 }
 
 // Takes the cycle, a plan id and a date. Returns the first Monday on or after that date scheduled for the plan.
 function nextWeekForPlan(cycle, plan, fromISO){
   let w = laterOf(mondayOf(fromISO), mondayOf(cycle.start));
-  for (let i = 0; i < CONFIG.blockWeeks * 4; i++){
-    if (weekInfo(cycle, w).plan === plan) return w;
-    w = addDays(w, 7);
+  for (let i = 0; i < CONFIG.maxBlockWeeks * 4 + 8; i++){
+    const x = weekInfo(cycle, w);
+    if (x.plan === plan) return w;
+    w = addDays(x.blockStart, 7 * Math.max(1, x.blockWeeks));
   }
   return w;
+}
+
+// Takes the cycle, the first block index and how many blocks. Returns those blocks for the calendar:
+// [{index, plan, start, weeks, list: [weekInfo for each week]}]. Blocks of 0 weeks are left out.
+function calendarBlocks(cycle, fromIndex, count){
+  const out = [], start = mondayOf(cycle.start);
+  for (let b = Math.max(0, fromIndex); out.length < count && b < fromIndex + count * 3 + 4; b++){
+    const len = blockLength(cycle, b);
+    if (!len) continue;
+    const at = blockOffset(cycle, b).at, first = addDays(start, 7 * at), list = [];
+    for (let i = 0; i < len; i++) list.push(weekInfo(cycle, addDays(first, 7 * i)));
+    out.push({index: b, plan: blockPlan(cycle, b), start: first, weeks: len, list: list});
+  }
+  return out;
+}
+
+// Takes the cycle, a block index and today. Returns what may change on that block:
+// {locked, step, min, max, why}. Rules: past blocks are fixed. Heavy Duty moves a week at a time,
+// powerbuilding two at a time so Weeks A and B stay paired. The block you're in can't end before this week.
+function blockLimits(cycle, b, today){
+  const plan = blockPlan(cycle, b), now = weekInfo(cycle, today);
+  const out = {locked: false, step: CONFIG.blockStep[plan], min: CONFIG.minBlockWeeks[plan], max: CONFIG.maxBlockWeeks, why: ""};
+  if (!now.before && b < now.blockIndex){ out.locked = true; out.why = "This block is in the past."; return out; }
+  if (!now.before && b === now.blockIndex && now.blockWeek > out.min){ out.min = now.blockWeek; out.why = "You're in week " + now.blockWeek + " of this block, so it can't be shorter."; }
+  return out;
+}
+
+// Takes the cycle, a block index and a length in weeks. Returns a new cycle with that block's length set.
+function withBlockLength(cycle, b, weeks){
+  const L = Array.isArray(cycle.lengths) ? cycle.lengths.slice() : [];
+  for (let i = 0; i <= b; i++) if (L[i] == null) L[i] = CONFIG.blockWeeks;
+  L[b] = weeks;
+  return {start: cycle.start, first: cycle.first, lengths: L};
+}
+
+// Takes the cycle and today. Returns a new cycle where the other plan starts this week.
+// Rule: weeks already done stay where they are, so labels and powerbuilding progress don't jump.
+function switchCycleNow(cycle, today){
+  const now = weekInfo(cycle, today);
+  if (now.before) return {start: mondayOf(today), first: otherPlan(cycle.first), lengths: []};
+  return withBlockLength(cycle, now.blockIndex, now.blockWeek - 1);
+}
+
+// Takes the cycle and today. Returns a new cycle with every block after the current one back to the default length.
+function resetUpcomingBlocks(cycle, today){
+  const now = weekInfo(cycle, today), L = Array.isArray(cycle.lengths) ? cycle.lengths.slice(0, now.blockIndex + 1) : [];
+  return {start: cycle.start, first: cycle.first, lengths: L};
+}
+// Takes the cycle and today. Returns true when a block after the current one has a non-default length.
+function hasUpcomingChanges(cycle, today){
+  const now = weekInfo(cycle, today), L = Array.isArray(cycle.lengths) ? cycle.lengths : [];
+  for (let i = now.blockIndex + 1; i < L.length; i++) if (L[i] != null && Number(L[i]) !== CONFIG.blockWeeks) return true;
+  return false;
 }
 
 // Takes the cycle, a plan id and two dates. Returns the whole weeks between them, not counting weeks
@@ -5773,6 +5923,9 @@ function normaliseState(raw, today){
   ["units", "history", "varHistory", "loadedStreaks", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
   if (!Array.isArray(st.pastVariations)) st.pastVariations = [];
   if (st.cycle && !(parseISO(st.cycle.start) && PLAN_IDS.indexOf(st.cycle.first) >= 0)) st.cycle = null;
+  // Block lengths: whole weeks from 0 to the maximum; anything else falls back to the default length
+  if (st.cycle) st.cycle.lengths = Array.isArray(st.cycle.lengths) ? st.cycle.lengths.slice(0, 2000).map(n => {
+    const v = parseInt(n, 10); return v >= 0 && v <= CONFIG.maxBlockWeeks ? v : CONFIG.blockWeeks; }) : [];
   if (st.pb && typeof st.pb === "object"){
     st.pb = Object.assign(freshSlot(st.pb.weekStart || mondayOf(today)), st.pb);
     st.pb.ui = Object.assign({dismissedMiss: {}}, st.pb.ui || {});
@@ -5913,9 +6066,9 @@ function rowArgs(c, item){
 function todaysDay(c){ return c.slot.weekStart === c.now.weekStart && !c.now.before && dayOfWeek(c.today) <= CONFIG.trainingDays ? dayOfWeek(c.today) : 0; }
 function weekLabel(plan, w){
   if (w.before) return "Starts " + fmtDayDate(w.weekStart);
-  if (plan === "hd") return "Week " + w.blockWeek + " of " + CONFIG.blockWeeks;
+  if (plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks;
   if (w.testWeek) return "Test week";
-  return PROGRAMME.plans.pb.weekLabels[w.blockWeek - 1] + (w.heavyWeek ? ", heavy week" : "") + " · block " + w.fortnight + " of 3";
+  return PROGRAMME.plans.pb.weekLabels[w.weekLetter === "A" ? 0 : 1] + (w.heavyWeek ? ", heavy week" : "") + " · block " + w.fortnight + " of 3";
 }
 
 /* ---------- 3.3 Header, notices, setup and help ---------- */
@@ -5926,7 +6079,8 @@ function renderHeader(c){
   $("#header-plan").textContent = PLAN_NAMES[c.plan];
   $("#header-week").innerHTML = term(c.plan === "pb" ? "weekab" : "block", weekLabel(c.plan, c.now));
   const sw = nextSwap(c.cycle, c.today);
-  $("#header-swap").textContent = "Swaps to " + PLAN_NAMES[sw.plan] + " on " + fmtDayDate(sw.date) + ".";
+  $("#header-swap").innerHTML = esc("Swaps to " + PLAN_NAMES[sw.plan] + " on " + fmtDayDate(sw.date) + ". ") +
+    '<button type="button" class="link-button" data-go-calendar>Change in calendar</button>';
 }
 function renderStorageWarning(){ $("#storage-warning").hidden = storageOK; }
 function renderSetup(){
@@ -6571,11 +6725,160 @@ function renderHazard(c){
   if (html) document.documentElement.style.setProperty("--hazard-height", bar.offsetHeight + 16 + "px");
 }
 
+/* ---------- 3.5b Calendar: blocks of each plan, with longer or shorter runs ---------- */
+// Takes a Monday. Returns "19 to 25 October" or "26 October to 1 November".
+function fmtWeekShort(start){
+  const end = addDays(start, 6), a = parseISO(start), b = parseISO(end);
+  return a.getMonth() === b.getMonth() ? a.getDate() + " to " + b.getDate() + " " + MONTHS[b.getMonth()] : a.getDate() + " " + MONTHS[a.getMonth()] + " to " + b.getDate() + " " + MONTHS[b.getMonth()];
+}
+// Takes two dates. Returns "19 October to 29 November 2026", with the first year only when the years differ.
+function fmtSpan(a, b){
+  const x = parseISO(a), y = parseISO(b);
+  return (x.getFullYear() === y.getFullYear() ? x.getDate() + " " + MONTHS[x.getMonth()] : fmtDate(a)) + " to " + fmtDate(b);
+}
+// Takes a week (from weekInfo). Returns its calendar label.
+function calWeekLabel(w){
+  if (w.plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks;
+  if (w.testWeek) return "Test week";
+  if (w.heavyWeek) return "Heavy week · block 3";
+  return "Week " + w.weekLetter + " · block " + w.fortnight;
+}
+function weekRange(a, b){ return a === b ? "Week " + a : "Weeks " + a + " to " + b; }
+// Takes a block. Returns what the plan's own rules do across it, as short lines.
+function calBlockNotes(block){
+  if (block.plan === "hd"){
+    const drop = Math.round((1 - CONFIG.dropPercent) * 1000) / 10;
+    const out = ["Same five sessions every week: one all-out set per exercise.",
+      "Reach the top of the rep range and your next target adds weight. Below the range " + weekWord(CONFIG.belowStreakToDrop) + " running, it drops about " + drop + "%."];
+    if (block.weeks >= CONFIG.longRunWeeks) out.push("Long run: if a lift stalls for two weeks, add a rest day before you cut the weight.");
+    return out;
+  }
+  const pb = PROGRAMME.plans.pb, out = [], groups = [];
+  block.list.forEach((w, i) => {
+    const key = Math.floor(w.pbWeek / 2), g = groups[groups.length - 1];
+    if (g && g.key === key) g.weeks.push(i + 1), g.letters.push(w.weekLetter); else groups.push({key: key, f: w.fortnight, weeks: [i + 1], letters: [w.weekLetter]});
+  });
+  groups.forEach((g, gi) => {
+    const f = pb.fortnights[g.f - 1], range = weekRange(g.weeks[0], g.weeks[g.weeks.length - 1]);
+    let line;
+    if (g.f === 3){
+      const parts = [];
+      if (g.letters.indexOf("A") >= 0) parts.push("heavy singles with " + f.top.A.left + " left");
+      if (g.letters.indexOf("B") >= 0) parts.push("test week to find your new maxes");
+      line = range + ": block 3, " + listWords(parts) + ".";
+    } else {
+      const reps = g.letters.map(l => f.top[l].left);
+      line = range + ": block " + g.f + ", top sets of " + f.top.A.reps + " reps with " + listWords(reps) + (reps.length > 1 ? " left (Week A, then B)." : " left.");
+    }
+    if (f.changes) line += " " + f.changes.charAt(0).toUpperCase() + f.changes.slice(1) + ".";
+    if (g.letters.length === 1 && g.letters[0] === "A" && gi === groups.length - 1) line += " Week B comes first in your next Powerbuilding run.";
+    out.push(line);
+    if (g.letters.indexOf("B") >= 0 && g.f === 3 && gi < groups.length - 1) out.push("After test week, block 1 starts again from your new maxes.");
+  });
+  return out;
+}
+// Takes the cycle, a block and today. Returns a line when the plan returns after a long run on the other plan.
+function calReturnNote(cycle, block, today){
+  if (block.start <= mondayOf(today)) return "";
+  for (let b = block.index - 1; b >= 0; b--){
+    const len = blockLength(cycle, b);
+    if (!len) continue;
+    if (blockPlan(cycle, b) === block.plan) return "";
+    if (len < CONFIG.longRunWeeks) return "";
+    return "Back after " + len + " weeks of " + PLAN_NAMES[blockPlan(cycle, b)] + ". Targets carry on from your last " + PLAN_NAMES[block.plan] + " week; go by feel in the first session.";
+  }
+  return "";
+}
+function renderCalendar(c){
+  const box = $("#calendar");
+  if (!box) return;
+  const show = Math.min(24, state.ui.calShow || CONFIG.calendarBlocks);
+  const blocks = calendarBlocks(c.cycle, c.now.before ? 0 : c.now.blockIndex, show), nowWeek = c.now.before ? "" : c.now.weekStart;
+  let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Calendar</h2>' +
+    '<p class="small muted">Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules.</p></div><ol class="cal-blocks">';
+  blocks.forEach(bl => {
+    const lim = blockLimits(c.cycle, bl.index, c.today), isNow = bl.list.some(w => w.weekStart === nowWeek);
+    const end = addDays(bl.start, 7 * bl.weeks - 1), step = lim.step, unitWord = step === 1 ? "a week" : step + " weeks";
+    const canAdd = !lim.locked && bl.weeks + step <= lim.max, canRemove = !lim.locked && bl.weeks - step >= lim.min;
+    const headId = "cal-b-" + bl.index, ret = calReturnNote(c.cycle, bl, c.today);
+    let why = "";
+    if (!canRemove && !lim.locked) why = lim.why || "The shortest " + PLAN_NAMES[bl.plan] + " block is " + weekWord(lim.min) + ".";
+    if (!canAdd && !lim.locked) why = (why ? why + " " : "") + "The longest block is " + weekWord(lim.max) + ".";
+    html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + '" aria-labelledby="' + headId + '">' +
+      '<div class="cal-block__head"><span class="cal-block__bar" aria-hidden="true"></span><div>' +
+      '<h3 class="cal-block__title" id="' + headId + '" tabindex="-1">' + esc(PLAN_NAMES[bl.plan]) + (isNow ? ' <span class="cal-tag">Now</span>' : "") + "</h3>" +
+      '<p class="small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks)) + "</p></div></div>" +
+      '<ol class="cal-weeks">' + bl.list.map(w => {
+        const past = nowWeek && w.weekStart < nowWeek, cur = w.weekStart === nowWeek;
+        return '<li class="cal-week' + (past ? " is-past" : "") + (cur ? " is-now" : "") + (w.testWeek ? " is-test" : "") + '"' + (cur ? ' aria-current="date"' : "") + '>' +
+          '<span class="cal-week__date">' + esc(fmtWeekShort(w.weekStart)) + "</span>" +
+          '<span class="cal-week__label">' + esc(calWeekLabel(w)) + "</span>" +
+          '<span class="cal-week__state">' + (cur ? "This week" : past ? "Done" : "") + "</span></li>";
+      }).join("") + "</ol>" +
+      '<ul class="cal-notes small">' + calBlockNotes(bl).map(t => "<li>" + esc(t) + "</li>").join("") + (ret ? "<li>" + esc(ret) + "</li>" : "") + "</ul>" +
+      (lim.locked ? "" : '<div class="button-row cal-block__actions">' +
+        '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="-1"' + (canRemove ? "" : " disabled") + ' aria-label="Remove ' + unitWord + " from " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Remove ' + unitWord + "</button>" +
+        '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="1"' + (canAdd ? "" : " disabled") + ' aria-label="Add ' + unitWord + " to " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Add ' + unitWord + "</button></div>" +
+        (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
+      "</li>";
+  });
+  html += "</ol><div class=\"button-row\">" +
+    (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
+    (state.cycle && !c.now.before ? '<button type="button" class="button" data-cal-switch>Switch to ' + esc(PLAN_NAMES[otherPlan(c.plan)]) + " this week</button>" : "") +
+    (hasUpcomingChanges(c.cycle, c.today) ? '<button type="button" class="button button--quiet" data-cal-reset>Set upcoming blocks to ' + weekWord(CONFIG.blockWeeks) + "</button>" : "") +
+    "</div>";
+  box.innerHTML = html;
+}
+// Takes today. Moves a plan's log to its next scheduled week when nothing is logged in it yet,
+// so a schedule change never leaves an empty log sitting on a week that now belongs to the other plan.
+function realignSlots(today){
+  if (!state.cycle) return;
+  PLAN_IDS.forEach(p => {
+    const slot = slotOf(state, p);
+    if (!slot) return;
+    const used = Object.keys(slot.entries || {}).some(id => isAccounted(slot.entries[id])) || Object.keys(slot.missedDays || {}).length > 0;
+    if (used) return;
+    const target = nextWeekForPlan(state.cycle, p, today);
+    if (slot.weekStart !== target) slot.weekStart = target;
+  });
+}
+// Takes a block index and +1 or -1. Changes that block by its plan's step, then re-renders and keeps focus.
+function changeBlock(b, dir){
+  const c = ctx(), lim = blockLimits(c.cycle, b, c.today);
+  if (lim.locked) return;
+  const weeks = blockLength(c.cycle, b) + dir * lim.step;
+  if (weeks < lim.min || weeks > lim.max) return;
+  state.cycle = withBlockLength(c.cycle, b, weeks);
+  realignSlots(c.today);
+  save(); renderAll();
+  const after = ctx(), sw = nextSwap(after.cycle, after.today), plan = blockPlan(state.cycle, b);
+  toast(PLAN_NAMES[plan] + " block is now " + weekWord(weeks) + ". " + PLAN_NAMES[sw.plan] + " starts " + fmtDayDate(sw.date) + ".");
+  const same = $('[data-cal-b="' + b + '"][data-cal-d="' + dir + '"]'), other = $('[data-cal-b="' + b + '"][data-cal-d="' + (-dir) + '"]');
+  const target = same && !same.disabled ? same : other && !other.disabled ? other : $("#cal-b-" + b);
+  if (target) target.focus({preventScroll: true});
+}
+$("#view-plan").addEventListener("click", ev => {
+  const b = ev.target.closest("[data-cal-b]");
+  if (b){ changeBlock(+b.dataset.calB, +b.dataset.calD); return; }
+  if (ev.target.closest("[data-cal-more]")){ state.ui.calShow = Math.min(24, (state.ui.calShow || CONFIG.calendarBlocks) + CONFIG.calendarBlocks); save(); renderAll(); const m = $("[data-cal-more]"); if (m) m.focus({preventScroll: true}); return; }
+  if (ev.target.closest("[data-cal-switch]")){ openSwitchDialog(); return; }
+  if (ev.target.closest("[data-cal-reset]")){
+    const c = ctx(); state.cycle = resetUpcomingBlocks(c.cycle, c.today); realignSlots(c.today); save(); renderAll();
+    toast("Upcoming blocks are " + weekWord(CONFIG.blockWeeks) + " each again."); const t = $("#calendar-title"); if (t) t.focus({preventScroll: true});
+  }
+});
+$("#view-train").addEventListener("click", ev => {
+  if (!ev.target.closest("[data-go-calendar]")) return;
+  showTab("plan");
+  const t = $("#calendar-title"); if (t){ t.scrollIntoView({block: "start"}); t.focus({preventScroll: true}); }
+});
+
 /* ---------- 3.6 Plan view ---------- */
 function renderPlanView(c){
   const view = state.ui.planView || c.plan;
   $("#plan-switch").innerHTML = PLAN_IDS.map(p => '<button type="button" class="button" data-plan-view="' + p + '" aria-pressed="' + (p === view) + '">' + esc(PLAN_NAMES[p]) + "</button>").join("");
   $("#plan-switch-note").textContent = view === c.plan ? "This is your plan right now. Log sets on the Today page." : "Viewing only. You start this plan again on " + fmtDayDate(nextWeekForPlan(c.cycle, view, c.today)) + ".";
+  renderCalendar(c);
   renderTodayCard(c, view);
   const plan = PROGRAMME.plans[view];
   const t = view === c.plan ? todaysDay(c) : 0;
@@ -6875,23 +7178,26 @@ $("#settings-start").addEventListener("change", () => readStart("#settings-start
 $("#button-schedule-save").addEventListener("click", () => {
   const r = readStart("#settings-start", "#settings-start-note", "#settings-start-error");
   if (r.error) return;
-  state.cycle = {start: r.value, first: ($('input[name="settings-first"]:checked') || {}).value || CONFIG.defaultFirstPlan};
+  const first = ($('input[name="settings-first"]:checked') || {}).value || CONFIG.defaultFirstPlan, old = state.cycle;
+  const same = old && old.start === r.value && old.first === first;
+  state.cycle = {start: r.value, first: first, lengths: same && Array.isArray(old.lengths) ? old.lengths : []};
   ensurePbSlot(state, todayISO());
+  realignSlots(todayISO());
   save(); renderAll();
-  toast("Schedule saved.");
+  toast(same ? "Schedule saved." : "Schedule saved. Blocks are back to " + weekWord(CONFIG.blockWeeks) + " each.");
 });
-$("#button-switch-now").addEventListener("click", () => {
+$("#button-switch-now").addEventListener("click", () => openSwitchDialog());
+function openSwitchDialog(){
   const c = ctx();
   $("#dialog-switch-text").textContent = "You'll start " + PLAN_NAMES[otherPlan(c.plan)] + " this week, " + fmtRange(c.now.weekStart) + ". Your logged sets stay safe in each plan.";
   closeDialog($("#dialog-settings"));
   openDialog($("#dialog-switch"));
-});
+}
 $("#button-switch-confirm").addEventListener("click", () => {
   const c = ctx(), to = otherPlan(c.plan);
-  state.cycle = {start: c.now.weekStart, first: to};
+  state.cycle = switchCycleNow(c.cycle, c.today);
   ensurePbSlot(state, c.today);
-  const slot = slotOf(state, to);
-  if (slot.weekStart < c.now.weekStart && !Object.keys(slot.entries).some(id => isComplete(slot.entries[id]))) slot.weekStart = c.now.weekStart;
+  realignSlots(c.today);
   closeDialog($("#dialog-switch"));
   openToday(); save(); renderAll();
   toast("Switched to " + PLAN_NAMES[to] + ".");
