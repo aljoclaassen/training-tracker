@@ -15,7 +15,9 @@ WHAT THE APP DOES
 
 FILE LAYOUT
   <style>            Design tokens first (theme.css, inlined at build: type, 8px spacing, radii,
-                     layered shadows, motion, 9 colour themes in light and dark), then sections:
+                     layered shadows, motion, 5 multi-colour themes in light and dark), then sections;
+                     the Fitness-style layout layer (summary card, weekday buttons, exercise sheet,
+                     live bar) is the last section
                      base, buttons and forms, header, panels, train view,
                      exercise rows, plan view, floating controls, dialogs.
   <body>             Semantic markup, one commented block per section.
@@ -70,6 +72,9 @@ STORAGE KEYS
     Filled by Start new week, Load last week and Restore. Not part of the export file.
   localStorage "training-tracker-theme": {palette, mode, contrast, v}. Not part of the export file.
     v 2 (21 October 2026): Tempo became the default theme; a saved "steel" without v moved to Tempo once.
+    v 3 (22 October 2026): five themes (pulse default, dune, glacier, forge, bloom); older ids move once
+    via themeMove: tempo, volt → pulse; steel, tide, iron → glacier; ember, mono → forge; bush → dune;
+    ultraviolet → bloom.
   Offline copy: the browser's Cache Storage, cache "training-tracker-<appVersion>" (sw.js).
   "localStorage-test" is written and removed once to check saving works.
 
@@ -289,7 +294,8 @@ FEATURES AND WHERE THEY LIVE
   Two-week alternation, manual switch ............ 2.3 weekInfo; Settings: 3.9 button-switch-confirm
   Opens on today's session ....................... 3.10 openToday; 3.15 start
   Day tabs, one day at a time ................... 3.4 renderDayTabs; 3.10 selectDay
-  Compact exercise rows that expand .............. 3.4 exerciseHTML, panelHTML; 3.11 closeAndOpenNext
+  Compact exercise rows; the open one is a sheet .. 3.4 exerciseHTML, panelHTML; 3.7 syncExerciseSheet; 3.11 closeAndOpenNext
+  Summary card: day ring, sets, exercises, week ... 3.4 renderSummary (called from renderProgress)
   Supersets (pairs) .............................. 2.5 buildPbSession; 3.4 sessionListHTML
   Set logging with steppers ...................... 3.4 setRowHTML, fieldsHTML; 3.11 applyValue
   Reps-left picker (powerbuilding) ............... 3.4 fieldsHTML; CONFIG.repsLeftScale
@@ -308,7 +314,7 @@ FEATURES AND WHERE THEY LIVE
   Catch-up panel with recovery flag .............. 3.4 renderCatchup, makeupNoteHTML; 2.12 recoveryNote
   Missed whole day: yellow card and make-ups ..... 2.13; 3.5 renderHazard; 3.13
   Swaps and skips log ............................ 2.14; 3.4 renderSwapsLog
-  Up next card and Next set button ............... 3.4 renderUpNext; 3.5 renderFab; 3.11 goToNextSet
+  Up next card and live bar (next set or rest) .... 3.4 renderUpNext; 3.5 renderFab; 3.11 goToNextSet; 3.11b startRest
   Progress bar, day and week rings ............... 2.6 dayProgress, weekDaysDone; 3.4
   Week options: Export, Load last week, Start new
   week, Restore from backup ...................... 2.16; 3.14
@@ -316,7 +322,7 @@ FEATURES AND WHERE THEY LIVE
   guides, read-only view of either plan .......... 3.6 renderPlanView
   Back to top .................................... 3.10 updateToTop
   Glossary: tap a dotted word .................... CONFIG.glossary; 3.1 term; 3.8
-  9 themes (Tempo default), Light/Dark/Match phone,
+  5 themes (Pulse default), Light/Dark/Match phone,
   extra contrast, layout .......................... theme.css; 3.9 applyTheme, applyMode, applyContrast, applyLayout
   Saving and the "not saving" warning ............ 2b; 3.2 save; 3.3 renderStorageWarning
   Older Android and Huawei fallbacks ............. Layer 0; 3.8 openDialog fallback
@@ -356,7 +362,7 @@ HOSTING AND UPDATES (GitHub Pages)
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
 /* =====================================================================
-   THEME: design tokens for the whole app (Summit style, Tempo colours)
+   THEME: design tokens for the whole app (Fitness style, five multi-colour themes)
    Edit here, then run build.py: it inlines this file into index.html so the
    app still works as one offline file. Components read only these tokens.
    ===================================================================== */
@@ -368,7 +374,9 @@ HOSTING AND UPDATES (GitHub Pages)
   --font-size-small: 14px;       /* secondary text */
   --font-size-base: 16px;        /* body */
   --font-size-large: 20px;       /* section and session titles */
-  --font-size-title: 28px;       /* page titles */
+  --font-size-title: 34px;       /* large page titles */
+  --font-size-section: 22px;     /* section titles */
+  --font-size-metric: 28px;      /* colour-coded numbers */
   --font-size-numeral: 22px;     /* set inputs */
   --font-size-timer: 28px;       /* rest timer */
   --font-weight-normal: 400;
@@ -396,6 +404,9 @@ HOSTING AND UPDATES (GitHub Pages)
   --size-content-max: 960px;
   --size-dialog-max: 560px;
   --size-nav: 64px;
+  --size-ring-summary: 104px;
+  --size-sheet-top: 96px;        /* space kept above the exercise sheet */
+  --size-grabber: 40px;
   --size-progress: 8px;
   --size-chevron: 10px;
   --size-check: 22px;
@@ -441,796 +452,554 @@ HOSTING AND UPDATES (GitHub Pages)
 :root[data-theme="dark"]{ --shadow-1: none; --shadow-2: none; --shadow-3: 0 12px 32px rgba(0, 0, 0, .6); --color-card-border: transparent; }
 
 /* =====================================================================
-   COLOUR TOKENS: 9 themes, each in light and dark. Tempo is the default.
+   COLOUR TOKENS: 5 themes, each in light and dark. Pulse is the default.
    Roles: bg (page) · surface (cards) · surface-alt (inset rows) · surface-raised (dialogs)
    text · text-muted (4.5:1+) · border (dividers) · border-control (inputs, 3:1+)
-   accent · on-accent · accent-soft · accent-text · success · best (beat last time)
+   accent · on-accent · accent-soft · accent-text · metric-1 to 4 (colour-coded numbers) · grad (progress)
+   success · best (beat last time)
    missed · danger · hazard (missed-day card) · inverse (toast, rest bar) · focus · scrim
    ===================================================================== */
 :root{
-  --color-bg: #F6F3EF;
+  --color-bg: #F2F2F5;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #F0EBE5;
+  --color-surface-alt: #ECECF1;
   --color-surface-raised: #FFFFFF;
-  --color-text: #16120E;
-  --color-text-muted: #61584F;
-  --color-border: #E2D9CF;
-  --color-border-control: #857A6E;
-  --color-accent: #C2361C;
+  --color-fill-track: #E2E2E8;
+  --color-text: #0B0B0F;
+  --color-text-muted: #585862;
+  --color-border: #D8D8DF;
+  --color-border-control: #7C7C86;
+  --color-accent: #BC0C35;
   --color-on-accent: #FFFFFF;
-  --color-accent-soft: #FBE5DF;
-  --color-accent-text: #A82D16;
-  --color-success: #1E7A49;
+  --color-accent-soft: #F7E2E7;
+  --color-accent-text: #BC0C35;
+  --color-metric-1: #C8123C;
+  --color-metric-2: #3D7300;
+  --color-metric-3: #006F86;
+  --color-metric-4: #8A5800;
+  --color-grad-start: #FF2E63;
+  --color-grad-end: #FF8A5B;
+  --color-success: #1C7440;
   --color-on-success: #FFFFFF;
-  --color-success-soft: #DFF2E6;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #61584F;
-  --color-danger: #B3261E;
+  --color-success-soft: #DDF2E5;
+  --color-best: #E8DECC;
+  --color-on-best: #0B0B0F;
+  --color-best-line: #8A5800;
+  --color-missed: #585862;
+  --color-danger: #B42318;
   --color-on-danger: #FFFFFF;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #16120E;
+  --color-inverse-bg: #0B0B0F;
   --color-inverse-text: #FFFFFF;
-  --color-focus: #16120E;
-  --color-scrim: rgba(22, 18, 14, .5);
+  --color-focus: #0B0B0F;
+  --color-scrim: rgba(8, 10, 14, .45);
 }
-:root[data-palette="steel"]{
-  --color-bg: #ECEFF3;
+:root[data-palette="dune"]{
+  --color-bg: #F6F0E7;
+  --color-surface: #FFFDF9;
+  --color-surface-alt: #F0E8DC;
+  --color-surface-raised: #FFFDF9;
+  --color-fill-track: #E6DCCD;
+  --color-text: #1E150D;
+  --color-text-muted: #625545;
+  --color-border: #DED2C1;
+  --color-border-control: #857560;
+  --color-accent: #A6461B;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #F4E7DE;
+  --color-accent-text: #A6461B;
+  --color-metric-1: #A6461B;
+  --color-metric-2: #855A00;
+  --color-metric-3: #3F6B3D;
+  --color-metric-4: #A33A3A;
+  --color-grad-start: #D9622B;
+  --color-grad-end: #F2B04E;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #EDD6D3;
+  --color-on-best: #1E150D;
+  --color-best-line: #A33A3A;
+  --color-missed: #625545;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #1E150D;
+  --color-inverse-text: #FFFDF9;
+  --color-focus: #1E150D;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+:root[data-palette="glacier"]{
+  --color-bg: #EDF2F7;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #F4F6F9;
+  --color-surface-alt: #E6EDF4;
   --color-surface-raised: #FFFFFF;
-  --color-text: #101923;
-  --color-text-muted: #4C5967;
-  --color-border: #C3CCD6;
-  --color-border-control: #758BA2;
-  --color-accent: #1B5BAE;
+  --color-fill-track: #DAE3EC;
+  --color-text: #0A1420;
+  --color-text-muted: #4E5D6E;
+  --color-border: #D2DCE6;
+  --color-border-control: #718395;
+  --color-accent: #0B63A8;
   --color-on-accent: #FFFFFF;
-  --color-accent-soft: #E2ECF9;
-  --color-accent-text: #1B5BAE;
-  --color-success: #1E7B45;
+  --color-accent-soft: #E2ECF5;
+  --color-accent-text: #0B63A8;
+  --color-metric-1: #0B63A8;
+  --color-metric-2: #00715D;
+  --color-metric-3: #4A49B8;
+  --color-metric-4: #6B6100;
+  --color-grad-start: #1E8FE0;
+  --color-grad-end: #3CCFB4;
+  --color-success: #1C7440;
   --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #4C5967;
-  --color-danger: #A32E22;
+  --color-success-soft: #DDF2E5;
+  --color-best: #E1DFCC;
+  --color-on-best: #0A1420;
+  --color-best-line: #6B6100;
+  --color-missed: #4E5D6E;
+  --color-danger: #B42318;
   --color-on-danger: #FFFFFF;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #101923;
+  --color-inverse-bg: #0A1420;
   --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
+  --color-focus: #0A1420;
+  --color-scrim: rgba(8, 10, 14, .45);
 }
-:root[data-palette="bush"]{
-  --color-bg: #EEEDE2;
-  --color-surface: #FFFFFC;
-  --color-surface-alt: #F6F5EA;
-  --color-surface-raised: #FFFFFC;
-  --color-text: #1B2015;
-  --color-text-muted: #535B47;
-  --color-border: #C9C7B5;
-  --color-border-control: #888660;
-  --color-accent: #3A7220;
-  --color-on-accent: #FFFFFF;
-  --color-accent-soft: #E0ECD2;
-  --color-accent-text: #3A7220;
-  --color-success: #0B6E8A;
-  --color-on-success: #FFFFFF;
-  --color-success-soft: #DDEFF5;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #535B47;
-  --color-danger: #A32E22;
-  --color-on-danger: #FFFFFF;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #1B2015;
-  --color-inverse-text: #FFFFFC;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
-}
-:root[data-palette="ember"]{
-  --color-bg: #F5EEE9;
+:root[data-palette="forge"]{
+  --color-bg: #ECECEE;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #FBF5F1;
+  --color-surface-alt: #E5E5E8;
   --color-surface-raised: #FFFFFF;
-  --color-text: #25190F;
-  --color-text-muted: #64524A;
-  --color-border: #DCCABF;
-  --color-border-control: #A4845D;
-  --color-accent: #B03414;
+  --color-fill-track: #DADADE;
+  --color-text: #111214;
+  --color-text-muted: #55575D;
+  --color-border: #D2D2D7;
+  --color-border-control: #76787F;
+  --color-accent: #A84200;
   --color-on-accent: #FFFFFF;
-  --color-accent-soft: #FBE1D6;
-  --color-accent-text: #B03414;
-  --color-success: #1E7B45;
+  --color-accent-soft: #F5E8E0;
+  --color-accent-text: #A84200;
+  --color-metric-1: #A84200;
+  --color-metric-2: #1D5FA8;
+  --color-metric-3: #7A5800;
+  --color-metric-4: #B3261E;
+  --color-grad-start: #E85D04;
+  --color-grad-end: #FFB02E;
+  --color-success: #1C7440;
   --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #64524A;
-  --color-danger: #8E2342;
+  --color-success-soft: #DDF2E5;
+  --color-best: #F0D4D2;
+  --color-on-best: #111214;
+  --color-best-line: #B3261E;
+  --color-missed: #55575D;
+  --color-danger: #B42318;
   --color-on-danger: #FFFFFF;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #25190F;
+  --color-inverse-bg: #111214;
   --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
+  --color-focus: #111214;
+  --color-scrim: rgba(8, 10, 14, .45);
 }
-:root[data-palette="iron"]{
-  --color-bg: #E9ECEE;
+:root[data-palette="bloom"]{
+  --color-bg: #F6F0F7;
   --color-surface: #FFFFFF;
-  --color-surface-alt: #F2F4F5;
+  --color-surface-alt: #EFE7F1;
   --color-surface-raised: #FFFFFF;
-  --color-text: #111619;
-  --color-text-muted: #4D575D;
-  --color-border: #C3CBD0;
-  --color-border-control: #758A9C;
-  --color-accent: #00727A;
+  --color-fill-track: #E5DAE8;
+  --color-text: #1A0F1F;
+  --color-text-muted: #5E5066;
+  --color-border: #DDD0E1;
+  --color-border-control: #7D6F85;
+  --color-accent: #B0127A;
   --color-on-accent: #FFFFFF;
-  --color-accent-soft: #DCF1F2;
-  --color-accent-text: #00727A;
-  --color-success: #1E7B45;
+  --color-accent-soft: #F6E3EF;
+  --color-accent-text: #B0127A;
+  --color-metric-1: #B0127A;
+  --color-metric-2: #2D7535;
+  --color-metric-3: #7A5800;
+  --color-metric-4: #0A62A8;
+  --color-grad-start: #E0258F;
+  --color-grad-end: #8A5CF6;
+  --color-success: #1C7440;
   --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #4D575D;
-  --color-danger: #A32E22;
+  --color-success-soft: #DDF2E5;
+  --color-best: #CEE0EE;
+  --color-on-best: #1A0F1F;
+  --color-best-line: #0A62A8;
+  --color-missed: #5E5066;
+  --color-danger: #B42318;
   --color-on-danger: #FFFFFF;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #111619;
+  --color-inverse-bg: #1A0F1F;
   --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
-}
-:root[data-palette="volt"]{
-  --color-bg: #EEF1E9;
-  --color-surface: #FFFFFF;
-  --color-surface-alt: #F5F7F1;
-  --color-surface-raised: #FFFFFF;
-  --color-text: #11140E;
-  --color-text-muted: #4F5848;
-  --color-border: #C6CDBC;
-  --color-border-control: #7B8E64;
-  --color-accent: #457300;
-  --color-on-accent: #FFFFFF;
-  --color-accent-soft: #E6F2D2;
-  --color-accent-text: #457300;
-  --color-success: #0B6E8A;
-  --color-on-success: #FFFFFF;
-  --color-success-soft: #DDEFF5;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #4F5848;
-  --color-danger: #A32E22;
-  --color-on-danger: #FFFFFF;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #11140E;
-  --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
-}
-:root[data-palette="ultraviolet"]{
-  --color-bg: #F0EEF6;
-  --color-surface: #FFFFFF;
-  --color-surface-alt: #F7F5FB;
-  --color-surface-raised: #FFFFFF;
-  --color-text: #18132A;
-  --color-text-muted: #58526F;
-  --color-border: #CFC8DE;
-  --color-border-control: #8780AE;
-  --color-accent: #672DD3;
-  --color-on-accent: #FFFFFF;
-  --color-accent-soft: #EBE2FB;
-  --color-accent-text: #672DD3;
-  --color-success: #1E7B45;
-  --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #58526F;
-  --color-danger: #A32E22;
-  --color-on-danger: #FFFFFF;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #18132A;
-  --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
-}
-:root[data-palette="tide"]{
-  --color-bg: #EAF2F4;
-  --color-surface: #FFFFFF;
-  --color-surface-alt: #F2F8F9;
-  --color-surface-raised: #FFFFFF;
-  --color-text: #0D1D25;
-  --color-text-muted: #485E68;
-  --color-border: #BFD3DA;
-  --color-border-control: #609299;
-  --color-accent: #0A6886;
-  --color-on-accent: #FFFFFF;
-  --color-accent-soft: #D9EDF4;
-  --color-accent-text: #0A6886;
-  --color-success: #1E7B45;
-  --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #485E68;
-  --color-danger: #A32E22;
-  --color-on-danger: #FFFFFF;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #0D1D25;
-  --color-inverse-text: #FFFFFF;
-  --color-focus: #8A5A00;
-  --color-scrim: rgba(10, 14, 18, .55);
-}
-:root[data-palette="mono"]{
-  --color-bg: #F1F1EF;
-  --color-surface: #FFFFFF;
-  --color-surface-alt: #F6F6F4;
-  --color-surface-raised: #FFFFFF;
-  --color-text: #111111;
-  --color-text-muted: #545454;
-  --color-border: #C8C8C4;
-  --color-border-control: #878783;
-  --color-accent: #111111;
-  --color-on-accent: #FFFFFF;
-  --color-accent-soft: #EAEAE7;
-  --color-accent-text: #111111;
-  --color-success: #1E7B45;
-  --color-on-success: #FFFFFF;
-  --color-success-soft: #DDF1E4;
-  --color-best: #F5C451;
-  --color-on-best: #2B1E02;
-  --color-best-line: #8A5A00;
-  --color-missed: #545454;
-  --color-danger: #A32E22;
-  --color-on-danger: #FFFFFF;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #111111;
-  --color-inverse-text: #FFFFFF;
-  --color-focus: #B3261E;
-  --color-scrim: rgba(10, 14, 18, .55);
+  --color-focus: #1A0F1F;
+  --color-scrim: rgba(8, 10, 14, .45);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
-    --color-bg: #0C0B0A;
-    --color-surface: #1C1A18;
-    --color-surface-alt: #26231F;
-    --color-surface-raised: #24211E;
-    --color-text: #F8F4EF;
-    --color-text-muted: #B0A69B;
-    --color-border: #36312C;
-    --color-border-control: #7E7468;
-    --color-accent: #FF6B4A;
-    --color-on-accent: #1A0700;
-    --color-accent-soft: #3A1A12;
-    --color-accent-text: #FF8A70;
-    --color-success: #4ADE80;
-    --color-on-success: #04160B;
-    --color-success-soft: #10291A;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #B0A69B;
-    --color-danger: #FF8A80;
-    --color-on-danger: #200605;
+    --color-bg: #000000;
+    --color-surface: #1A1A1E;
+    --color-surface-alt: #26262B;
+    --color-surface-raised: #222227;
+    --color-fill-track: #2E2E34;
+    --color-text: #F5F5F7;
+    --color-text-muted: #A1A1AA;
+    --color-border: #2C2C32;
+    --color-border-control: #6E6E78;
+    --color-accent: #FF4D6D;
+    --color-on-accent: #1A0009;
+    --color-accent-soft: #43232C;
+    --color-accent-text: #FF6883;
+    --color-metric-1: #FF4D6D;
+    --color-metric-2: #B6F34A;
+    --color-metric-3: #3FD7F5;
+    --color-metric-4: #FFC23D;
+    --color-grad-start: #FF2E63;
+    --color-grad-end: #FF9A6B;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #514225;
+    --color-on-best: #F5F5F7;
+    --color-best-line: #FFC23D;
+    --color-missed: #A1A1AA;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
     --color-hazard: #FFD21F;
     --color-on-hazard: #111111;
-    --color-inverse-bg: #F8F4EF;
-    --color-inverse-text: #16120E;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
+    --color-inverse-bg: #F5F5F7;
+    --color-inverse-text: #1A1A1E;
+    --color-focus: #F5F5F7;
+    --color-scrim: rgba(0, 0, 0, .65);
   }
-  :root[data-palette="steel"]:not([data-theme="light"]){
-    --color-bg: #06080C;
-    --color-surface: #141C25;
-    --color-surface-alt: #1A242F;
-    --color-surface-raised: #1D2936;
-    --color-text: #E9EEF3;
-    --color-text-muted: #9DABB9;
-    --color-border: #334255;
-    --color-border-control: #576F8B;
-    --color-accent: #72B2FF;
-    --color-on-accent: #06162A;
-    --color-accent-soft: #16304C;
-    --color-accent-text: #72B2FF;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #9DABB9;
-    --color-danger: #FF9A8A;
-    --color-on-danger: #1A0F0D;
+  :root[data-palette="dune"]:not([data-theme="light"]){
+    --color-bg: #0D0A07;
+    --color-surface: #1E1914;
+    --color-surface-alt: #2A231C;
+    --color-surface-raised: #251F19;
+    --color-fill-track: #322A22;
+    --color-text: #F7F0E6;
+    --color-text-muted: #B5A893;
+    --color-border: #3A3028;
+    --color-border-control: #7E705E;
+    --color-accent: #EE8A55;
+    --color-on-accent: #1E0B02;
+    --color-accent-soft: #432D20;
+    --color-accent-text: #F19C6E;
+    --color-metric-1: #EE8A55;
+    --color-metric-2: #F2C14E;
+    --color-metric-3: #9CC79A;
+    --color-metric-4: #F59A9A;
+    --color-grad-start: #EE7A45;
+    --color-grad-end: #F2C14E;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #523834;
+    --color-on-best: #F7F0E6;
+    --color-best-line: #F59A9A;
+    --color-missed: #B5A893;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
     --color-hazard: #FFD21F;
     --color-on-hazard: #111111;
-    --color-inverse-bg: #E9EEF3;
-    --color-inverse-text: #141C25;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
+    --color-inverse-bg: #F7F0E6;
+    --color-inverse-text: #1E1914;
+    --color-focus: #F7F0E6;
+    --color-scrim: rgba(0, 0, 0, .65);
   }
-  :root[data-palette="bush"]:not([data-theme="light"]){
-    --color-bg: #080A06;
-    --color-surface: #181F13;
-    --color-surface-alt: #1F2719;
-    --color-surface-raised: #242F1D;
-    --color-text: #EAEDE1;
-    --color-text-muted: #A4AC93;
-    --color-border: #3A4430;
-    --color-border-control: #627450;
-    --color-accent: #A0DD6C;
-    --color-on-accent: #0F1A07;
-    --color-accent-soft: #223519;
-    --color-accent-text: #A0DD6C;
-    --color-success: #5CC8E8;
-    --color-on-success: #05202A;
-    --color-success-soft: #123A47;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #A4AC93;
-    --color-danger: #FF9A8A;
-    --color-on-danger: #1A0F0D;
+  :root[data-palette="glacier"]:not([data-theme="light"]){
+    --color-bg: #04080C;
+    --color-surface: #111A22;
+    --color-surface-alt: #1B2630;
+    --color-surface-raised: #16202A;
+    --color-fill-track: #22303C;
+    --color-text: #EEF4F9;
+    --color-text-muted: #9DAEBF;
+    --color-border: #25333F;
+    --color-border-control: #647A8E;
+    --color-accent: #5CC8FF;
+    --color-on-accent: #00121F;
+    --color-accent-soft: #1E394A;
+    --color-accent-text: #74D0FF;
+    --color-metric-1: #5CC8FF;
+    --color-metric-2: #64E6C8;
+    --color-metric-3: #A3ABFF;
+    --color-metric-4: #E6EE7A;
+    --color-grad-start: #4FB4FF;
+    --color-grad-end: #64E6C8;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #444D37;
+    --color-on-best: #EEF4F9;
+    --color-best-line: #E6EE7A;
+    --color-missed: #9DAEBF;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
     --color-hazard: #FFD21F;
     --color-on-hazard: #111111;
-    --color-inverse-bg: #EAEDE1;
-    --color-inverse-text: #181F13;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
+    --color-inverse-bg: #EEF4F9;
+    --color-inverse-text: #111A22;
+    --color-focus: #EEF4F9;
+    --color-scrim: rgba(0, 0, 0, .65);
   }
-  :root[data-palette="ember"]:not([data-theme="light"]){
-    --color-bg: #0B0706;
-    --color-surface: #221714;
-    --color-surface-alt: #2B1E1A;
-    --color-surface-raised: #32221D;
-    --color-text: #F4EAE5;
-    --color-text-muted: #BBA59D;
-    --color-border: #4E3A32;
-    --color-border-control: #846756;
-    --color-accent: #FF8D67;
-    --color-on-accent: #2A0B02;
-    --color-accent-soft: #3E2218;
-    --color-accent-text: #FF8D67;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #BBA59D;
-    --color-danger: #FF9DB3;
-    --color-on-danger: #1A0F0D;
+  :root[data-palette="forge"]:not([data-theme="light"]){
+    --color-bg: #090909;
+    --color-surface: #1A1B1D;
+    --color-surface-alt: #252629;
+    --color-surface-raised: #202124;
+    --color-fill-track: #2D2E32;
+    --color-text: #F4F4F5;
+    --color-text-muted: #A3A5AB;
+    --color-border: #2E2F33;
+    --color-border-control: #6F7178;
+    --color-accent: #FF7A1A;
+    --color-on-accent: #1A0A00;
+    --color-accent-soft: #432C1C;
+    --color-accent-text: #FF8E3C;
+    --color-metric-1: #FF7A1A;
+    --color-metric-2: #6FB6FF;
+    --color-metric-3: #E8C468;
+    --color-metric-4: #FF6B60;
+    --color-grad-start: #FF6A00;
+    --color-grad-end: #FFC04D;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #512E2D;
+    --color-on-best: #F4F4F5;
+    --color-best-line: #FF6B60;
+    --color-missed: #A3A5AB;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
     --color-hazard: #FFD21F;
     --color-on-hazard: #111111;
-    --color-inverse-bg: #F4EAE5;
-    --color-inverse-text: #221714;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
+    --color-inverse-bg: #F4F4F5;
+    --color-inverse-text: #1A1B1D;
+    --color-focus: #F4F4F5;
+    --color-scrim: rgba(0, 0, 0, .65);
   }
-  :root[data-palette="iron"]:not([data-theme="light"]){
-    --color-bg: #050708;
-    --color-surface: #13191C;
-    --color-surface-alt: #192024;
-    --color-surface-raised: #1D272B;
-    --color-text: #E6EBED;
-    --color-text-muted: #99A4AA;
-    --color-border: #303B43;
-    --color-border-control: #586D7F;
-    --color-accent: #40E0E6;
-    --color-on-accent: #03201F;
-    --color-accent-soft: #10363A;
-    --color-accent-text: #40E0E6;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #99A4AA;
-    --color-danger: #FF9A8A;
-    --color-on-danger: #1A0F0D;
+  :root[data-palette="bloom"]:not([data-theme="light"]){
+    --color-bg: #0A0610;
+    --color-surface: #1C1424;
+    --color-surface-alt: #271D31;
+    --color-surface-raised: #22192B;
+    --color-fill-track: #30253B;
+    --color-text: #F8F0FA;
+    --color-text-muted: #B4A3BF;
+    --color-border: #33283E;
+    --color-border-control: #7A6C86;
+    --color-accent: #FF5FBF;
+    --color-on-accent: #1F0014;
+    --color-accent-soft: #452240;
+    --color-accent-text: #FF77C9;
+    --color-metric-1: #FF5FBF;
+    --color-metric-2: #7EE08A;
+    --color-metric-3: #FFD447;
+    --color-metric-4: #5DB8FF;
+    --color-grad-start: #FF4FB8;
+    --color-grad-end: #A47CFF;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #2C3B59;
+    --color-on-best: #F8F0FA;
+    --color-best-line: #5DB8FF;
+    --color-missed: #B4A3BF;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
     --color-hazard: #FFD21F;
     --color-on-hazard: #111111;
-    --color-inverse-bg: #E6EBED;
-    --color-inverse-text: #13191C;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
-  }
-  :root[data-palette="volt"]:not([data-theme="light"]){
-    --color-bg: #060704;
-    --color-surface: #161A11;
-    --color-surface-alt: #1C2116;
-    --color-surface-raised: #23291B;
-    --color-text: #EEF3E5;
-    --color-text-muted: #A3AD94;
-    --color-border: #36402D;
-    --color-border-control: #5E704D;
-    --color-accent: #BDF542;
-    --color-on-accent: #152000;
-    --color-accent-soft: #25331A;
-    --color-accent-text: #BDF542;
-    --color-success: #5CC8E8;
-    --color-on-success: #05202A;
-    --color-success-soft: #123A47;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #A3AD94;
-    --color-danger: #FF9A8A;
-    --color-on-danger: #1A0F0D;
-    --color-hazard: #FFD21F;
-    --color-on-hazard: #111111;
-    --color-inverse-bg: #EEF3E5;
-    --color-inverse-text: #161A11;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
-  }
-  :root[data-palette="ultraviolet"]:not([data-theme="light"]){
-    --color-bg: #08060C;
-    --color-surface: #191427;
-    --color-surface-alt: #201A30;
-    --color-surface-raised: #241D38;
-    --color-text: #EEEAF7;
-    --color-text-muted: #AAA3C1;
-    --color-border: #3C3453;
-    --color-border-control: #736095;
-    --color-accent: #B697FF;
-    --color-on-accent: #1A0B3A;
-    --color-accent-soft: #2C2147;
-    --color-accent-text: #B697FF;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #AAA3C1;
-    --color-danger: #FF9A8A;
-    --color-on-danger: #1A0F0D;
-    --color-hazard: #FFD21F;
-    --color-on-hazard: #111111;
-    --color-inverse-bg: #EEEAF7;
-    --color-inverse-text: #191427;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
-  }
-  :root[data-palette="tide"]:not([data-theme="light"]){
-    --color-bg: #040A0D;
-    --color-surface: #0F1F28;
-    --color-surface-alt: #142732;
-    --color-surface-raised: #162D3B;
-    --color-text: #E4F0F4;
-    --color-text-muted: #95ACB6;
-    --color-border: #2C4856;
-    --color-border-control: #44788E;
-    --color-accent: #62CAEC;
-    --color-on-accent: #032029;
-    --color-accent-soft: #123747;
-    --color-accent-text: #62CAEC;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #95ACB6;
-    --color-danger: #FF9DB3;
-    --color-on-danger: #1A0F0D;
-    --color-hazard: #FFD21F;
-    --color-on-hazard: #111111;
-    --color-inverse-bg: #E4F0F4;
-    --color-inverse-text: #0F1F28;
-    --color-focus: #F5C451;
-    --color-scrim: rgba(0, 0, 0, .7);
-  }
-  :root[data-palette="mono"]:not([data-theme="light"]){
-    --color-bg: #060606;
-    --color-surface: #161616;
-    --color-surface-alt: #1D1D1D;
-    --color-surface-raised: #232323;
-    --color-text: #F2F2F2;
-    --color-text-muted: #A8A8A8;
-    --color-border: #3A3A3A;
-    --color-border-control: #6C6C6C;
-    --color-accent: #F2F2F2;
-    --color-on-accent: #111111;
-    --color-accent-soft: #262626;
-    --color-accent-text: #F2F2F2;
-    --color-success: #5CD08A;
-    --color-on-success: #062012;
-    --color-success-soft: #163A26;
-    --color-best: #F5C451;
-    --color-on-best: #241A02;
-    --color-best-line: #F5C451;
-    --color-missed: #A8A8A8;
-    --color-danger: #FF8A80;
-    --color-on-danger: #1A0F0D;
-    --color-hazard: #FFD21F;
-    --color-on-hazard: #111111;
-    --color-inverse-bg: #F2F2F2;
-    --color-inverse-text: #161616;
-    --color-focus: #FF8A80;
-    --color-scrim: rgba(0, 0, 0, .7);
+    --color-inverse-bg: #F8F0FA;
+    --color-inverse-text: #1C1424;
+    --color-focus: #F8F0FA;
+    --color-scrim: rgba(0, 0, 0, .65);
   }
 }
 :root[data-theme="dark"]{
-  --color-bg: #0C0B0A;
-  --color-surface: #1C1A18;
-  --color-surface-alt: #26231F;
-  --color-surface-raised: #24211E;
-  --color-text: #F8F4EF;
-  --color-text-muted: #B0A69B;
-  --color-border: #36312C;
-  --color-border-control: #7E7468;
-  --color-accent: #FF6B4A;
-  --color-on-accent: #1A0700;
-  --color-accent-soft: #3A1A12;
-  --color-accent-text: #FF8A70;
-  --color-success: #4ADE80;
-  --color-on-success: #04160B;
-  --color-success-soft: #10291A;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #B0A69B;
-  --color-danger: #FF8A80;
-  --color-on-danger: #200605;
+  --color-bg: #000000;
+  --color-surface: #1A1A1E;
+  --color-surface-alt: #26262B;
+  --color-surface-raised: #222227;
+  --color-fill-track: #2E2E34;
+  --color-text: #F5F5F7;
+  --color-text-muted: #A1A1AA;
+  --color-border: #2C2C32;
+  --color-border-control: #6E6E78;
+  --color-accent: #FF4D6D;
+  --color-on-accent: #1A0009;
+  --color-accent-soft: #43232C;
+  --color-accent-text: #FF6883;
+  --color-metric-1: #FF4D6D;
+  --color-metric-2: #B6F34A;
+  --color-metric-3: #3FD7F5;
+  --color-metric-4: #FFC23D;
+  --color-grad-start: #FF2E63;
+  --color-grad-end: #FF9A6B;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #514225;
+  --color-on-best: #F5F5F7;
+  --color-best-line: #FFC23D;
+  --color-missed: #A1A1AA;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #F8F4EF;
-  --color-inverse-text: #16120E;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
+  --color-inverse-bg: #F5F5F7;
+  --color-inverse-text: #1A1A1E;
+  --color-focus: #F5F5F7;
+  --color-scrim: rgba(0, 0, 0, .65);
 }
-:root[data-palette="steel"][data-theme="dark"]{
-  --color-bg: #06080C;
-  --color-surface: #141C25;
-  --color-surface-alt: #1A242F;
-  --color-surface-raised: #1D2936;
-  --color-text: #E9EEF3;
-  --color-text-muted: #9DABB9;
-  --color-border: #334255;
-  --color-border-control: #576F8B;
-  --color-accent: #72B2FF;
-  --color-on-accent: #06162A;
-  --color-accent-soft: #16304C;
-  --color-accent-text: #72B2FF;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #9DABB9;
-  --color-danger: #FF9A8A;
-  --color-on-danger: #1A0F0D;
+:root[data-palette="dune"][data-theme="dark"]{
+  --color-bg: #0D0A07;
+  --color-surface: #1E1914;
+  --color-surface-alt: #2A231C;
+  --color-surface-raised: #251F19;
+  --color-fill-track: #322A22;
+  --color-text: #F7F0E6;
+  --color-text-muted: #B5A893;
+  --color-border: #3A3028;
+  --color-border-control: #7E705E;
+  --color-accent: #EE8A55;
+  --color-on-accent: #1E0B02;
+  --color-accent-soft: #432D20;
+  --color-accent-text: #F19C6E;
+  --color-metric-1: #EE8A55;
+  --color-metric-2: #F2C14E;
+  --color-metric-3: #9CC79A;
+  --color-metric-4: #F59A9A;
+  --color-grad-start: #EE7A45;
+  --color-grad-end: #F2C14E;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #523834;
+  --color-on-best: #F7F0E6;
+  --color-best-line: #F59A9A;
+  --color-missed: #B5A893;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #E9EEF3;
-  --color-inverse-text: #141C25;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
+  --color-inverse-bg: #F7F0E6;
+  --color-inverse-text: #1E1914;
+  --color-focus: #F7F0E6;
+  --color-scrim: rgba(0, 0, 0, .65);
 }
-:root[data-palette="bush"][data-theme="dark"]{
-  --color-bg: #080A06;
-  --color-surface: #181F13;
-  --color-surface-alt: #1F2719;
-  --color-surface-raised: #242F1D;
-  --color-text: #EAEDE1;
-  --color-text-muted: #A4AC93;
-  --color-border: #3A4430;
-  --color-border-control: #627450;
-  --color-accent: #A0DD6C;
-  --color-on-accent: #0F1A07;
-  --color-accent-soft: #223519;
-  --color-accent-text: #A0DD6C;
-  --color-success: #5CC8E8;
-  --color-on-success: #05202A;
-  --color-success-soft: #123A47;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #A4AC93;
-  --color-danger: #FF9A8A;
-  --color-on-danger: #1A0F0D;
+:root[data-palette="glacier"][data-theme="dark"]{
+  --color-bg: #04080C;
+  --color-surface: #111A22;
+  --color-surface-alt: #1B2630;
+  --color-surface-raised: #16202A;
+  --color-fill-track: #22303C;
+  --color-text: #EEF4F9;
+  --color-text-muted: #9DAEBF;
+  --color-border: #25333F;
+  --color-border-control: #647A8E;
+  --color-accent: #5CC8FF;
+  --color-on-accent: #00121F;
+  --color-accent-soft: #1E394A;
+  --color-accent-text: #74D0FF;
+  --color-metric-1: #5CC8FF;
+  --color-metric-2: #64E6C8;
+  --color-metric-3: #A3ABFF;
+  --color-metric-4: #E6EE7A;
+  --color-grad-start: #4FB4FF;
+  --color-grad-end: #64E6C8;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #444D37;
+  --color-on-best: #EEF4F9;
+  --color-best-line: #E6EE7A;
+  --color-missed: #9DAEBF;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #EAEDE1;
-  --color-inverse-text: #181F13;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
+  --color-inverse-bg: #EEF4F9;
+  --color-inverse-text: #111A22;
+  --color-focus: #EEF4F9;
+  --color-scrim: rgba(0, 0, 0, .65);
 }
-:root[data-palette="ember"][data-theme="dark"]{
-  --color-bg: #0B0706;
-  --color-surface: #221714;
-  --color-surface-alt: #2B1E1A;
-  --color-surface-raised: #32221D;
-  --color-text: #F4EAE5;
-  --color-text-muted: #BBA59D;
-  --color-border: #4E3A32;
-  --color-border-control: #846756;
-  --color-accent: #FF8D67;
-  --color-on-accent: #2A0B02;
-  --color-accent-soft: #3E2218;
-  --color-accent-text: #FF8D67;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #BBA59D;
-  --color-danger: #FF9DB3;
-  --color-on-danger: #1A0F0D;
+:root[data-palette="forge"][data-theme="dark"]{
+  --color-bg: #090909;
+  --color-surface: #1A1B1D;
+  --color-surface-alt: #252629;
+  --color-surface-raised: #202124;
+  --color-fill-track: #2D2E32;
+  --color-text: #F4F4F5;
+  --color-text-muted: #A3A5AB;
+  --color-border: #2E2F33;
+  --color-border-control: #6F7178;
+  --color-accent: #FF7A1A;
+  --color-on-accent: #1A0A00;
+  --color-accent-soft: #432C1C;
+  --color-accent-text: #FF8E3C;
+  --color-metric-1: #FF7A1A;
+  --color-metric-2: #6FB6FF;
+  --color-metric-3: #E8C468;
+  --color-metric-4: #FF6B60;
+  --color-grad-start: #FF6A00;
+  --color-grad-end: #FFC04D;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #512E2D;
+  --color-on-best: #F4F4F5;
+  --color-best-line: #FF6B60;
+  --color-missed: #A3A5AB;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #F4EAE5;
-  --color-inverse-text: #221714;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
+  --color-inverse-bg: #F4F4F5;
+  --color-inverse-text: #1A1B1D;
+  --color-focus: #F4F4F5;
+  --color-scrim: rgba(0, 0, 0, .65);
 }
-:root[data-palette="iron"][data-theme="dark"]{
-  --color-bg: #050708;
-  --color-surface: #13191C;
-  --color-surface-alt: #192024;
-  --color-surface-raised: #1D272B;
-  --color-text: #E6EBED;
-  --color-text-muted: #99A4AA;
-  --color-border: #303B43;
-  --color-border-control: #586D7F;
-  --color-accent: #40E0E6;
-  --color-on-accent: #03201F;
-  --color-accent-soft: #10363A;
-  --color-accent-text: #40E0E6;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #99A4AA;
-  --color-danger: #FF9A8A;
-  --color-on-danger: #1A0F0D;
+:root[data-palette="bloom"][data-theme="dark"]{
+  --color-bg: #0A0610;
+  --color-surface: #1C1424;
+  --color-surface-alt: #271D31;
+  --color-surface-raised: #22192B;
+  --color-fill-track: #30253B;
+  --color-text: #F8F0FA;
+  --color-text-muted: #B4A3BF;
+  --color-border: #33283E;
+  --color-border-control: #7A6C86;
+  --color-accent: #FF5FBF;
+  --color-on-accent: #1F0014;
+  --color-accent-soft: #452240;
+  --color-accent-text: #FF77C9;
+  --color-metric-1: #FF5FBF;
+  --color-metric-2: #7EE08A;
+  --color-metric-3: #FFD447;
+  --color-metric-4: #5DB8FF;
+  --color-grad-start: #FF4FB8;
+  --color-grad-end: #A47CFF;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #2C3B59;
+  --color-on-best: #F8F0FA;
+  --color-best-line: #5DB8FF;
+  --color-missed: #B4A3BF;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
   --color-hazard: #FFD21F;
   --color-on-hazard: #111111;
-  --color-inverse-bg: #E6EBED;
-  --color-inverse-text: #13191C;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
-}
-:root[data-palette="volt"][data-theme="dark"]{
-  --color-bg: #060704;
-  --color-surface: #161A11;
-  --color-surface-alt: #1C2116;
-  --color-surface-raised: #23291B;
-  --color-text: #EEF3E5;
-  --color-text-muted: #A3AD94;
-  --color-border: #36402D;
-  --color-border-control: #5E704D;
-  --color-accent: #BDF542;
-  --color-on-accent: #152000;
-  --color-accent-soft: #25331A;
-  --color-accent-text: #BDF542;
-  --color-success: #5CC8E8;
-  --color-on-success: #05202A;
-  --color-success-soft: #123A47;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #A3AD94;
-  --color-danger: #FF9A8A;
-  --color-on-danger: #1A0F0D;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #EEF3E5;
-  --color-inverse-text: #161A11;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
-}
-:root[data-palette="ultraviolet"][data-theme="dark"]{
-  --color-bg: #08060C;
-  --color-surface: #191427;
-  --color-surface-alt: #201A30;
-  --color-surface-raised: #241D38;
-  --color-text: #EEEAF7;
-  --color-text-muted: #AAA3C1;
-  --color-border: #3C3453;
-  --color-border-control: #736095;
-  --color-accent: #B697FF;
-  --color-on-accent: #1A0B3A;
-  --color-accent-soft: #2C2147;
-  --color-accent-text: #B697FF;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #AAA3C1;
-  --color-danger: #FF9A8A;
-  --color-on-danger: #1A0F0D;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #EEEAF7;
-  --color-inverse-text: #191427;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
-}
-:root[data-palette="tide"][data-theme="dark"]{
-  --color-bg: #040A0D;
-  --color-surface: #0F1F28;
-  --color-surface-alt: #142732;
-  --color-surface-raised: #162D3B;
-  --color-text: #E4F0F4;
-  --color-text-muted: #95ACB6;
-  --color-border: #2C4856;
-  --color-border-control: #44788E;
-  --color-accent: #62CAEC;
-  --color-on-accent: #032029;
-  --color-accent-soft: #123747;
-  --color-accent-text: #62CAEC;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #95ACB6;
-  --color-danger: #FF9DB3;
-  --color-on-danger: #1A0F0D;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #E4F0F4;
-  --color-inverse-text: #0F1F28;
-  --color-focus: #F5C451;
-  --color-scrim: rgba(0, 0, 0, .7);
-}
-:root[data-palette="mono"][data-theme="dark"]{
-  --color-bg: #060606;
-  --color-surface: #161616;
-  --color-surface-alt: #1D1D1D;
-  --color-surface-raised: #232323;
-  --color-text: #F2F2F2;
-  --color-text-muted: #A8A8A8;
-  --color-border: #3A3A3A;
-  --color-border-control: #6C6C6C;
-  --color-accent: #F2F2F2;
-  --color-on-accent: #111111;
-  --color-accent-soft: #262626;
-  --color-accent-text: #F2F2F2;
-  --color-success: #5CD08A;
-  --color-on-success: #062012;
-  --color-success-soft: #163A26;
-  --color-best: #F5C451;
-  --color-on-best: #241A02;
-  --color-best-line: #F5C451;
-  --color-missed: #A8A8A8;
-  --color-danger: #FF8A80;
-  --color-on-danger: #1A0F0D;
-  --color-hazard: #FFD21F;
-  --color-on-hazard: #111111;
-  --color-inverse-bg: #F2F2F2;
-  --color-inverse-text: #161616;
-  --color-focus: #FF8A80;
-  --color-scrim: rgba(0, 0, 0, .7);
+  --color-inverse-bg: #F8F0FA;
+  --color-inverse-text: #1C1424;
+  --color-focus: #F8F0FA;
+  --color-scrim: rgba(0, 0, 0, .65);
 }
 /* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength, cards keep outlines. */
 @media (prefers-contrast: more){
@@ -1585,6 +1354,137 @@ dialog:not([open]){ display: none; }
 .chart__label{ font-size: var(--font-size-xs); fill: var(--color-text-muted); font-family: var(--font-family-body); }
 .hist-table td:nth-child(2), .finder-table strong{ font-family: var(--font-family-numeral); }
 .hist-table td:nth-child(2){ font-weight: var(--font-weight-heavy); }
+
+/* =====================================================================
+   FITNESS-STYLE LAYOUT (22 October 2026)
+   Large titles, a summary card with colour-coded counts, weekday buttons,
+   the open exercise as a sheet from the bottom, a live bar above the tabs.
+   ===================================================================== */
+/* Title bar and large titles */
+.app-header{ position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--color-bg) 92%, transparent); border-bottom: 0; box-shadow: none; -webkit-backdrop-filter: var(--blur-bar); backdrop-filter: var(--blur-bar); }
+.app-header__row{ min-height: calc(var(--size-tap) + var(--space-1)); }
+.app-header__date{ flex: 1; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .06em; color: var(--color-text-muted); }
+.icon-button{ flex: none; display: grid; place-items: center; width: var(--size-tap); height: var(--size-tap); border: 0; border-radius: var(--radius-round); background: var(--color-surface); color: var(--color-accent-text); cursor: pointer; box-shadow: var(--shadow-1); transition: background-color var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease); }
+.icon-button:hover{ background: var(--color-surface-alt); }
+.icon-button:active{ transform: var(--press-scale); }
+.icon-button svg{ width: var(--size-icon); height: var(--size-icon); }
+.icon-button--profile{ background: var(--color-accent-soft); }
+.page-title{ font-size: var(--font-size-title); font-weight: var(--font-weight-heavy); letter-spacing: var(--letter-spacing-tight); margin-top: var(--space-1); }
+.plan-switch .page-title{ margin-top: 0; }
+
+/* Colour-coded numbers */
+.metric-1{ color: var(--color-metric-1); } .metric-2{ color: var(--color-metric-2); } .metric-3{ color: var(--color-metric-3); } .metric-4{ color: var(--color-metric-4); }
+.metric-label{ font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .06em; }
+.metric-value{ font-family: var(--font-family-numeral); font-variant-numeric: tabular-nums; font-weight: var(--font-weight-heavy); font-size: var(--font-size-metric); line-height: 1.1; }
+.metric-unit{ font-family: var(--font-family-body); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-text-muted); margin-left: 2px; }
+
+/* Summary card */
+.summary-card{ margin-top: var(--space-2); padding: var(--space-2); display: grid; gap: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
+.summary-card__plan{ justify-self: start; padding: 2px var(--space-1); border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-text); font-size: var(--font-size-small); font-weight: var(--font-weight-bold); }
+.summary{ display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: center; }
+.summary__ring svg{ display: block; width: var(--size-ring-summary); height: var(--size-ring-summary); }
+.summary__ring .ring__track, .summary__ring .ring__fill{ stroke-width: 10px; }
+.summary__ring .ring__fill{ stroke: url(#grad-ring); }
+.summary__ring .ring__text{ font-size: 24px; }
+.summary__metrics{ display: grid; gap: var(--space-1-5); min-width: 0; }
+.mrow{ display: grid; gap: 2px; }
+.mrow__top{ display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-1); }
+.mbar{ height: 6px; border-radius: var(--radius-pill); background: var(--color-fill-track); overflow: hidden; }
+.mbar > span{ display: block; height: 100%; border-radius: inherit; transition: width var(--duration-slow) var(--ease); }
+.mbar--1 > span{ background: linear-gradient(90deg, var(--color-metric-1), var(--color-grad-end)); }
+.mbar--2 > span{ background: linear-gradient(90deg, var(--color-metric-2), color-mix(in srgb, var(--color-metric-2) 55%, var(--color-surface))); }
+.mbar--3 > span{ background: linear-gradient(90deg, var(--color-metric-3), color-mix(in srgb, var(--color-metric-3) 55%, var(--color-surface))); }
+.grad-stop-start{ stop-color: var(--color-grad-start); } .grad-stop-end{ stop-color: var(--color-grad-end); } .grad-stop-metric{ stop-color: var(--color-metric-1); }
+.grad-stop-area{ stop-color: var(--color-metric-1); stop-opacity: .28; } .grad-stop-area-end{ stop-color: var(--color-metric-1); stop-opacity: 0; }
+.gradients{ position: absolute; width: 0; height: 0; overflow: hidden; }
+
+/* Weekday buttons with a dot per exercise done */
+.day-tab{ min-height: 68px; gap: 2px; }
+.day-tab__name{ font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .04em; }
+.day-tab__num{ font-family: var(--font-family-numeral); font-weight: var(--font-weight-heavy); font-size: var(--font-size-large); line-height: 1; }
+.day-tab__dots{ display: flex; gap: 3px; justify-content: center; min-height: 6px; flex-wrap: wrap; max-width: 100%; }
+.day-tab__dot{ width: 6px; height: 6px; border-radius: var(--radius-round); background: var(--color-fill-track); }
+.day-tab__dot.is-on{ background: var(--color-metric-1); }
+.day-tab__dot.is-missed{ background: var(--color-text-muted); }
+.day-tab[aria-selected="true"]{ background: var(--color-accent); border-color: var(--color-accent); box-shadow: 0 6px 16px color-mix(in srgb, var(--color-accent) 30%, transparent); }
+.day-tab[aria-selected="true"] .day-tab__name, .day-tab[aria-selected="true"] .day-tab__num{ color: var(--color-on-accent); }
+.day-tab[aria-selected="true"] .day-tab__dot{ background: color-mix(in srgb, var(--color-on-accent) 35%, transparent); }
+.day-tab[aria-selected="true"] .day-tab__dot.is-on{ background: var(--color-on-accent); }
+.day-tab.is-today .day-tab__name{ text-decoration: none; }
+.day-tab.is-today .day-tab__num{ text-decoration: underline; text-decoration-thickness: var(--border-width-strong); text-underline-offset: 4px; }
+
+/* Session heading and the slim progress line under it */
+.session-head{ margin-top: var(--space-3); }
+.session-head__title{ font-size: var(--font-size-section); font-weight: var(--font-weight-heavy); letter-spacing: var(--letter-spacing-tight); }
+.progress{ margin-top: var(--space-1); }
+.progress__rail{ height: 4px; }
+.progress__fill{ background: linear-gradient(90deg, var(--color-grad-start), var(--color-grad-end)); }
+
+/* Rows: progress circle in the sets colour */
+.exercise.is-done .exercise__status{ background: var(--color-success); border-color: var(--color-success); }
+.set-row--compact.is-done .set-row__badge{ background: var(--color-success); border-color: var(--color-success); }
+.set-row__beat, .tag--best{ background: var(--color-best); color: var(--color-on-best); }
+
+/* The open exercise becomes a sheet from the bottom of the screen */
+.sheet-scrim{ position: fixed; inset: 0; z-index: 44; background: var(--color-scrim); animation: fade-in var(--duration-med) var(--ease); }
+@keyframes fade-in{ from{ opacity: 0; } to{ opacity: 1; } }
+body.has-sheet{ overflow: hidden; }
+.exercise.is-open{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-width: var(--size-dialog-max); margin: 0 auto; max-height: calc(100% - var(--size-sheet-top) - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain;
+  border: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--color-bg); box-shadow: var(--shadow-3); padding-bottom: env(safe-area-inset-bottom, 0px); animation: sheet-up var(--duration-slow) var(--ease); }
+@keyframes sheet-up{ from{ transform: translateY(var(--space-4)); opacity: .6; } to{ transform: none; opacity: 1; } }
+.exercise.is-open::before{ content: ""; display: block; width: var(--size-grabber); height: 5px; margin: var(--space-1) auto 0; border-radius: var(--radius-pill); background: var(--color-fill-track); }
+.exercise.is-open .exercise__summary{ position: sticky; top: 0; z-index: 2; background: var(--color-bg); border-radius: 0; }
+.exercise.is-open .exercise__name{ font-size: var(--font-size-large); font-weight: var(--font-weight-heavy); }
+.exercise.is-open .exercise__chevron{ transform: rotate(45deg); }
+.exercise.is-open .exercise__panel{ padding-bottom: var(--space-3); }
+.exercise.is-open .set-row, .exercise.is-open .sub-panel{ background: var(--color-surface); }
+.exercise.is-open .set-row:not(.set-row--compact){ background: var(--color-surface); box-shadow: inset 0 0 0 var(--border-width-strong) var(--color-accent); border-left-color: transparent; }
+.exercise.is-open .set-row--compact{ background: var(--color-surface); }
+@media (min-width: 900px){ .exercise.is-open{ bottom: var(--space-3); border-radius: var(--radius-lg); max-height: calc(100% - var(--space-6) * 2); } }
+
+/* Live bar above the tabs: the rest countdown, or the next set when resting is over */
+.rest-bar{ top: auto; bottom: calc(var(--size-nav) + var(--space-1) + env(safe-area-inset-bottom, 0px)); background: var(--color-surface-raised); color: var(--color-text); border-radius: var(--radius-pill); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2); box-shadow: var(--shadow-3), inset 0 0 0 var(--border-width) var(--color-border); }
+.rest-bar__time{ color: var(--color-metric-2); }
+.rest-bar__next{ color: var(--color-text-muted); }
+.rest-bar .button{ color: var(--color-text); border-color: var(--color-border-control); background: var(--color-surface-alt); }
+.rest-bar .button:hover{ background: var(--color-surface); }
+.rest-bar.is-done{ background: var(--color-success); color: var(--color-on-success); }
+.rest-bar.is-done .rest-bar__time, .rest-bar.is-done .rest-bar__next{ color: var(--color-on-success); }
+.rest-bar.is-done .button{ background: transparent; color: var(--color-on-success); border-color: var(--color-on-success); }
+.rest-bar__track{ left: var(--space-3); right: var(--space-3); }
+body.has-sheet .rest-bar{ top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); bottom: auto; z-index: 55; }
+body.has-hazard .rest-bar{ bottom: calc(var(--size-nav) + var(--space-1) + var(--hazard-height, var(--size-hazard-default))); }
+body.has-rest .toast{ top: calc(var(--space-2) + env(safe-area-inset-top, 0px)); }
+body.has-sheet.has-rest .toast{ top: calc(var(--space-1) + var(--size-rest-clearance) + env(safe-area-inset-top, 0px)); }
+.next-fab{ position: fixed; left: var(--space-1); right: var(--space-1); bottom: calc(var(--size-nav) + var(--space-1) + env(safe-area-inset-bottom, 0px)); z-index: 30; max-width: var(--size-dialog-max); margin: 0 auto; display: flex; align-items: center; gap: var(--space-1-5);
+  min-height: calc(var(--size-tap) + var(--space-1)); padding: var(--space-0-5) var(--space-0-5) var(--space-0-5) var(--space-2); border: 0; border-radius: var(--radius-pill); background: var(--color-surface-raised); color: var(--color-text); text-align: left; cursor: pointer; box-shadow: var(--shadow-3), inset 0 0 0 var(--border-width) var(--color-border); transition: transform var(--duration-fast) var(--ease); }
+.next-fab:active{ transform: var(--press-scale); }
+.next-fab__text{ flex: 1; min-width: 0; display: grid; line-height: 1.25; }
+.next-fab__title{ font-weight: var(--font-weight-bold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.next-fab__sub{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.next-fab__go{ flex: none; display: grid; place-items: center; min-height: var(--size-tap); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--color-accent); color: var(--color-on-accent); font-weight: var(--font-weight-bold); }
+body.has-rest .next-fab, body.has-sheet .next-fab{ display: none; }
+body.has-hazard .next-fab{ bottom: calc(var(--size-nav) + var(--space-1) + var(--hazard-height, var(--size-hazard-default))); left: var(--space-1); right: var(--space-1); }
+
+/* Room at the end of the page for the live bar, so nothing hides behind it */
+body{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(--space-6) + env(safe-area-inset-bottom, 0px)); }
+body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(--space-6) + var(--hazard-height, var(--size-hazard-default))); }
+/* This log card */
+.log-card{ margin-top: var(--space-2); padding: var(--space-2); display: grid; gap: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.log-card .week-line{ margin-top: 0; }
+.week-line__ring svg .ring__fill{ stroke: var(--color-metric-3); }
+
+/* History: coloured tiles and a gradient chart */
+.hist-tiles{ display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-1); }
+.hist-tile{ padding: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); display: grid; gap: 2px; }
+.chart__line{ stroke: url(#grad-chart); stroke-width: 3.5; }
+.chart__area{ fill: url(#grad-area); stroke: none; }
+.chart__dot{ stroke: var(--color-metric-1); }
+.chart__dot--last{ fill: var(--color-metric-1); }
+
+/* Theme picker: four colour dots per theme */
+.theme-dots{ display: inline-flex; gap: 3px; margin-right: var(--space-1); vertical-align: -2px; }
+.theme-dots i{ width: 14px; height: 14px; border-radius: var(--radius-round); display: block; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .3); }
 </style>
 <script>
 /* Apply the saved theme before the page paints, so it never flashes the wrong colours.
@@ -1596,9 +1496,11 @@ dialog:not([open]){ display: none; }
     if (!t) return;
     var r = document.documentElement;
     window.viewerThemeAtLoad = r.getAttribute("data-theme");
-    // Version 2 themes: Tempo is the default. Anyone still on the old default (Steel) moves to Tempo once.
-    if (!t.v && (!t.palette || t.palette === "steel")) t.palette = "tempo";
-    if (t.palette && t.palette !== "tempo") r.setAttribute("data-palette", t.palette);
+    // Version 3 themes: five themes; older ones move to the closest new one (same map as themeMove)
+    var ok = {pulse: 1, dune: 1, glacier: 1, forge: 1, bloom: 1};
+    var map = {tempo: "pulse", volt: "pulse", steel: "glacier", tide: "glacier", iron: "glacier", ember: "forge", mono: "forge", bush: "dune", ultraviolet: "bloom"};
+    var p = ok[t.palette] ? t.palette : (map[t.palette] || "pulse");
+    if (p !== "pulse") r.setAttribute("data-palette", p);
     if (t.mode === "light" || t.mode === "dark") r.setAttribute("data-theme", t.mode);
     if (t.contrast === "more") r.setAttribute("data-contrast", "more");
   } catch (e){}
@@ -1616,14 +1518,10 @@ dialog:not([open]){ display: none; }
      ===================================================================== -->
 <header class="app-header">
   <div class="page-width app-header__row">
-    <div class="app-header__titles">
-      <p class="app-header__plan" id="header-plan">Training Tracker</p>
-      <p class="app-header__week" id="header-week"></p>
-    </div>
-    <button type="button" class="button button--quiet" id="button-help">Help</button>
-    <button type="button" class="button button--quiet" id="button-settings">Settings</button>
+    <p class="app-header__date" id="header-date"></p>
+    <button type="button" class="icon-button" id="button-help" aria-label="Help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9.8-.9 1.4v.3M12 17h.01"/></svg></button>
+    <button type="button" class="icon-button icon-button--profile" id="button-settings" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></button>
   </div>
-  <p class="page-width app-header__swap" id="header-swap"></p>
 </header>
 
 <main id="main-content" tabindex="-1">
@@ -1662,38 +1560,48 @@ dialog:not([open]){ display: none; }
 
     <!-- TRAIN VIEW: today's session and logging -->
     <section id="view-train" aria-labelledby="train-title" hidden>
-      <h1 class="visually-hidden" id="train-title">Today's session</h1>
-      <div class="week-line">
-        <p class="week-line__text" id="week-status"></p>
-        <div class="week-line__ring" id="week-ring"></div>
-      </div>
-      <div class="button-row">
-        <button type="button" class="button" id="button-week-options">Week options</button>
-      </div>
+      <h1 class="page-title" id="train-title">Today</h1>
+      <!-- SUMMARY: plan and week, a day ring and three colour-coded counts -->
+      <section class="summary-card" aria-label="Today's progress">
+        <p class="summary-card__plan"><span id="header-plan">Training Tracker</span> · <span id="header-week"></span></p>
+        <div class="summary">
+          <div class="summary__ring" id="summary-ring"></div>
+          <div class="summary__metrics" id="summary-metrics"></div>
+        </div>
+        <p class="small muted" id="header-swap"></p>
+      </section>
       <div id="week-banner"></div>
       <div class="day-tabs" role="tablist" aria-label="Training day" id="day-tabs"></div>
+      <section class="up-next" id="up-next" aria-live="polite" aria-label="Up next"></section>
+      <div id="catchup"></div>
       <div class="session-head" id="session-head"></div>
       <div class="progress">
         <div class="progress__rail" role="progressbar" aria-labelledby="progress-text" aria-valuemin="0" id="progress-rail"><div class="progress__fill" id="progress-fill"></div></div>
         <p class="progress__text" id="progress-text"></p>
       </div>
-      <section class="up-next" id="up-next" aria-live="polite" aria-label="Up next"></section>
-      <div id="catchup"></div>
       <div class="exercise-list" id="exercise-list" role="tabpanel"></div>
       <section class="extras" id="extras" aria-labelledby="extras-title"></section>
       <div id="swaps-log"></div>
+      <!-- THIS LOG: the week being logged, targets loaded, days done, week options -->
+      <section class="log-card" aria-label="This log">
+        <div class="week-line">
+          <p class="week-line__text" id="week-status"></p>
+          <div class="week-line__ring" id="week-ring"></div>
+        </div>
+        <button type="button" class="button button--full" id="button-week-options">Week options</button>
+      </section>
     </section>
 
     <!-- HISTORY VIEW: past weeks (this, last and archived) and progress per exercise -->
     <section id="view-hist" aria-labelledby="hist-title" hidden>
-      <h1 id="hist-title" tabindex="-1">History</h1>
+      <h1 class="page-title" id="hist-title" tabindex="-1">History</h1>
       <div id="hist-body" class="hist"></div>
     </section>
 
     <!-- PLAN VIEW: read-only plan for either programme -->
     <section id="view-plan" aria-labelledby="plan-title" hidden>
       <div class="plan-switch">
-        <h1 id="plan-title" tabindex="-1">Plans</h1>
+        <h1 class="page-title" id="plan-title" tabindex="-1">Plans</h1>
         <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
         <p class="small muted" id="plan-switch-note"></p>
       </div>
@@ -1709,11 +1617,17 @@ dialog:not([open]){ display: none; }
      FLOATING CONTROLS
      ===================================================================== -->
 <nav class="bottom-nav" aria-label="Pages">
-  <button type="button" class="bottom-nav__button" data-tab="train"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Train</button>
-  <button type="button" class="bottom-nav__button" data-tab="plan"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
+  <button type="button" class="bottom-nav__button" data-tab="train"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"/></svg>Today</button>
+  <button type="button" class="bottom-nav__button" data-tab="plan"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plans</button>
   <button type="button" class="bottom-nav__button" data-tab="history"><svg class="bottom-nav__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg>History</button>
 </nav>
-<button type="button" class="button button--primary next-fab" id="next-fab" hidden>Next set</button>
+<div class="sheet-scrim" id="sheet-scrim" hidden></div>
+<button type="button" class="next-fab" id="next-fab" hidden><span class="next-fab__text"><span class="next-fab__title" id="next-fab-title">Next set</span><span class="next-fab__sub" id="next-fab-sub"></span></span><span class="next-fab__go">Open</span></button>
+<svg class="gradients" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+  <linearGradient id="grad-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" class="grad-stop-start"/><stop offset="1" class="grad-stop-end"/></linearGradient>
+  <linearGradient id="grad-chart" x1="0" y1="0" x2="1" y2="0"><stop offset="0" class="grad-stop-metric"/><stop offset="1" class="grad-stop-end"/></linearGradient>
+  <linearGradient id="grad-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" class="grad-stop-area"/><stop offset="1" class="grad-stop-area-end"/></linearGradient>
+</defs></svg>
 <button type="button" class="button to-top" id="to-top" hidden>Back to top</button>
 <aside class="hazard-bar" id="hazard-bar" aria-live="polite" hidden></aside>
 <div class="term-box" id="term-box" role="status" hidden><p class="term-box__text" id="term-box-text"></p><button type="button" class="button button--quiet" id="term-box-close">Close</button></div>
@@ -1948,7 +1862,7 @@ dialog:not([open]){ display: none; }
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-22.1",
+ "appVersion": "2026-10-22.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2170,49 +2084,59 @@ const CONFIG = {
  ],
  "themes": [
   {
-   "id": "tempo",
-   "name": "Tempo",
-   "desc": "Warm coral on sand. The default."
+   "id": "pulse",
+   "name": "Pulse",
+   "desc": "Coral, lime, cyan and amber on true black. The default.",
+   "colours": [
+    "#FF4D6D",
+    "#B6F34A",
+    "#3FD7F5",
+    "#FFC23D"
+   ]
   },
   {
-   "id": "steel",
-   "name": "Steel",
-   "desc": "Steel blue on cool grey. The previous default."
+   "id": "dune",
+   "name": "Dune",
+   "desc": "Terracotta, saffron, sage and rose on warm sand.",
+   "colours": [
+    "#EE8A55",
+    "#F2C14E",
+    "#9CC79A",
+    "#F59A9A"
+   ]
   },
   {
-   "id": "bush",
-   "name": "Bush",
-   "desc": "Olive green on warm stone."
+   "id": "glacier",
+   "name": "Glacier",
+   "desc": "Ice blue, mint, periwinkle and lemon on cold slate.",
+   "colours": [
+    "#5CC8FF",
+    "#64E6C8",
+    "#A3ABFF",
+    "#E6EE7A"
+   ]
   },
   {
-   "id": "ember",
-   "name": "Ember",
-   "desc": "Rust red on warm sand."
+   "id": "forge",
+   "name": "Forge",
+   "desc": "Molten orange, steel blue, brass and ember on graphite.",
+   "colours": [
+    "#FF7A1A",
+    "#6FB6FF",
+    "#E8C468",
+    "#FF6B60"
+   ]
   },
   {
-   "id": "iron",
-   "name": "Iron",
-   "desc": "Teal on charcoal grey."
-  },
-  {
-   "id": "volt",
-   "name": "Volt",
-   "desc": "Lime green on graphite."
-  },
-  {
-   "id": "ultraviolet",
-   "name": "Ultraviolet",
-   "desc": "Deep violet on lilac grey."
-  },
-  {
-   "id": "tide",
-   "name": "Tide",
-   "desc": "Ocean blue on sea mist."
-  },
-  {
-   "id": "mono",
-   "name": "Mono",
-   "desc": "Black and white only."
+   "id": "bloom",
+   "name": "Bloom",
+   "desc": "Magenta, leaf, sunflower and ocean on soft plum.",
+   "colours": [
+    "#FF5FBF",
+    "#7EE08A",
+    "#FFD447",
+    "#5DB8FF"
+   ]
   }
  ],
  "glossary": {
@@ -5947,6 +5871,8 @@ function weekLabel(plan, w){
 
 /* ---------- 3.3 Header, notices, setup and help ---------- */
 function renderHeader(c){
+  const td = parseISO(c.today);
+  $("#header-date").textContent = td ? weekdayName(c.today) + " " + td.getDate() + " " + MONTHS[td.getMonth()] : "";
   if (!state.cycle){ $("#header-plan").textContent = "Training Tracker"; $("#header-week").textContent = "Set up your plans to begin."; $("#header-swap").textContent = ""; return; }
   $("#header-plan").textContent = PLAN_NAMES[c.plan];
   $("#header-week").innerHTML = term(c.plan === "pb" ? "weekab" : "block", weekLabel(c.plan, c.now));
@@ -6007,8 +5933,9 @@ function renderDayTabs(c){
   $("#day-tabs").innerHTML = c.sessions.map(s => {
     const sel = s.n === state.ui.day, p = dayProgress(c.slot, s);
     return '<button type="button" role="tab" class="day-tab' + (s.n === t ? " is-today" : "") + '" id="tab-day-' + s.n + '" aria-selected="' + sel + '" aria-controls="exercise-list" tabindex="' + (sel ? 0 : -1) + '" data-day="' + s.n + '">' +
-      '<span class="day-tab__name">Day ' + s.n + (s.n === t ? '<span class="visually-hidden">, today</span>' : "") + "</span>" +
-      '<span class="day-tab__count">' + (s.rest ? "Rest" : p.done + " of " + p.total) + "</span></button>";
+      '<span class="day-tab__name">' + esc(weekdayName(addDays(c.slot.weekStart, s.n - 1)).slice(0, 3)) + '</span><span class="day-tab__num">' + s.n + "</span>" +
+      '<span class="day-tab__dots" aria-hidden="true">' + (s.rest ? "" : Array.from({length: Math.min(p.total, 6)}, (_, k) => '<span class="day-tab__dot' + (k < p.done ? " is-on" : k < p.done + p.missed ? " is-missed" : "") + '"></span>').join("")) + "</span>" +
+      '<span class="visually-hidden">Day ' + s.n + (s.n === t ? ", today" : "") + ", " + '<span class="day-tab__count">' + (s.rest ? "Rest" : p.done + " of " + p.total) + "</span> done</span></button>";
   }).join("");
   $("#exercise-list").setAttribute("aria-labelledby", "tab-day-" + state.ui.day);
 }
@@ -6020,7 +5947,25 @@ function renderSessionHead(c, day){
     (day.intro ? '<p class="small">' + term("pair", "Pairs") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
     (lwDay ? '<p class="small muted">Last week: ' + esc(lwDay.note.replace(/^Day \d+: /, "")) + ".</p>" : "");
 }
+// Summary card: a ring for today's exercises and three colour-coded counts (sets, exercises, week)
+function renderSummary(c, day){
+  const p = dayProgress(c.slot, day), w = weekDaysDone(c.slot, c.sessions);
+  let sets = 0, setsDone = 0;
+  if (!day.rest) sessionItems(day).filter(it => it.counted && it.kind !== "warmup").forEach(it => {
+    const e = c.slot.entries[it.id];
+    if (isMissed(e)) return;
+    const sp = e && e.replaced ? {done: e.repl.sets.filter(isLogged).length, total: e.repl.sets.length} : setsProgress(it, e);
+    sets += sp.total; setsDone += sp.done;
+  });
+  const frac = p.total ? p.accounted / p.total : 0;
+  $("#summary-ring").innerHTML = ringSVG(frac, 104, day.rest ? "Rest" : Math.round(frac * 100) + "%");
+  const row = (n, label, val, total, unit) => '<div class="mrow"><div class="mrow__top"><span class="metric-label metric-' + n + '">' + label + '</span><span class="metric-value metric-' + n + '">' + val + '<span class="metric-unit">' + esc(unit) + "</span></span></div>" +
+    '<div class="mbar mbar--' + n + '" aria-hidden="true"><span style="width:' + (total ? Math.round(val / total * 100) : 0) + '%"></span></div></div>';
+  $("#summary-metrics").innerHTML = day.rest ? '<p class="small muted">Rest day. Nothing to log.</p>' :
+    row(1, "Sets", setsDone, sets, "/" + sets) + row(3, "Exercises", p.accounted, p.total, "/" + p.total) + row(2, "Week", w.done, w.total, "/" + w.total + " days");
+}
 function renderProgress(c, day){
+  renderSummary(c, day);
   const p = dayProgress(c.slot, day);
   $("#progress-fill").style.width = (p.total ? Math.round(p.accounted / p.total * 100) : 0) + "%";
   const rail = $("#progress-rail");
@@ -6043,14 +5988,14 @@ function renderUpNext(c, day){
   } else if (!n){
     const next = sessionOf(c, day.n + 1);
     box.className = "up-next";
-    box.innerHTML = ring + '<div class="up-next__body"><p class="up-next__kicker">Day ' + day.n + ' done</p><p class="up-next__title">Every exercise is logged or accounted for.</p>' +
+    box.innerHTML = '<div class="up-next__body"><p class="up-next__kicker">Day ' + day.n + ' done</p><p class="up-next__title">Every exercise is logged or accounted for.</p>' +
       (next && !next.rest ? '<button type="button" class="button button--primary" data-goto-day="' + next.n + '">Open Day ' + next.n + ": " + esc(next.title) + "</button>" : '<button type="button" class="button button--primary" data-export>Export this week</button>') + "</div>";
   } else {
     const a = rowArgs(c, n.item), ev = ensureEntryView(c, n.item);
     const t = n.kind === "main" ? rowTarget(n.item, n.i, Object.assign(a, {entry: ev})) : replGuide(c, n.item, ev, n.i, ev.repl.unit || "kg").t;
     const label = plainRowLabel((n.item.rows[n.i] || {label: "Extra set"}).label);
     box.className = "up-next";
-    box.innerHTML = ring + '<div class="up-next__body"><p class="up-next__kicker">Up next</p><p class="up-next__title">' + esc(n.kind === "repl" && ev.repl.name.trim() ? ev.repl.name.trim() : n.item.name) + "</p>" +
+    box.innerHTML = '<div class="up-next__body"><p class="up-next__kicker">Up next</p><p class="up-next__title">' + esc(n.kind === "repl" && ev.repl.name.trim() ? ev.repl.name.trim() : n.item.name) + "</p>" +
       '<p class="small">' + esc(label) + (t.text ? ". " + esc(t.text) : "") + "</p>" +
       '<div class="button-row"><button type="button" class="button button--primary" data-next-set>Log this set</button>' +
       '<button type="button" class="link-button" data-miss-day="' + day.n + '">Missed this day?</button></div></div>';
@@ -6469,7 +6414,7 @@ function extraHTML(c, n, x){
 }
 function rerenderExtras(focusSel){
   const c = ctx(), day = sessionOf(c, state.ui.day); if (!day) return;
-  renderExtras(c, day);
+  renderExtras(c, day); syncExerciseSheet();
   if (focusSel){ const f = $("#extras " + focusSel); if (f) f.focus(); }
 }
 let extraTimer = null;
@@ -6491,13 +6436,13 @@ let extraTimer = null;
     if (act === "extra-add" || act === "extra-again"){
       const c = ctx(), list = extrasOf(c, state.ui.day), rec = act === "extra-again" ? savedExtraFor(c, state.ui.day, btn.dataset.name) : null;
       const x = newExtra(rec ? rec.name : "", rec ? rec.unit : "kg", rec ? rec.sets.length : 1, Date.now().toString(36));
-      list.push(x); state.ui.openExtra = x.id; save();
+      list.push(x); state.ui.openExtra = x.id; state.ui.openEx = null; save(); renderAll();
       rerenderExtras(rec ? "#extra-" + x.id + "-0-reps" : "#extra-" + x.id + "-name");
       if (rec) toast(rec.name + " added. Last time's numbers are in grey.");
       return;
     }
     const h = find(btn); if (!h) return;
-    if (act === "extra-toggle"){ state.ui.openExtra = state.ui.openExtra === h.x.id ? null : h.x.id; save(); rerenderExtras("#extra-" + h.x.id + " .exercise__summary"); }
+    if (act === "extra-toggle"){ state.ui.openExtra = state.ui.openExtra === h.x.id ? null : h.x.id; if (state.ui.openExtra && state.ui.openEx){ state.ui.openEx = null; renderAll(); } save(); rerenderExtras("#extra-" + h.x.id + " .exercise__summary"); }
     else if (act === "extra-close"){ state.ui.openExtra = null; save(); rerenderExtras("#extra-" + h.x.id + " .exercise__summary"); if (h.x.sets.some(isLogged)) toast((h.x.name || "Extra exercise") + " saved."); }
     else if (act === "extra-unit"){ h.x.unit = btn.dataset.unit === "plates" ? "plates" : "kg"; save(); rerenderExtras('[data-act="extra-unit"][data-unit="' + h.x.unit + '"]'); }
     else if (act === "extra-set-add"){ if (h.x.sets.length < CONFIG.maxSetsPerExtra){ h.x.sets.push(emptySet()); save(); rerenderExtras("#extra-" + h.x.id + "-" + (h.x.sets.length - 1) + "-reps"); } }
@@ -6535,8 +6480,13 @@ let extraTimer = null;
 /* ---------- 3.5 Floating controls: next-set button, hazard card ---------- */
 let upNextVisible = true;
 function renderFab(c){
-  const day = sessionOf(c, state.ui.day);
-  $("#next-fab").hidden = state.ui.tab !== "train" || !state.cycle || !day || day.rest || !nextSet(c.slot, day) || upNextVisible;
+  const day = sessionOf(c, state.ui.day), n = day && !day.rest ? nextSet(c.slot, day) : null;
+  $("#next-fab").hidden = state.ui.tab !== "train" || !state.cycle || !day || day.rest || !n || upNextVisible || !!state.ui.openEx;
+  if (n){
+    const e = c.slot.entries[n.item.id];
+    $("#next-fab-title").textContent = n.kind === "repl" && e && e.repl.name.trim() ? e.repl.name.trim() : n.item.name;
+    $("#next-fab-sub").textContent = plainRowLabel((n.item.rows[n.i] || {label: "Next set"}).label) + " is next";
+  }
 }
 function renderHazard(c){
   const bar = $("#hazard-bar");
@@ -6565,7 +6515,7 @@ function renderHazard(c){
 function renderPlanView(c){
   const view = state.ui.planView || c.plan;
   $("#plan-switch").innerHTML = PLAN_IDS.map(p => '<button type="button" class="button" data-plan-view="' + p + '" aria-pressed="' + (p === view) + '">' + esc(PLAN_NAMES[p]) + "</button>").join("");
-  $("#plan-switch-note").textContent = view === c.plan ? "This is your plan right now. Log sets on the Train page." : "Viewing only. You start this plan again on " + fmtDayDate(nextWeekForPlan(c.cycle, view, c.today)) + ".";
+  $("#plan-switch-note").textContent = view === c.plan ? "This is your plan right now. Log sets on the Today page." : "Viewing only. You start this plan again on " + fmtDayDate(nextWeekForPlan(c.cycle, view, c.today)) + ".";
   renderTodayCard(c, view);
   const plan = PROGRAMME.plans[view];
   const t = view === c.plan ? todaysDay(c) : 0;
@@ -6659,6 +6609,10 @@ function renderHistory(c){
   const label = w => (w.source === "this" ? "This week: " : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? "Last week: " : "") + fmtRange(w.weekStart);
   html += '<div class="field"><label class="field__label" for="hist-week">Week</label><select class="select-input" id="hist-week">' +
     weeks.map(w => '<option value="' + w.weekStart + '"' + (w.weekStart === ws ? " selected" : "") + ">" + esc(label(w)) + "</option>").join("") + "</select></div>";
+  const nItems = week.view.reduce((a, dd) => a + dd.items.filter(it => it.sets.length || (it.swap && it.swap.sets.length)).length, 0);
+  const nSets = week.view.reduce((a, dd) => a + dd.items.reduce((b, it) => b + it.sets.filter(x => x.working).length + (it.swap ? it.swap.sets.length : 0), 0), 0);
+  const tile = (n, label, val, sub) => '<div class="hist-tile"><span class="metric-label metric-' + n + '">' + label + '</span><span class="metric-value metric-' + n + '">' + val + '</span><span class="small muted">' + sub + "</span></div>";
+  html += '<div class="hist-tiles">' + tile(2, "Days", week.view.length, "trained") + tile(3, "Exercises", nItems, "logged") + tile(1, "Sets", nSets, "working") + "</div>";
   html += '<p class="small muted">Working sets are in bold. This phone keeps your last ' + CONFIG.archiveWeeks + " finished weeks of each plan.</p>";
   html += week.view.map(d => '<article class="hist-day"><h3 class="hist-day__title">Day ' + d.day + ": " + esc(d.title) + "</h3><ul class=\"hist-list\">" +
     d.items.map(it => {
@@ -6693,7 +6647,8 @@ function progressChartSVG(rows, meta){
   const every = Math.ceil(pts.length / 6);   // at most about six date labels, so they never overlap
   return '<svg class="chart" viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' + esc(label) + '">' +
     [lo, hi].filter((v, i, a) => a.indexOf(v) === i).map(v => '<line class="chart__grid" x1="' + padL + '" x2="' + (W - padR) + '" y1="' + Y(v).toFixed(1) + '" y2="' + Y(v).toFixed(1) + '"/><text class="chart__label" x="' + (padL - 6) + '" y="' + (Y(v) + 4).toFixed(1) + '" text-anchor="end">' + esc(fmtNum(v)) + "</text>").join("") +
-    (xy.length > 1 ? '<polyline class="chart__line" points="' + xy.map(q => q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ") + '"/>' : "") +
+    (xy.length > 1 ? '<polygon class="chart__area" points="' + xy.map(q => q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ") + " " + xy[xy.length - 1][0].toFixed(1) + "," + (H - padB) + " " + xy[0][0].toFixed(1) + "," + (H - padB) + '"/>' +
+      '<polyline class="chart__line" points="' + xy.map(q => q[0].toFixed(1) + "," + q[1].toFixed(1)).join(" ") + '"/>' : "") +
     xy.map((q, k) => '<circle class="chart__dot' + (k === xy.length - 1 ? " chart__dot--last" : "") + '" cx="' + q[0].toFixed(1) + '" cy="' + q[1].toFixed(1) + '" r="5"/>').join("") +
     pts.map((r, k) => (k % every === 0 || k === pts.length - 1) ? '<text class="chart__label" x="' + X(k).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="' + (pts.length > 1 && k === pts.length - 1 ? "end" : k === 0 && pts.length > 1 ? "start" : "middle") + '">' + esc(short(r.weekStart)) + "</text>" : "").join("") +
     '<text class="chart__label" x="' + padL + '" y="10">' + esc(word) + "</text></svg>";
@@ -6771,7 +6726,20 @@ function renderAllInner(){
   renderHazard(c);
   renderFab(c);
   updateToTop();
+  syncExerciseSheet();
   if (sheetOpen) renderMakeupSheet();
+}
+// The open exercise shows as a sheet over Today: dim the page behind it and stop it scrolling
+function syncExerciseSheet(){
+  const open = state.ui.tab === "train" && !!state.cycle && ((!!state.ui.openEx && !!$("#ex-" + state.ui.openEx)) || (!!state.ui.openExtra && !!$("#extra-" + state.ui.openExtra)));
+  $("#sheet-scrim").hidden = !open;
+  document.body.classList.toggle("has-sheet", open);
+}
+function closeExerciseSheet(){
+  if (state.ui.openExtra){ const x = state.ui.openExtra; state.ui.openExtra = null; save(); renderAll(); const s = $("#extra-" + x + " .exercise__summary"); if (s) s.focus({preventScroll: true}); return; }
+  const id = state.ui.openEx; if (!id) return;
+  state.ui.openEx = null; save(); renderAll();
+  const s = $("#ex-" + id + " .exercise__summary"); if (s) s.focus({preventScroll: true});
 }
 // Redraw one exercise, keeping focus where it was
 function rerenderExercise(id, focusSel){
@@ -6783,7 +6751,7 @@ function rerenderExercise(id, focusSel){
   if (focusSel){ const f = $("#ex-" + id + " " + focusSel); if (f) f.focus(); }
   const day = sessionOf(c, state.ui.day);
   if (day){ renderProgress(c, day); renderUpNext(c, day); renderDayTabs(c); renderWeekStatus(c); renderSwapsLog(c, day); }
-  renderHazard(c); renderFab(c);
+  renderHazard(c); renderFab(c); syncExerciseSheet();
   if (sheetOpen) renderMakeupNote();
 }
 
@@ -6870,11 +6838,17 @@ $("#button-switch-confirm").addEventListener("click", () => {
 });
 // Themes, colour mode, layout
 // Theme preferences, kept apart from training data. Older saves held them in state.ui: move them once.
-const themePrefs = themeLoad() || {palette: state.ui.theme || "tempo", mode: state.ui.mode || "system", contrast: "auto", v: 2};
-// Version 2 themes: Tempo is the default; anyone still on the old default (Steel) moves to it once
-if (!themePrefs.v){ if (!themePrefs.palette || themePrefs.palette === "steel") themePrefs.palette = "tempo"; themePrefs.v = 2; }
+const themePrefs = themeLoad() || {palette: "pulse", mode: state.ui.mode || "system", contrast: "auto", v: 3};
+// Version 3 themes (22 October 2026): five multi-colour themes replace the nine single-colour ones.
+// Each old theme moves to the closest new one, once.
+if (!themePrefs.v || themePrefs.v < 3){ themePrefs.palette = themeMove(themePrefs.palette); themePrefs.v = 3; }
 delete state.ui.theme; delete state.ui.mode;
 themeSave(themePrefs);
+// Takes an old theme id. Returns the closest of the five current themes.
+function themeMove(id){
+  const map = {tempo: "pulse", volt: "pulse", steel: "glacier", tide: "glacier", iron: "glacier", ember: "forge", mono: "forge", bush: "dune", ultraviolet: "bloom"};
+  return CONFIG.themes.some(t => t.id === id) ? id : (map[id] || "pulse");
+}
 // A short cross-fade when the theme changes (skipped with reduced motion)
 function fadeTheme(){
   if (reducedMotion()) return;
@@ -6888,11 +6862,11 @@ function syncThemeColour(){
   if (m) m.setAttribute("content", getComputedStyle(document.documentElement).getPropertyValue("--color-surface").trim());
 }
 function applyTheme(id){
-  const t = CONFIG.themes.some(x => x.id === id) ? id : "tempo";
-  if (t === "tempo") document.documentElement.removeAttribute("data-palette"); else document.documentElement.setAttribute("data-palette", t);
+  const t = CONFIG.themes.some(x => x.id === id) ? id : "pulse";
+  if (t === "pulse") document.documentElement.removeAttribute("data-palette"); else document.documentElement.setAttribute("data-palette", t);
   themePrefs.palette = t; themeSave(themePrefs); syncThemeColour();
 }
-$("#theme-options").insertAdjacentHTML("beforeend", CONFIG.themes.map(t => '<label class="choice"><input type="radio" name="theme" value="' + t.id + '"><span class="choice__text"><strong>' + esc(t.name) + '</strong><span class="small muted">' + esc(t.desc) + "</span></span></label>").join(""));
+$("#theme-options").insertAdjacentHTML("beforeend", CONFIG.themes.map(t => '<label class="choice"><input type="radio" name="theme" value="' + t.id + '"><span class="choice__text"><strong><span class="theme-dots" aria-hidden="true">' + t.colours.map(x => '<i style="background:' + x + '"></i>').join("") + "</span>" + esc(t.name) + '</strong><span class="small muted">' + esc(t.desc) + "</span></span></label>").join(""));
 $("#theme-options").addEventListener("change", ev => { if (ev.target.name === "theme"){ fadeTheme(); applyTheme(ev.target.value); } });
 const viewerTheme = window.viewerThemeAtLoad || null;
 function applyMode(mode){
@@ -6928,14 +6902,13 @@ function showTab(tab){
 function openToday(){
   const c = ctx(), t = todaysDay(c);
   if (t) state.ui.day = t;
-  const day = sessionOf(c, state.ui.day), n = day ? nextSet(c.slot, day) : null;
-  state.ui.openEx = n ? n.item.id : null;
+  // Today opens on the overview; the Up next card opens the exercise sheet with one tap
+  state.ui.openEx = null;
   state.ui.tab = "train";
 }
 function selectDay(n, focus){
   state.ui.day = n;
-  const c = ctx(), day = sessionOf(c, n), nx = day ? nextSet(c.slot, day) : null;
-  state.ui.openEx = nx ? nx.item.id : null;
+  state.ui.openEx = null;   // switching day shows that day's overview, not a sheet
   save(); renderAll();
   if (focus) $("#tab-day-" + n).focus();
 }
@@ -7017,7 +6990,7 @@ function listHandler(root){
     const sum = ev.target.closest(".exercise__summary");
     if (sum){
       const id = sum.closest(".exercise").dataset.id;
-      state.ui.openEx = state.ui.openEx === id ? null : id;
+      state.ui.openEx = state.ui.openEx === id ? null : id; if (state.ui.openEx) state.ui.openExtra = null;
       save(); rerenderAllKeepScroll(id);
       return;
     }
@@ -7272,6 +7245,8 @@ document.addEventListener("click", ev => {
   if (ev.target.closest("#button-clear-loaded")) openDialog($("#dialog-clear"));
 });
 $("#next-fab").addEventListener("click", goToNextSet);
+$("#sheet-scrim").addEventListener("click", closeExerciseSheet);
+document.addEventListener("keydown", ev => { if (ev.key === "Escape" && (state.ui.openEx || state.ui.openExtra) && !$("dialog[open]") && state.ui.tab === "train") closeExerciseSheet(); });
 if ("IntersectionObserver" in window) new IntersectionObserver(entries => { upNextVisible = entries[0].isIntersecting; renderFab(ctx()); }).observe($("#up-next"));
 $("#hazard-bar").addEventListener("click", ev => {
   const y = ev.target.closest("[data-hz-yes]"); if (y){ openMissDialog(+y.dataset.hzYes); return; }
@@ -7467,14 +7442,15 @@ function setupOffline(){
 setupOffline();
 
 /* ---------- 3.16 Start ---------- */
-applyTheme(themePrefs.palette || "tempo");
-$$('#theme-options input').forEach(i => { i.checked = i.value === (themePrefs.palette || "tempo"); });
+applyTheme(themePrefs.palette || "pulse");
+$$('#theme-options input').forEach(i => { i.checked = i.value === (themePrefs.palette || "pulse"); });
 applyMode(themePrefs.mode || "system");
 applyContrast(themePrefs.contrast === "more");
 applyLayout(state.ui.cols || "2");
 if (state.cycle){
   // Open on today's session each new day
   if (state.ui.lastOpened !== todayISO()){ openToday(); state.ui.lastOpened = todayISO(); }
+  state.ui.openEx = null;   // never start with a sheet covering Today
 }
 renderAll();
 save();

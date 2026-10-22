@@ -1,0 +1,1572 @@
+/* Backup of the app's CSS before the Fitness-style redesign, index.html version 2026-10-22.1 (22 October 2026). */
+            Design tokens first (theme.css, inlined at build: type, 8px spacing, radii,
+                     layered shadows, motion, 9 colour themes in light and dark), then sections:
+                     base, buttons and forms, header, panels, train view,
+                     exercise rows, plan view, floating controls, dialogs.
+  <body>             Semantic markup, one commented block per section.
+  <script>           Layer 0  compatibility fixes
+                     Layer 1  DATA: CONFIG and PROGRAMME (pure JSON)
+                     Layer 2  LOGIC: pure functions (2.1 to 2.21)
+                     Layer 2b STORAGE: the only code that saves or loads
+                     Layer 3  DISPLAY: rendering and event handlers (3.1 to 3.16)
+  Display never calculates; it calls logic. Logic never touches the page.
+
+DATA STRUCTURE (Layer 1)
+  CONFIG     Settings, labels, reasons, reps-left scale, themes, glossary,
+             muscle rules (regex text), export file prefixes.
+  PROGRAMME  {version, plans: {hd, pb}}
+    plans.hd {id, name, summary, legend, weekLabels, variants{KEY:[{id,label,rows,unit?}]},
+              days[{n, title, groups[{title, items[{id, name, equip, sets, reps, rest, notes,
+              tag?, rows?, variants? (KEY), optional?}]}]}]}
+              "sets" uses the plan's notation ("2W + 1"); "reps" holds the
+              prescription with percentages ("15 @ 50%, 12 @ 70% → 10–12 @ 100%").
+    plans.pb {id, name, summary, weekLabels, variants, warmup, mainLifts, topSetLadder,
+              topSetOutcome, backoffCheck, fortnights[{n, top{A,B}, backoff{sets,reps,pct}, changes}],
+              secondaryPattern, topSetRules, accessoryRule, nordicRule, carryRule, estimatedMax,
+              testWeek, badDay, days[{n, title, time, roll, moves, intro, items[...]}]}
+              Item: {id, name, kind (main|secondary|accessory|carry|cardio|stretch), log
+              (lift|bw|carry|time|rounds|check), equip, sets, setCount, repMin, repMax, left,
+              leftByWeek?, rest, notes, swap, pair? ("A1"), lift? (main lifts), top/backoff (main lifts),
+              checklist? (stretching), rule? (nordic|carry)}
+  Exercise ids never change. Heavy Duty: d1-0 ... d5-7 (plus d2-pec, d3-facepull,
+  d4-ohcable). Removed ids stay unused: d4-underpd (underhand pushdown), d3-9 (optional
+  deadlift, removed 11 October 2026); old logs for them are ignored. Powerbuilding: pb-d1-squat ... pb-d5-sprints, plus pb-dN-warmup
+  for each day's warm-up checklist (new, not counted toward progress).
+
+STORAGE KEYS
+  localStorage "heavy-duty-tracker-v1": the whole state, JSON. Unchanged key.
+  State = the Heavy Duty slot at the top level (exactly the version 1 shape, so
+  old saves load untouched) plus:
+    cycle {start (Monday, YYYY-MM-DD), first ("hd"|"pb")}   set on first use
+    pb    a second slot with the same shape, for powerbuilding
+    ui    {tab ("train"|"plan"|"history"), day, openEx, openExtra, theme, mode, cols, helpSeen,
+           planView, finder, varOpen, makeupDay, lastOpened, dismissedMiss, histPlan, histWeek, histEx}
+  Slot = {weekStart, entries{id: entry}, units{id or id:variant: "kg"|"plates"},
+          lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, ui{dismissedMiss},
+          extras{dayN: [{id, name, unit, sets[], doneAt}]},
+          savedSwaps{id: [{name, unit, sets[], date, regular}]}   newest first, at most CONFIG.maxSaved,
+          savedExtras{dayN: [{name, unit, sets[], date}]}}       kept per plan and per day, never shared}
+  Entry = {sets[{reps, kg, end?, extra?, left?}], variant?, doneAt, replaced,
+           repl{name, reason, date, unit?, measure? ("reps"|"time": seconds held|"distance": metres), sets[]}, missed{on, reason, date, madeUp{day,date}?, viaDay?}}
+  "reps" holds the main count: reps, metres (carries), minutes (bike),
+  rounds (sprints) or "1" for a ticked checklist line. "left" = reps left 0 to 4.
+  localStorage "training-tracker-archive": {hd: [week], pb: [week]}, newest first, the last
+    CONFIG.archiveWeeks finished weeks per plan. Week = {weekStart, entries (export shape), extras}.
+    Filled by Start new week, Load last week and Restore. Not part of the export file.
+  localStorage "training-tracker-theme": {palette, mode, contrast, v}. Not part of the export file.
+    v 2 (21 October 2026): Tempo became the default theme; a saved "steel" without v moved to Tempo once.
+  Offline copy: the browser's Cache Storage, cache "training-tracker-<appVersion>" (sw.js).
+  "localStorage-test" is written and removed once to check saving works.
+
+EXPORT FORMAT (unchanged from version 1, with additions)
+  File name: workout-week-START-to-END.json (Heavy Duty, as before) or
+  powerbuilding-week-START-to-END.json.
+  {app: "heavy-duty-tracker", version: 2, plan: "hd"|"pb", exportedAt, weekStart, weekEnd,
+   entries{id: {plan, day, exercise, rows[], sets[], unit, variant?, doneAt, replaced,
+                replacement|null, missed|null}},
+   streaks{}, history{}, varHistory{}, variations[], missedDays[{day, title, date, reason,
+   total, madeUp[], note}], extras{dayN: [...]},
+   backup{lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, units,
+          savedSwaps, savedExtras, otherPlan: {plan, slot} | null}}
+  Version 1 files (no "plan") import as Heavy Duty. Every session is tagged with
+  its plan, and comparisons only ever use the same plan's slot.
+
+LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applies
+
+  2.1 Derived lookups (read-only, built once from the data)
+    buildExerciseIndex(programme) : Returns {exerciseId: {plan, day, item}} for every exercise in both plans, plus the synthetic powerbuilding warm-up checklists (pb-dN-warmup).
+    warmupId(dayN) : Takes a day number. Returns the id used for that powerbuilding day's warm-up checklist.
+    warmupItem(pb, day) : Takes the powerbuilding plan and one of its days. Returns the day's warm-up as a checklist item. Rule: the four warm-up steps from the plan, with the day's roll areas and moves filled in.
+
+  2.2 Dates and formatting
+    pad2(n)
+    toISO(d) : Takes a Date. Returns "YYYY-MM-DD" in local time.
+    parseISO(s) : Takes "YYYY-MM-DD". Returns a local Date, or null when the text isn't a real date.
+    addDays(iso, n)
+    mondayOf(iso) : Takes a date. Returns the Monday of its week (weeks run Monday to Sunday).
+    daysBetween(a, b)
+    laterOf(a, b)
+    weekdayName(iso)
+    fmtDate(iso) : "5 October 2026"
+    fmtDayDate(iso) : "Monday 19 October 2026"
+    fmtRange(start) : Takes a Monday. Returns "5 to 11 October 2026", across months and years as needed.
+    fmtNum(n)
+    fmtLoad(n, unit) : Takes a load and "kg" or "plates". Returns "62.5 kg" or "3 plates".
+    listWords(a)
+    weekWord(n)
+    keyOf(name)
+    otherPlan(plan)
+
+  2.3 The two-week cycle
+    weekInfo(cycle, iso) : Takes the cycle {start, first} and any date. Returns where that date sits: {before, weekStart, weekIndex, blockIndex, plan, blockWeek (1 or 2), weekLetter ("A" or "B"), fortnight (powerbuilding only: 1, 2 or 3), heavyWeek, testWeek}. Rule: blocks of CONFIG.blockWeeks weeks alternate, starting with cycle.first on cycle.start. Powerbuilding blocks count 1, 2, 3 and then repeat; the third block's second week is test week.
+    nextSwap(cycle, iso) : Takes the cycle and a date. Returns {date, plan}: the Monday the plan next changes, and the plan it changes to.
+    nextWeekForPlan(cycle, plan, fromISO) : Takes the cycle, a plan id and a date. Returns the first Monday on or after that date scheduled for the plan.
+    planWeeksBetween(cycle, plan, fromISO, toISO) : Takes the cycle, a plan id and two dates. Returns the whole weeks between them, not counting weeks scheduled for the other plan. Rule: time spent on the other plan doesn't count as a break.
+    dayOfWeek(iso) : Takes a date. Returns its place in the week: 1 (Monday) to 7 (Sunday).
+
+  2.4 Reading the plan text
+    plainSets(text) : Takes plan text like "2W + 1". Returns plain words: "2 warm-ups + 1 main set".
+    plainRowLabel(label) : Takes a row label from the data. Returns the words shown on screen.
+    workingTarget(item) : Heavy Duty: takes an item. Returns the main-set rep target, e.g. "10–12", or null.
+    repRange(item) : Takes an item. Returns {min, max} reps for its main sets, or null when the plan gives no numbers.
+    planPercents(item) : Heavy Duty: takes an item. Returns the percentage for each prescribed set, e.g. [50, 70, 100].
+    parseRows(sets) : Heavy Duty: takes a sets text. Returns default row labels. Rule: "2W + 1" gives two warm-ups and one main set.
+    parseLeft(text) : Takes reps-left text like "2–3", "1, last set to failure" or "Can still talk". Returns {min, max} or null.
+    leftForWeek(text, letter) : Takes reps-left text with week variants, e.g. "3 (Wk A), 2 (Wk B)", and "A" or "B". Returns that week's text.
+
+  2.5 Building a session
+    variantFor(planId, item, variantId) : Takes a Heavy Duty item and the chosen variation id. Returns the variation object, or null. Rule: the chosen one, else the first.
+    buildSession(planId, dayN, week, variantChoice) : Takes a plan id, a day number, the week (from weekInfo) and {exerciseId: variationId}. Returns the session to show: {plan, n, title, time, intro, notes[], rest, groups[{title, pair, items[]}]}. Each item: {id, plan, day, name, pair, kind, log, equip, setsText, leftText, rest, notes, swap, tag, optional, counted, skipped, variants, variant, rows[{label, role, reps, left, pct}], repMin, repMax, backoffPct, lift, checklist}. Rules: Heavy Duty is the same every week. Powerbuilding changes by fortnight and Week A or B: main lifts follow the fortnight table, the three secondary lifts lose a rep from fortnight 2 and drop to two sets in fortnight 3, easy bike gains 5 minutes in fortnight 2, sprints stop in fortnight 3, and test week replaces Days 1 to 3 with test singles, Day 4 with stretching and bike, Day 5 with rest.
+    buildHdSession(dayN, variantChoice)
+    buildPbSession(dayN, week, variantChoice)
+    pbItem(item, dayN, week, f, letter, variantId) : Takes a powerbuilding item and the week. Returns the session item for this week.
+    leftPhrase(text, log) : Takes reps-left text from the plan. Returns it as a short phrase: "2 left", "about 3 left", "1 left, last set to failure", "to failure", or the text unchanged ("Can still talk"). For carries (log "carry") the number reads as an effort level instead: "effort: hard".
+    weekDaysDone(slot, sessions) : Takes the slot and the week's sessions. Returns {done, total}: training days fully done (not missed days).
+    alignEmptySlot(slot, weekStart) : Takes a slot and the current Monday. Moves an untouched slot forward to this week, so a plan with nothing logged never asks for "Start new week". Changes slot in place.
+    sessionItems(session) : Takes a session. Returns its items in order, flattened.
+
+  2.6 Entries, completion and progress
+    emptySet()
+    isLogged(s)
+    isMissed(e)
+    isMadeUp(e)
+    isComplete(e) : Takes an entry. Returns true when at least one set (or replacement set) is logged and it isn't missed.
+    isAccounted(e)
+    ensureEntry(slot, item) : Takes a slot and a session item. Returns the item's entry, creating an empty one if needed. Changes slot.entries in place. Rule: an untouched entry follows the item's current rows.
+    dayProgress(slot, session) : Takes a slot and a session. Returns {done, missed, accounted, total} for the counted items.
+    dayIsDone(slot, session) : Takes a slot and a session. Returns true when every counted item is done or missed.
+    nextSet(slot, session, skipId) : Takes a slot and a session. Returns the first set still to log: {item, kind, i} or null. Optional skipId leaves one exercise out (the one just closed). Rule: finish the working sets of an exercise already started, then the first exercise not done.
+    bestSet(sets) : Takes sets. Returns the heaviest logged set {kg, reps}, more reps breaking ties, or null.
+    isWorkingRow(item, i) : Takes an item and a row index. Returns true when the row counts as a working set (not a warm-up or checklist line).
+
+  2.7 Units
+    defaultUnit(item) : Takes an item. Returns "kg" or "plates". Rule: machines and cables log plates, except plate-loaded machines.
+    unitKey(item)
+    unitOf(units, item) : Takes the slot's unit choices and an item. Returns the unit in use.
+    hasWeight(item)
+
+  2.8 Rounding
+    roundKg(kg) : Takes kg. Returns it rounded to the step for that weight (1 kg under 20 kg, else 2.5 kg).
+    roundTo(n, unit)
+    loadStep(n, unit)
+    returnLoad(kg, unit) : Takes a load. Returns about 90% of it, rounded for coming back after a break.
+
+  2.9 Last time and "beat last time"
+    rawLastEntry(slot, item) : Takes the slot and a session item. Returns last week's raw entry for the item, or null.
+    varKey(item)
+    lastEntryFor(slot, item, today, cycle) : Takes the slot, a session item, today and the cycle. Returns the entry to compare against, or null: {sets, unit, variant, replaced, missed, replacement, fromHistory, histDate, otherVariant, gapWeeks}. Rules: same plan only (each plan has its own slot). Last week's entry if it is the same variation and was logged; otherwise the last time this variation was done. gapWeeks counts only this plan's weeks.
+    withUnit(set, unit) : Takes a set and an optional unit. Returns a copy that carries its unit.
+    sameUnit(last, unit) : Takes last time's set and the unit in use. Returns it without its load when the units differ.
+    compareToLast(set, last) : Takes this set and last time's same set. Returns {reps, kg}: true where this set beats last time.
+    setText(s) : Takes a set. Returns how it reads: "8", or "8 + 2 RP" with rest-pause or forced reps.
+    perfText(s, unit) : Takes a set and the unit. Returns "60 kg × 8, 2 left" style text.
+    weekPartner(slot, itemId) : Heavy Duty. Takes the slot and an exercise id. Returns this week's result on its partner day {day, kg, reps, unit} or null. Rule: only pairs in CONFIG.hdWeekPairs (same exercise, same place in the session, Days 1 and 5); only main sets count. It is a baseline to hold, not a progression target.
+
+  2.10 Next targets
+    nextTargetHd(item, i, last, unit, belowStreak, gapWeeks) : Heavy Duty. Takes an item, a row index, last week's same set, the unit, the below-range streak and the weeks away. Returns {text, kg}. Rules (clean reps only): top of range → add the small step; inside range → same weight, one more rep; rest-pause or forced reps → same weight, one more clean rep; stopped short → repeat; below range two weeks running → drop about 7.5%; 3+ weeks away → about 90%.
+    nextTopSet(lift, last, plannedLeft, reps, unit) : Powerbuilding top set. Takes the lift id, last top set, the reps left planned for it, this week's planned reps and the unit. Returns {text, kg}. Rules: at least 1 more left than planned → add 5 kg (bench 2.5 kg); as planned → same weight; at least 1 fewer → same weight into the next fortnight.
+    backoffTarget(topKg, pct, unit) : Powerbuilding back-off. Takes today's top-set load, the percentage lighter and the unit. Returns {text, kg}.
+    nextAccessory(item, i, lastSets, unit) : Powerbuilding accessory. Takes the item, a row index, last time's sets and the unit. Returns {text, kg}. Rules: every set at the top of the range with the planned reps left → add the smallest step; otherwise same weight, one more rep. Nordic: one more rep a week up to 6. Carry: +10 kg when all sets felt like 3 left. Bike and stretching have no targets.
+    estimatedMax(kg, reps, left) : Takes kg, reps done and reps left. Returns the estimated max for one rep, rounded to 0.5 kg. Rule: weight × (1 + (reps done + reps left) ÷ 30).
+    warmupLoad(pct, workingKg, unit) : Heavy Duty warm-ups. Takes the percentage, the main-set load and the unit. Returns the warm-up load.
+
+  2.11 Finding the top set
+    hdWorkingKg(hdSlot, exId, variantId) : Takes the Heavy Duty slot, an exercise id and a variation id. Returns the latest main-set load logged for it in kg, or null. Looks at this week, then last week, then the variation history, then history by name.
+    topSetGuess(lift, variantId, hdSlot) : Takes the lift id, the chosen variation and the Heavy Duty slot. Returns {kg, source, note}: the first guess for a top set of 5, rounded to 2.5 kg, or kg null. Rules: squat = back squat × 1.05; bench = incline bench × 1.00; sumo deadlift = sumo × 0.95; conventional deadlift or no Heavy Duty data = no guess.
+    topSetLadder(guessKg, lift) : Takes a guess in kg and the lift id. Returns the five warm-up ladder sets with loads: [{set, weight, kg, reps, rest}]. Rule: empty bar (deadlift 40%), 50%, 70%, 85%, then the guess.
+    topSetOutcome(left, guessKg, lift, tryNumber) : Takes the reps left on the guess set, the guess, the lift id and the try number. Returns {verdict, message, nextGuess, done}. Rules from the plan's outcome table; three tries at most.
+
+  2.12 Advice for swapped or missed exercises
+    replacementAdvice(name, reason, hist, planned, replacementName, weeksAway) : Takes the exercise name, the reason key, its history {kg, reps, unit, date} or null, the planned reps, the replacement's name and the weeks away. Returns one line of next-session advice. Rules: injury → start lighter; no history → moderate weight, log a new baseline; 3+ weeks away → about 90% and rebuild over two sessions; otherwise match last time.
+    musclesOf(name) : Takes a name. Returns the muscles it loads, from CONFIG.muscleRules.
+    recoveryNote(itemName, todayItems, yesterdayItems, tomorrowItems, tomorrowDayN) : Takes the made-up item, today's session items, items trained yesterday and tomorrow's session items. Returns a recovery warning, or "" when no muscles overlap.
+
+  2.13 Missed whole days
+    markDayMissed(slot, session, reason, dateISO) : Takes the slot, the session, a reason key and the day's date. Marks every unlogged counted item missed. Changes slot in place.
+    undoDayMissed(slot, dayN) : Takes the slot and a day number. Clears the missed day and its items. Changes slot in place.
+    dayMakeupStatus(slot, dayN, session) : Takes the slot, a day number and that day's session. Returns {total, made[{item, date}], pending[items]}.
+    dayNote(slot, dayN, session) : Takes the slot, a day number and its session. Returns the line the export carries, e.g. "Day 2: missed Tuesday, made up 3 of 8 during the week".
+    unansweredDay(slot, sessions, today) : Takes the slot, the week's sessions and today. Returns the first past training day with nothing logged that hasn't been answered, or null. Rule: only inside the slot's own week.
+
+  2.14 Swaps and skips log
+    currentVariations(slot, session, today) : Takes the slot and a session. Returns this week's swaps, skips, make-ups and missed day as log lines.
+    variationKey(v)
+    dedupeVariations(list)
+
+  2.15 Input checks
+    sanitize(f, raw, unit) : Takes a field name ("reps", "extra", "left" or "kg"), the raw text and the unit. Returns {value, error}: the cleaned value and a plain message saying how to fix the input.
+    checkStartDate(raw) : Takes a start date as typed. Returns {value (a Monday), error, note}.
+
+  2.16 Export and import
+    cleanSets(sets) : Takes sets from a file. Returns clean sets with only known fields and safe values.
+    migrateId(id)
+    isCalf(name)
+    mergedHistory(slot, sessions, unitFor) : Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}: the latest best set per exercise name, this week included.
+    exportStreaks(slot, sessions) : Heavy Duty: weeks each exercise's main sets stayed below the rep range, counting this week.
+    mergedVarHistory(slot, sessions, unitFor) : The latest session of every exercise variation, carried from week to week.
+    buildExport(slot, planId, sessions, otherSlotData, nowISO) : Takes the slot, its plan id, the week's sessions, the other plan's id and slot, and the time now. Returns the export file object. Format: the version 1 week file, plus "plan" at the top and on each entry, and the other plan's slot under backup.otherPlan so Restore can bring both back.
+    slotForExport(slot) : Takes a slot. Returns a copy holding only training data (no app settings, theme or the other plan), for the other plan's backup inside an export file.
+    exportFilename(planId, weekStart) : Takes a plan id and a Monday. Returns the export file name.
+    readExportFile(text) : Takes the text of an export file. Returns {data, plan}. Throws an Error with a plain message when it can't be read. Rule: files without "plan" were made before this rebuild and are Heavy Duty.
+    cleanLastEntry(id, x) : Takes an exported entry and its id. Returns a clean "last week" entry, or null for unknown ids.
+    loadAsLastWeek(slot, planId, data) : Takes a slot, its plan id and an export's data. Loads the file as "last week": targets, history, streaks and the swaps log. Changes slot in place. Rule: only exercises from the same plan are read.
+    startNewWeek(slot, planId, sessions, cycle, today, nowISO) : Takes a slot, its plan id, its sessions, the cycle and today. Starts the next week for that plan: the finished week becomes last week's targets, then the log clears. Changes slot in place. Rule: the new week is the plan's next scheduled week, so weeks on the other plan are skipped.
+    clearLoadedWeek(slot) : Takes a slot. Clears everything loaded from last week. Changes slot in place.
+    cleanEntry(id, x) : Takes an exported entry and its id. Returns a clean entry for this week, or null.
+    parseBackup(text) : Takes the text of an export. Returns everything needed to restore it: {plan, data, weekStart, entries, units, logged, other}. Throws an Error with a plain message.
+    applyBackup(slot, p) : Takes a slot and a parsed backup. Puts the backup's week back exactly as logged. Changes slot in place. Rule: newer files carry the full working state; older files rebuild what they can.
+
+  2.17 Targets for any row
+    plannedTopLeft(cycle, iso) : Takes the cycle and the date a powerbuilding session was done. Returns the top-set reps left planned that week.
+    firstWorkRow(item) : Takes an item. Returns the index of its first working row (0 when there is none).
+    rowTarget(item, i, a) : Takes an item, a row index and {entry, last, unit, streak, cycle}. Returns {text, kg}: what to aim for on that row today. Dispatches to the Heavy Duty, top-set, back-off or accessory rule.
+    hdWarmup(item, i, a) : Heavy Duty. Takes an item, a row index and the same args as rowTarget. Returns the warm-up line data: {pct, kg, workingKg, from, source} or {pct, pending: true}, or null for rows without a warm-up percentage. Rules: the main-set load is this week's entry, else today's target, else last week's load. The warm-up share is the one you actually used last time (last warm-up ÷ last main set, same unit), so your own choices carry forward; with no history, or a share outside CONFIG.warmupShareRange, it is the plan's percentage. Same main-set weight as last time → exactly last time's warm-up weight.
+
+  2.18 Logging a set quickly
+    restSeconds(text, role) : Takes the plan's rest text and the row's role. Returns seconds to rest after that set, or null. Rules: "None" → no rest (the first half of a pair); a range uses its lower end; "4 min after the top set, 3 min after back-offs" picks the part for the role; warm-ups and checklists → null, because the plan gives them no rest time.
+    planRowReps(item, i) : Takes an item and a row index. Returns the planned reps for that row as a number, or null. Rules: Heavy Duty reads the row's part of the prescription ("15 @ 50%" → 15, "10–12 @ 100%" → 10); powerbuilding reads the row's reps ("10–12" → 10).
+    suggestedSet(set, suggestKg, lastSet, planReps, targetReps) : Takes the set as typed, the suggested load (warm-up weight or target), last time's same set, the planned reps and the target's reps. Returns {reps, kg}: what "Log set" saves. Rules: anything typed wins; an empty weight takes the suggested load, else last time's; empty reps take the target's reps, else last time's, else the planned reps.
+    bestKnownLoad(item, i, a, history) : Takes an item, a row index and rowTarget's args. Returns {kg, from} for showing a weight even when no target rule applies, or null. Order: the target, then last time's same set, then last time's heaviest working set, then the latest history for this exercise name (same unit only).
+    setsProgress(item, entry) : Takes an item and its entry (or null). Returns {done, total}: logged sets out of the planned sets, counting working sets only when the exercise has warm-ups.
+    firstOpenRow(item, entry) : Takes an item and its entry. Returns the index of the first set not yet logged, or -1 when all are.
+
+  2.19 Saved swaps and extra exercises
+    cleanExtras(x) : Takes extras from a file or state. Returns clean extras: {dayN: [{id, name, unit, sets, doneAt}]}.
+    rememberNamed(list, rec) : Takes the saved list for one exercise or day and a new record {name, unit, sets, date}. Returns the list with that name moved to the front (newest first), keeping a regular flag already set, at most CONFIG.maxSaved.
+    harvestSaved(slot, entries, extras, date) : Takes a slot, a week's entries, that week's extras and the week's date. Remembers every named swap with logged sets (per exercise, so per day) and every extra exercise (per day). Changes slot in place. Rule: only the plan's own slot is touched, so Heavy Duty and Powerbuilding keep separate lists.
+    applyRegularSwaps(slot) : Takes a slot. For each exercise with a regular swap, starts this week's entry already swapped. Changes slot in place. Rule: only entries with nothing logged yet are touched.
+    setRegularSwap(slot, id, swap, on, today) : Takes a slot, an exercise id, the swap {name, unit, setCount}, on or off and today's date. Turns "do this instead every week" on or off for that swap. Changes slot in place. Rules: one regular swap per exercise; a new name is saved with empty sets, so it has no targets until a week with it logged is finished.
+    forgetSwap(slot, id, name) : Takes a slot, an exercise id and a swap name. Removes that saved swap. Changes slot in place.
+    savedSwapFor(list, name) : Takes the slot's saved list for an exercise and a swap name. Returns that saved record, or null.
+    measureFor(name) : Takes a swap name. Returns "time" when it's a hold measured in seconds (plank, hang, wall sit), else "reps". Takes a swap name. Returns "time" for a hold measured in seconds (plank, hang, wall sit), "distance" for a carry or walk measured in metres, else "reps". Holds are checked first: "hold still 30 s" is a hold.
+    cleanMeasure(m) : Takes any value. Returns "time", "distance" or "reps".
+    planSwapName(text) : Takes the plan's swap text, e.g. "plank, 3 × 30–45 s". Returns the exercise name only: "Plank".
+    startSwap(e, item, rec, today) : Takes an exercise entry, its session item, a saved swap (or null) and today's date. Turns the swap on with one set row per planned row, so the swap is logged exactly like the exercise it replaces. Changes e in place. Rule: sets already logged on the swap are kept.
+    swapTarget(item, i, savedSets, unit, measure) : Takes an item, a row index, the saved sets from last time, the unit and "reps" or "time". Returns {text, kg, reps}: the target for a swapped exercise's set, using the replaced exercise's rep range and the plan's rules. Rules: Heavy Duty targets only its main set (from your heaviest swap set); Powerbuilding targets every working set; holds add CONFIG.holdStepSeconds at the same weight.
+    swapWarmup(item, i, savedSets, unit, measure) : Heavy Duty swaps. Takes an item, a warm-up row index, the saved sets, the unit and the measure. Returns {kg, pct, workKg} from the plan's percentage of the swap's main-set target, or null.
+    swapSetText(s, unit, measure) : Takes a set, the unit and "reps" or "time". Returns "60 kg × 10", "12 reps" or "45 s, 10 kg added".
+    newExtra(name, unit, setCount, idSeed) : Takes a name, a unit and a set count. Returns a new extra exercise for a day.
+
+  2.20 History and progress
+    archiveAdd(archive, planId, exp, max) : Takes an archive {hd: [exports], pb: [exports]}, a plan id, an export and the most weeks to keep. Returns a new archive with that week added (replacing the same week if present), newest first.
+    weekView(entries, extras, planId) : Takes week entries {id: entry} in export or state shape, that week's extras and a plan id. Returns the week laid out by day: [{day, title, items:[{id, name, unit, sets:[{label, set, working}], swap:{name, unit, sets}|null, missed, madeUp}], extras:[{name, unit, sets}]}]. Unknown ids are ignored.
+    historyWeeks(slot, planId, sessions, archive, nowISO) : Takes the slot, plan id, this week's sessions, the archive and the time now. Returns every week there is to show, newest first: [{weekStart, source ("this"|"last"|"archive"), view}]. Rule: one entry per week; this week from the live log, then the archive, then last week if not archived.
+    exerciseProgress(weeks, id) : Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first: [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week. Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers.
+
+  2.21 App state shape
+    freshSlot(weekStart) : Takes a Monday. Returns an empty slot: one plan's weekly log and memory.
+    slotOf(state, plan) : Takes the whole state and a plan id. Returns that plan's slot. Rule: Heavy Duty lives at the top level, exactly where version 1 kept it; powerbuilding lives in state.pb.
+    normaliseState(raw, today) : Takes whatever was stored (or null) and today. Returns a complete, current state. Rules: version 1 data loads unchanged; moved calf ids are renamed; missing parts are added.
+    ensurePbSlot(state, today) : Takes the state and today. Adds the powerbuilding slot once the cycle is known. Changes state in place.
+
+  Layer 2b STORAGE
+    storageAvailable() : true when the browser can save
+    storageLoad() : the saved state or null
+    storageSave(state) : saves; true on success
+    storageDownload(obj, filename) : promise of "saved" | "cancelled" | "busy" | "fallback"
+    archiveLoad() : {hd: [], pb: []}       archiveSave(archive) : true on success
+    themeLoad() / themeSave(t) : the theme choice
+
+FEATURES AND WHERE THEY LIVE
+  First-use setup (start date, first plan) ...... #setup-panel; 3.9 button-setup-save; checkStartDate
+  "How this works" 3 steps, reopen from Help ..... #help-panel; 3.3 renderHelp; 3.9
+  Current plan, block week, next swap ............ .app-header; 3.3 renderHeader; weekInfo, nextSwap
+  Two-week alternation, manual switch ............ 2.3 weekInfo; Settings: 3.9 button-switch-confirm
+  Opens on today's session ....................... 3.10 openToday; 3.15 start
+  Day tabs, one day at a time ................... 3.4 renderDayTabs; 3.10 selectDay
+  Compact exercise rows that expand .............. 3.4 exerciseHTML, panelHTML; 3.11 closeAndOpenNext
+  Supersets (pairs) .............................. 2.5 buildPbSession; 3.4 sessionListHTML
+  Set logging with steppers ...................... 3.4 setRowHTML, fieldsHTML; 3.11 applyValue
+  Reps-left picker (powerbuilding) ............... 3.4 fieldsHTML; CONFIG.repsLeftScale
+  How the set ended (Heavy Duty) ................. 3.4 fieldsHTML; CONFIG.setEnds
+  Warm-up weights from percentages ............... 2.17 hdWarmup; 3.4 setRowHTML
+  Last time, beat last time, next targets ........ 2.9 lastEntryFor, compareToLast; 2.10; 2.17 rowTarget
+  Back-off weights ............................... 2.10 backoffTarget
+  Find my top set ................................ 2.11; 3.4 finderHTML; 3.11 finder-* actions
+  Estimated max .................................. 2.10 estimatedMax; 3.4 setRowHTML
+  Test week, heavy week, fortnight changes ....... 2.5 buildPbSession
+  Warm-up and stretching checklists .............. 2.1 warmupItem; 3.4 setRowHTML (check rows)
+  kg or plates per exercise ...................... 2.7; 3.11 "unit" action
+  Variations with their own memory ............... 2.5 variantFor; 2.9 lastEntryFor; 3.2 variantChoice
+  Swap exercise (replacement) with advice ........ 3.4 swapPanelHTML; 2.12 replacementAdvice
+  Skip exercise (missed) with advice ............. 3.4 missedPanelHTML; 2.12
+  Catch-up panel with recovery flag .............. 3.4 renderCatchup, makeupNoteHTML; 2.12 recoveryNote
+  Missed whole day: yellow card and make-ups ..... 2.13; 3.5 renderHazard; 3.13
+  Swaps and skips log ............................ 2.14; 3.4 renderSwapsLog
+  Up next card and Next set button ............... 3.4 renderUpNext; 3.5 renderFab; 3.11 goToNextSet
+  Progress bar, day and week rings ............... 2.6 dayProgress, weekDaysDone; 3.4
+  Week options: Export, Load last week, Start new
+  week, Restore from backup ...................... 2.16; 3.14
+  Plan page: today card, week tiles, day tables,
+  guides, read-only view of either plan .......... 3.6 renderPlanView
+  Back to top .................................... 3.10 updateToTop
+  Glossary: tap a dotted word .................... CONFIG.glossary; 3.1 term; 3.8
+  9 themes (Tempo default), Light/Dark/Match phone,
+  extra contrast, layout .......................... theme.css; 3.9 applyTheme, applyMode, applyContrast, applyLayout
+  Saving and the "not saving" warning ............ 2b; 3.2 save; 3.3 renderStorageWarning
+  Older Android and Huawei fallbacks ............. Layer 0; 3.8 openDialog fallback
+  One active set, other sets one line each ..... 3.4 setRowHTML, compactRowHTML; 3.4 activeRowOf; 2.18 firstOpenRow
+  "Log set" with grey suggested values ......... 3.11 logSet; 2.18 suggestedSet, planRowReps
+  Sets done per exercise ("2/4 sets") .......... 3.4 exerciseHTML; 2.18 setsProgress
+  Rest timer after each set ..................... 3.11b startRest; 2.18 restSeconds (memory only, not saved)
+  Saved swaps: "Swap again", quick picks,
+  Swaps log in the replaced exercise's own set rows
+  (same count, labels, targets, Log set, rest) ..... 2.19 startSwap; 3.4 swapPanelHTML, setRowHTML
+  Swaps counted in reps, seconds (plank) or metres
+  (carries), with weight ......................... 2.19 measureFor, swapSetText; CONFIG.holdWords, carryWords
+  "Do this instead every week", swap targets ..... 2.19 harvestSaved, setRegularSwap, applyRegularSwaps, swapTarget; 3.4 swapPanelHTML
+  Extra exercises with "Add again" reminder ...... 2.19 cleanExtras, newExtra; 3.4b renderExtras (not counted in progress)
+  History tab: any kept week, by day ............. 2.20 historyWeeks, weekView; 3.6b renderHistory
+  12-week archive on the phone ................... 2.20 archiveAdd; 2b archiveLoad/archiveSave; 3.14 archiveWeek
+  Progress per exercise .......................... 2.20 exerciseProgress; 3.6b progressHTML
+  Offline copy and "Update now" bar .............. sw.js; 3.15 setupOffline; CONFIG.appVersion
+
+HOSTING AND UPDATES (GitHub Pages)
+  Files: index.html (this file), sw.js, manifest.webmanifest, icon-192.png, icon-512.png.
+  To release: change the app, raise CONFIG.appVersion, and set the same value as VERSION
+  in sw.js. Push. Phones fetch the new copy next time they are online and show "Update now".
+=======================================================================
+-->
+
+<!doctype html>
+<html lang="en-ZA">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Training Tracker</title>
+<meta name="theme-color" content="">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* =====================================================================
+   THEME: design tokens for the whole app (Summit style, Tempo colours)
+   Edit here, then run build.py: it inlines this file into index.html so the
+   app still works as one offline file. Components read only these tokens.
+   ===================================================================== */
+:root{
+  /* Type: system fonts only, nothing downloaded */
+  --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-family-numeral: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-size-xs: 12px;          /* tags, counts, badges */
+  --font-size-small: 14px;       /* secondary text */
+  --font-size-base: 16px;        /* body */
+  --font-size-large: 20px;       /* section and session titles */
+  --font-size-title: 28px;       /* page titles */
+  --font-size-numeral: 22px;     /* set inputs */
+  --font-size-timer: 28px;       /* rest timer */
+  --font-weight-normal: 400;
+  --font-weight-bold: 600;
+  --font-weight-heavy: 700;      /* page titles and numbers (was 800: too heavy) */
+  --line-height-base: 1.45;
+  --line-height-tight: 1.2;
+  --letter-spacing-tight: -.02em;
+  /* Spacing: 8px scale with a 4px half step */
+  --space-0-5: 4px;
+  --space-1: 8px;
+  --space-1-5: 12px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  /* Sizes */
+  --size-tap: 44px;              /* minimum touch target */
+  --size-input: 56px;
+  --size-input-height: 52px;     /* set inputs and steppers: bigger for sweaty thumbs */
+  --size-badge: 30px;
+  --size-status: 30px;
+  --size-icon: 22px;
+  --size-content-max: 960px;
+  --size-dialog-max: 560px;
+  --size-nav: 64px;
+  --size-progress: 8px;
+  --size-chevron: 10px;
+  --size-check: 22px;
+  --size-textarea: 120px;
+  --size-tile: 72px;
+  --size-tile-min: 88px;
+  --size-stepper-min: 128px;
+  --size-select-min: 160px;
+  --size-table-min: 640px;
+  --size-rest-clearance: 72px;   /* toast sits below the rest bar */
+  --size-hazard-default: 96px;
+  --border-width: 1px;
+  --border-width-control: 1.5px;
+  --border-width-strong: 2px;
+  --border-width-marker: 4px;
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --ring-stroke: 6px;
+  /* Shape */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  /* Motion: 150 to 250ms, eased; all off with reduced motion */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --duration-fast: 150ms;
+  --duration-med: 200ms;
+  --duration-slow: 250ms;
+  --press-scale: scale(.97);
+  /* Depth (light): layered shadows */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, .06);
+  --shadow-2: 0 1px 2px rgba(16, 24, 40, .06), 0 6px 18px rgba(16, 24, 40, .08);
+  --shadow-3: 0 12px 32px rgba(16, 24, 40, .18);
+  --color-card-border: var(--color-border);
+  --blur-bar: saturate(180%) blur(20px);
+  --nav-opacity: 90%;
+}
+/* Depth (dark): no shadows on cards; lighter surfaces on a near-black base do the work */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --shadow-1: none; --shadow-2: none; --shadow-3: 0 12px 32px rgba(0, 0, 0, .6); --color-card-border: transparent; }
+}
+:root[data-theme="dark"]{ --shadow-1: none; --shadow-2: none; --shadow-3: 0 12px 32px rgba(0, 0, 0, .6); --color-card-border: transparent; }
+
+/* =====================================================================
+   COLOUR TOKENS: 9 themes, each in light and dark. Tempo is the default.
+   Roles: bg (page) · surface (cards) · surface-alt (inset rows) · surface-raised (dialogs)
+   text · text-muted (4.5:1+) · border (dividers) · border-control (inputs, 3:1+)
+   accent · on-accent · accent-soft · accent-text · success · best (beat last time)
+   missed · danger · hazard (missed-day card) · inverse (toast, rest bar) · focus · scrim
+   ===================================================================== */
+:root{
+  --color-bg: #F6F3EF;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F0EBE5;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #16120E;
+  --color-text-muted: #61584F;
+  --color-border: #E2D9CF;
+  --color-border-control: #857A6E;
+  --color-accent: #C2361C;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #FBE5DF;
+  --color-accent-text: #A82D16;
+  --color-success: #1E7A49;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DFF2E6;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #61584F;
+  --color-danger: #B3261E;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #16120E;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #16120E;
+  --color-scrim: rgba(22, 18, 14, .5);
+}
+:root[data-palette="steel"]{
+  --color-bg: #ECEFF3;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F4F6F9;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #101923;
+  --color-text-muted: #4C5967;
+  --color-border: #C3CCD6;
+  --color-border-control: #758BA2;
+  --color-accent: #1B5BAE;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #E2ECF9;
+  --color-accent-text: #1B5BAE;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #4C5967;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #101923;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="bush"]{
+  --color-bg: #EEEDE2;
+  --color-surface: #FFFFFC;
+  --color-surface-alt: #F6F5EA;
+  --color-surface-raised: #FFFFFC;
+  --color-text: #1B2015;
+  --color-text-muted: #535B47;
+  --color-border: #C9C7B5;
+  --color-border-control: #888660;
+  --color-accent: #3A7220;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #E0ECD2;
+  --color-accent-text: #3A7220;
+  --color-success: #0B6E8A;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDEFF5;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #535B47;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #1B2015;
+  --color-inverse-text: #FFFFFC;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="ember"]{
+  --color-bg: #F5EEE9;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #FBF5F1;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #25190F;
+  --color-text-muted: #64524A;
+  --color-border: #DCCABF;
+  --color-border-control: #A4845D;
+  --color-accent: #B03414;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #FBE1D6;
+  --color-accent-text: #B03414;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #64524A;
+  --color-danger: #8E2342;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #25190F;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="iron"]{
+  --color-bg: #E9ECEE;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F2F4F5;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #111619;
+  --color-text-muted: #4D575D;
+  --color-border: #C3CBD0;
+  --color-border-control: #758A9C;
+  --color-accent: #00727A;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #DCF1F2;
+  --color-accent-text: #00727A;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #4D575D;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #111619;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="volt"]{
+  --color-bg: #EEF1E9;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F5F7F1;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #11140E;
+  --color-text-muted: #4F5848;
+  --color-border: #C6CDBC;
+  --color-border-control: #7B8E64;
+  --color-accent: #457300;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #E6F2D2;
+  --color-accent-text: #457300;
+  --color-success: #0B6E8A;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDEFF5;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #4F5848;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #11140E;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="ultraviolet"]{
+  --color-bg: #F0EEF6;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F7F5FB;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #18132A;
+  --color-text-muted: #58526F;
+  --color-border: #CFC8DE;
+  --color-border-control: #8780AE;
+  --color-accent: #672DD3;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #EBE2FB;
+  --color-accent-text: #672DD3;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #58526F;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #18132A;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="tide"]{
+  --color-bg: #EAF2F4;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F2F8F9;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #0D1D25;
+  --color-text-muted: #485E68;
+  --color-border: #BFD3DA;
+  --color-border-control: #609299;
+  --color-accent: #0A6886;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #D9EDF4;
+  --color-accent-text: #0A6886;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #485E68;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #0D1D25;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #8A5A00;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+:root[data-palette="mono"]{
+  --color-bg: #F1F1EF;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #F6F6F4;
+  --color-surface-raised: #FFFFFF;
+  --color-text: #111111;
+  --color-text-muted: #545454;
+  --color-border: #C8C8C4;
+  --color-border-control: #878783;
+  --color-accent: #111111;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #EAEAE7;
+  --color-accent-text: #111111;
+  --color-success: #1E7B45;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF1E4;
+  --color-best: #F5C451;
+  --color-on-best: #2B1E02;
+  --color-best-line: #8A5A00;
+  --color-missed: #545454;
+  --color-danger: #A32E22;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #111111;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #B3261E;
+  --color-scrim: rgba(10, 14, 18, .55);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --color-bg: #0C0B0A;
+    --color-surface: #1C1A18;
+    --color-surface-alt: #26231F;
+    --color-surface-raised: #24211E;
+    --color-text: #F8F4EF;
+    --color-text-muted: #B0A69B;
+    --color-border: #36312C;
+    --color-border-control: #7E7468;
+    --color-accent: #FF6B4A;
+    --color-on-accent: #1A0700;
+    --color-accent-soft: #3A1A12;
+    --color-accent-text: #FF8A70;
+    --color-success: #4ADE80;
+    --color-on-success: #04160B;
+    --color-success-soft: #10291A;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #B0A69B;
+    --color-danger: #FF8A80;
+    --color-on-danger: #200605;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F8F4EF;
+    --color-inverse-text: #16120E;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="steel"]:not([data-theme="light"]){
+    --color-bg: #06080C;
+    --color-surface: #141C25;
+    --color-surface-alt: #1A242F;
+    --color-surface-raised: #1D2936;
+    --color-text: #E9EEF3;
+    --color-text-muted: #9DABB9;
+    --color-border: #334255;
+    --color-border-control: #576F8B;
+    --color-accent: #72B2FF;
+    --color-on-accent: #06162A;
+    --color-accent-soft: #16304C;
+    --color-accent-text: #72B2FF;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #9DABB9;
+    --color-danger: #FF9A8A;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #E9EEF3;
+    --color-inverse-text: #141C25;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="bush"]:not([data-theme="light"]){
+    --color-bg: #080A06;
+    --color-surface: #181F13;
+    --color-surface-alt: #1F2719;
+    --color-surface-raised: #242F1D;
+    --color-text: #EAEDE1;
+    --color-text-muted: #A4AC93;
+    --color-border: #3A4430;
+    --color-border-control: #627450;
+    --color-accent: #A0DD6C;
+    --color-on-accent: #0F1A07;
+    --color-accent-soft: #223519;
+    --color-accent-text: #A0DD6C;
+    --color-success: #5CC8E8;
+    --color-on-success: #05202A;
+    --color-success-soft: #123A47;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #A4AC93;
+    --color-danger: #FF9A8A;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #EAEDE1;
+    --color-inverse-text: #181F13;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="ember"]:not([data-theme="light"]){
+    --color-bg: #0B0706;
+    --color-surface: #221714;
+    --color-surface-alt: #2B1E1A;
+    --color-surface-raised: #32221D;
+    --color-text: #F4EAE5;
+    --color-text-muted: #BBA59D;
+    --color-border: #4E3A32;
+    --color-border-control: #846756;
+    --color-accent: #FF8D67;
+    --color-on-accent: #2A0B02;
+    --color-accent-soft: #3E2218;
+    --color-accent-text: #FF8D67;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #BBA59D;
+    --color-danger: #FF9DB3;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F4EAE5;
+    --color-inverse-text: #221714;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="iron"]:not([data-theme="light"]){
+    --color-bg: #050708;
+    --color-surface: #13191C;
+    --color-surface-alt: #192024;
+    --color-surface-raised: #1D272B;
+    --color-text: #E6EBED;
+    --color-text-muted: #99A4AA;
+    --color-border: #303B43;
+    --color-border-control: #586D7F;
+    --color-accent: #40E0E6;
+    --color-on-accent: #03201F;
+    --color-accent-soft: #10363A;
+    --color-accent-text: #40E0E6;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #99A4AA;
+    --color-danger: #FF9A8A;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #E6EBED;
+    --color-inverse-text: #13191C;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="volt"]:not([data-theme="light"]){
+    --color-bg: #060704;
+    --color-surface: #161A11;
+    --color-surface-alt: #1C2116;
+    --color-surface-raised: #23291B;
+    --color-text: #EEF3E5;
+    --color-text-muted: #A3AD94;
+    --color-border: #36402D;
+    --color-border-control: #5E704D;
+    --color-accent: #BDF542;
+    --color-on-accent: #152000;
+    --color-accent-soft: #25331A;
+    --color-accent-text: #BDF542;
+    --color-success: #5CC8E8;
+    --color-on-success: #05202A;
+    --color-success-soft: #123A47;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #A3AD94;
+    --color-danger: #FF9A8A;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #EEF3E5;
+    --color-inverse-text: #161A11;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="ultraviolet"]:not([data-theme="light"]){
+    --color-bg: #08060C;
+    --color-surface: #191427;
+    --color-surface-alt: #201A30;
+    --color-surface-raised: #241D38;
+    --color-text: #EEEAF7;
+    --color-text-muted: #AAA3C1;
+    --color-border: #3C3453;
+    --color-border-control: #736095;
+    --color-accent: #B697FF;
+    --color-on-accent: #1A0B3A;
+    --color-accent-soft: #2C2147;
+    --color-accent-text: #B697FF;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #AAA3C1;
+    --color-danger: #FF9A8A;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #EEEAF7;
+    --color-inverse-text: #191427;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="tide"]:not([data-theme="light"]){
+    --color-bg: #040A0D;
+    --color-surface: #0F1F28;
+    --color-surface-alt: #142732;
+    --color-surface-raised: #162D3B;
+    --color-text: #E4F0F4;
+    --color-text-muted: #95ACB6;
+    --color-border: #2C4856;
+    --color-border-control: #44788E;
+    --color-accent: #62CAEC;
+    --color-on-accent: #032029;
+    --color-accent-soft: #123747;
+    --color-accent-text: #62CAEC;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #95ACB6;
+    --color-danger: #FF9DB3;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #E4F0F4;
+    --color-inverse-text: #0F1F28;
+    --color-focus: #F5C451;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+  :root[data-palette="mono"]:not([data-theme="light"]){
+    --color-bg: #060606;
+    --color-surface: #161616;
+    --color-surface-alt: #1D1D1D;
+    --color-surface-raised: #232323;
+    --color-text: #F2F2F2;
+    --color-text-muted: #A8A8A8;
+    --color-border: #3A3A3A;
+    --color-border-control: #6C6C6C;
+    --color-accent: #F2F2F2;
+    --color-on-accent: #111111;
+    --color-accent-soft: #262626;
+    --color-accent-text: #F2F2F2;
+    --color-success: #5CD08A;
+    --color-on-success: #062012;
+    --color-success-soft: #163A26;
+    --color-best: #F5C451;
+    --color-on-best: #241A02;
+    --color-best-line: #F5C451;
+    --color-missed: #A8A8A8;
+    --color-danger: #FF8A80;
+    --color-on-danger: #1A0F0D;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F2F2F2;
+    --color-inverse-text: #161616;
+    --color-focus: #FF8A80;
+    --color-scrim: rgba(0, 0, 0, .7);
+  }
+}
+:root[data-theme="dark"]{
+  --color-bg: #0C0B0A;
+  --color-surface: #1C1A18;
+  --color-surface-alt: #26231F;
+  --color-surface-raised: #24211E;
+  --color-text: #F8F4EF;
+  --color-text-muted: #B0A69B;
+  --color-border: #36312C;
+  --color-border-control: #7E7468;
+  --color-accent: #FF6B4A;
+  --color-on-accent: #1A0700;
+  --color-accent-soft: #3A1A12;
+  --color-accent-text: #FF8A70;
+  --color-success: #4ADE80;
+  --color-on-success: #04160B;
+  --color-success-soft: #10291A;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #B0A69B;
+  --color-danger: #FF8A80;
+  --color-on-danger: #200605;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F8F4EF;
+  --color-inverse-text: #16120E;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="steel"][data-theme="dark"]{
+  --color-bg: #06080C;
+  --color-surface: #141C25;
+  --color-surface-alt: #1A242F;
+  --color-surface-raised: #1D2936;
+  --color-text: #E9EEF3;
+  --color-text-muted: #9DABB9;
+  --color-border: #334255;
+  --color-border-control: #576F8B;
+  --color-accent: #72B2FF;
+  --color-on-accent: #06162A;
+  --color-accent-soft: #16304C;
+  --color-accent-text: #72B2FF;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #9DABB9;
+  --color-danger: #FF9A8A;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #E9EEF3;
+  --color-inverse-text: #141C25;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="bush"][data-theme="dark"]{
+  --color-bg: #080A06;
+  --color-surface: #181F13;
+  --color-surface-alt: #1F2719;
+  --color-surface-raised: #242F1D;
+  --color-text: #EAEDE1;
+  --color-text-muted: #A4AC93;
+  --color-border: #3A4430;
+  --color-border-control: #627450;
+  --color-accent: #A0DD6C;
+  --color-on-accent: #0F1A07;
+  --color-accent-soft: #223519;
+  --color-accent-text: #A0DD6C;
+  --color-success: #5CC8E8;
+  --color-on-success: #05202A;
+  --color-success-soft: #123A47;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #A4AC93;
+  --color-danger: #FF9A8A;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #EAEDE1;
+  --color-inverse-text: #181F13;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="ember"][data-theme="dark"]{
+  --color-bg: #0B0706;
+  --color-surface: #221714;
+  --color-surface-alt: #2B1E1A;
+  --color-surface-raised: #32221D;
+  --color-text: #F4EAE5;
+  --color-text-muted: #BBA59D;
+  --color-border: #4E3A32;
+  --color-border-control: #846756;
+  --color-accent: #FF8D67;
+  --color-on-accent: #2A0B02;
+  --color-accent-soft: #3E2218;
+  --color-accent-text: #FF8D67;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #BBA59D;
+  --color-danger: #FF9DB3;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F4EAE5;
+  --color-inverse-text: #221714;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="iron"][data-theme="dark"]{
+  --color-bg: #050708;
+  --color-surface: #13191C;
+  --color-surface-alt: #192024;
+  --color-surface-raised: #1D272B;
+  --color-text: #E6EBED;
+  --color-text-muted: #99A4AA;
+  --color-border: #303B43;
+  --color-border-control: #586D7F;
+  --color-accent: #40E0E6;
+  --color-on-accent: #03201F;
+  --color-accent-soft: #10363A;
+  --color-accent-text: #40E0E6;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #99A4AA;
+  --color-danger: #FF9A8A;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #E6EBED;
+  --color-inverse-text: #13191C;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="volt"][data-theme="dark"]{
+  --color-bg: #060704;
+  --color-surface: #161A11;
+  --color-surface-alt: #1C2116;
+  --color-surface-raised: #23291B;
+  --color-text: #EEF3E5;
+  --color-text-muted: #A3AD94;
+  --color-border: #36402D;
+  --color-border-control: #5E704D;
+  --color-accent: #BDF542;
+  --color-on-accent: #152000;
+  --color-accent-soft: #25331A;
+  --color-accent-text: #BDF542;
+  --color-success: #5CC8E8;
+  --color-on-success: #05202A;
+  --color-success-soft: #123A47;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #A3AD94;
+  --color-danger: #FF9A8A;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #EEF3E5;
+  --color-inverse-text: #161A11;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="ultraviolet"][data-theme="dark"]{
+  --color-bg: #08060C;
+  --color-surface: #191427;
+  --color-surface-alt: #201A30;
+  --color-surface-raised: #241D38;
+  --color-text: #EEEAF7;
+  --color-text-muted: #AAA3C1;
+  --color-border: #3C3453;
+  --color-border-control: #736095;
+  --color-accent: #B697FF;
+  --color-on-accent: #1A0B3A;
+  --color-accent-soft: #2C2147;
+  --color-accent-text: #B697FF;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #AAA3C1;
+  --color-danger: #FF9A8A;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #EEEAF7;
+  --color-inverse-text: #191427;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="tide"][data-theme="dark"]{
+  --color-bg: #040A0D;
+  --color-surface: #0F1F28;
+  --color-surface-alt: #142732;
+  --color-surface-raised: #162D3B;
+  --color-text: #E4F0F4;
+  --color-text-muted: #95ACB6;
+  --color-border: #2C4856;
+  --color-border-control: #44788E;
+  --color-accent: #62CAEC;
+  --color-on-accent: #032029;
+  --color-accent-soft: #123747;
+  --color-accent-text: #62CAEC;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #95ACB6;
+  --color-danger: #FF9DB3;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #E4F0F4;
+  --color-inverse-text: #0F1F28;
+  --color-focus: #F5C451;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+:root[data-palette="mono"][data-theme="dark"]{
+  --color-bg: #060606;
+  --color-surface: #161616;
+  --color-surface-alt: #1D1D1D;
+  --color-surface-raised: #232323;
+  --color-text: #F2F2F2;
+  --color-text-muted: #A8A8A8;
+  --color-border: #3A3A3A;
+  --color-border-control: #6C6C6C;
+  --color-accent: #F2F2F2;
+  --color-on-accent: #111111;
+  --color-accent-soft: #262626;
+  --color-accent-text: #F2F2F2;
+  --color-success: #5CD08A;
+  --color-on-success: #062012;
+  --color-success-soft: #163A26;
+  --color-best: #F5C451;
+  --color-on-best: #241A02;
+  --color-best-line: #F5C451;
+  --color-missed: #A8A8A8;
+  --color-danger: #FF8A80;
+  --color-on-danger: #1A0F0D;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F2F2F2;
+  --color-inverse-text: #161616;
+  --color-focus: #FF8A80;
+  --color-scrim: rgba(0, 0, 0, .7);
+}
+/* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength, cards keep outlines. */
+@media (prefers-contrast: more){
+  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+}
+:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+/* Theme switch: a short cross-fade, off when motion is reduced */
+:root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after{ transition: background-color var(--duration-med) var(--ease), color var(--duration-med) var(--ease), border-color var(--duration-med) var(--ease), fill var(--duration-med) var(--ease), stroke var(--duration-med) var(--ease) !important; }
+
+
+
+/* =====================================================================
+   BASE
+   ===================================================================== */
+*, *::before, *::after{ box-sizing: border-box; }
+html{ -webkit-text-size-adjust: 100%; }
+body{
+  font-variant-numeric: tabular-nums;
+  margin: 0; background: var(--color-bg); color: var(--color-text);
+  font-family: var(--font-family-body); font-size: var(--font-size-base); line-height: var(--line-height-base);
+  -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
+  padding-bottom: calc(var(--size-nav) + var(--space-6) + env(safe-area-inset-bottom, 0px));
+}
+body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--space-6) + var(--hazard-height, var(--size-hazard-default))); }
+h1, h2, h3, h4{ margin: 0; line-height: var(--line-height-tight); font-weight: var(--font-weight-bold); }
+h1, h2{ font-weight: var(--font-weight-heavy); letter-spacing: var(--letter-spacing-tight); }
+h1{ font-size: var(--font-size-title); }
+h2{ font-size: var(--font-size-large); }
+h3, h4{ font-size: var(--font-size-base); }
+p{ margin: 0; }
+button, input, select, textarea{ font: inherit; color: inherit; }
+[hidden]{ display: none !important; }
+:focus-visible{ outline: var(--focus-width) solid var(--color-focus); outline-offset: var(--focus-offset); }
+.visually-hidden{ position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.muted{ color: var(--color-text-muted); }
+.small{ font-size: var(--font-size-small); }
+.num{ font-family: var(--font-family-numeral); font-variant-numeric: tabular-nums; font-weight: var(--font-weight-heavy); }
+.skip-link{ position: absolute; left: var(--space-1); top: calc(-1 * var(--space-6) - var(--size-tap)); z-index: 50; padding: var(--space-1) var(--space-2); background: var(--color-accent); color: var(--color-on-accent); border-radius: var(--radius-md); font-weight: var(--font-weight-bold); }
+.skip-link:focus{ top: var(--space-1); }
+.page-width{ max-width: var(--size-content-max); margin: 0 auto; padding: 0 var(--space-2); }
+@media (prefers-reduced-motion: reduce){ *, *::before, *::after{ transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+
+/* =====================================================================
+   BUTTONS AND FORM CONTROLS
+   ===================================================================== */
+.button{
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1);
+  min-height: var(--size-tap); min-width: var(--size-tap); padding: 0 var(--space-2);
+  border: var(--border-width-control) solid var(--color-border-control); border-radius: var(--radius-md);
+  background: var(--color-surface); color: var(--color-text); font-weight: var(--font-weight-bold);
+  cursor: pointer; text-align: center; text-decoration: none; touch-action: manipulation;
+  transition: background-color var(--duration-fast) var(--ease), border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease), filter var(--duration-fast) var(--ease);
+}
+.button:hover{ background: var(--color-surface-alt); }
+.button:active:not([disabled]){ transform: var(--press-scale); }
+.button[aria-busy="true"]{ position: relative; color: transparent; pointer-events: none; }
+.button[aria-busy="true"]::after{ content: ""; position: absolute; width: var(--space-2); height: var(--space-2); border-radius: var(--radius-round); border: var(--border-width-strong) solid var(--color-text); border-right-color: transparent; animation: spin 700ms linear infinite; }
+@keyframes spin{ to{ transform: rotate(360deg); } }
+.button--primary{ background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); box-shadow: var(--shadow-1); }
+.button--primary:hover:not([disabled]){ background: var(--color-accent); filter: brightness(1.08); box-shadow: var(--shadow-2); }
+.button--danger{ background: var(--color-danger); border-color: var(--color-danger); color: var(--color-on-danger); }
+.button--danger:hover:not([disabled]){ background: var(--color-danger); filter: brightness(1.08); }
+.button--quiet{ background: transparent; border-color: transparent; color: var(--color-accent-text); }
+.button--quiet:hover:not([disabled]){ background: var(--color-accent-soft); }
+.button--full{ width: 100%; }
+.button[disabled]{ opacity: .5; cursor: not-allowed; box-shadow: none; filter: none; }
+.button[aria-pressed="true"]{ background: var(--color-accent-soft); border-color: var(--color-accent); }
+.link-button{ display: inline-flex; align-items: center; min-height: var(--size-tap); padding: 0 var(--space-0-5); border: 0; background: none; color: var(--color-accent-text); font-weight: var(--font-weight-bold); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; border-radius: var(--radius-sm); transition: background-color var(--duration-fast) var(--ease); }
+.link-button:hover{ background: var(--color-accent-soft); }
+.button-row{ display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.segmented{ display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px; background: var(--color-surface-alt); border-radius: var(--radius-md); }
+.segmented .button{ border-color: transparent; background: transparent; padding: 0 var(--space-1-5); border-radius: calc(var(--radius-md) - 3px); box-shadow: none; }
+.segmented .button[aria-pressed="true"]{ background: var(--color-surface-raised); border-color: var(--color-accent); box-shadow: var(--shadow-1); }
+.field{ display: grid; gap: var(--space-0-5); }
+.field__label{ font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-text-muted); }
+.text-input, .select-input, .textarea-input{
+  width: 100%; min-height: var(--size-tap); padding: var(--space-1) var(--space-1-5);
+  border: var(--border-width-control) solid var(--color-border-control); border-radius: var(--radius-md); background: var(--color-surface);
+  transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease);
+}
+.textarea-input{ min-height: var(--size-textarea); font-family: ui-monospace, Menlo, monospace; font-size: var(--font-size-xs); }
+.text-input:hover:not(:disabled), .select-input:hover:not(:disabled), .textarea-input:hover:not(:disabled){ border-color: var(--color-text-muted); }
+.text-input:focus-visible, .select-input:focus-visible, .textarea-input:focus-visible{ outline: none; border-color: var(--color-accent); box-shadow: 0 0 0 var(--focus-width) var(--color-accent-soft), 0 0 0 calc(var(--focus-width) + var(--border-width-strong)) var(--color-focus); }
+.text-input:disabled, .select-input:disabled, .textarea-input:disabled{ opacity: .5; cursor: not-allowed; }
+.field:has(.error-text:not(:empty)) .text-input, .text-input[aria-invalid="true"]{ border-color: var(--color-danger); }
+.choice{ display: flex; align-items: center; gap: var(--space-1-5); min-height: var(--size-tap); padding: var(--space-1) var(--space-1-5); border: var(--border-width-control) solid var(--color-border-control); border-radius: var(--radius-md); background: var(--color-surface); cursor: pointer; transition: border-color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease); }
+.choice:hover{ border-color: var(--color-text-muted); }
+.choice:has(input:checked){ border-color: var(--color-accent); background: var(--color-accent-soft); }
+.choice:has(input:focus-visible){ outline: var(--focus-width) solid var(--color-focus); outline-offset: var(--focus-offset); }
+.choice input{ width: var(--size-check); height: var(--size-check); margin: 0; flex: none; accent-color: var(--color-accent); }
+.choice__text{ display: grid; }
+.choice-list{ display: grid; gap: var(--space-1); border: 0; margin: 0; padding: 0; }
+.error-text{ color: var(--color-danger); font-size: var(--font-size-small); font-weight: var(--font-weight-bold); }
+.error-text:empty{ display: none; }
+.note-text{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.note-text:empty{ display: none; }
+
+/* Glossary term: tap to explain */
+.term{ display: inline; padding: var(--space-1) 0; margin: calc(-1 * var(--space-1)) 0; border: 0; background: none; color: inherit; font: inherit; text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+.term-box{ position: fixed; left: var(--space-1); right: var(--space-1); bottom: calc(var(--size-nav) + var(--space-1) + env(safe-area-inset-bottom, 0px)); z-index: 40; max-width: var(--size-dialog-max); margin: 0 auto; display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2); background: var(--color-inverse-bg); color: var(--color-inverse-text); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); }
+.term-box__text{ flex: 1; }
+.term-box .button{ color: var(--color-inverse-text); }
+
+/* =====================================================================
+   APP HEADER: current plan, block week and next swap
+   ===================================================================== */
+.app-header{ position: relative; z-index: 5; background: var(--color-surface); border-bottom: var(--border-width) solid var(--color-card-border); box-shadow: var(--shadow-1); padding-top: env(safe-area-inset-top, 0px); }
+.app-header__row{ display: flex; align-items: center; gap: var(--space-1); padding-top: var(--space-1); padding-bottom: var(--space-1); }
+.app-header__titles{ flex: 1; min-width: 0; }
+.app-header__plan{ font-size: var(--font-size-large); font-weight: var(--font-weight-bold); letter-spacing: var(--letter-spacing-tight); }
+.app-header__week{ color: var(--color-text-muted); }
+.app-header__swap{ padding-bottom: var(--space-1); font-size: var(--font-size-small); color: var(--color-text-muted); }
+
+/* =====================================================================
+   PANELS: first-use setup, "How this works", notices
+   ===================================================================== */
+.panel{ margin-top: var(--space-2); padding: var(--space-2); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); display: grid; gap: var(--space-1-5); }
+.panel--accent{ border: var(--border-width-strong) solid var(--color-accent); }
+.steps-list{ margin: 0; padding-left: var(--space-3); display: grid; gap: var(--space-1); }
+.notice{ margin-top: var(--space-1-5); padding: var(--space-1-5) var(--space-2); border-radius: var(--radius-md); background: var(--color-accent-soft); display: grid; gap: var(--space-1); }
+.notice--warn{ background: var(--color-surface); border: var(--border-width-strong) solid var(--color-danger); border-left-width: var(--border-width-marker); }
+
+/* =====================================================================
+   TRAIN VIEW: week line, day tabs, progress, up next
+   ===================================================================== */
+.week-line{ display: flex; align-items: center; gap: var(--space-1-5); margin-top: var(--space-1-5); }
+.week-line__text{ flex: 1; font-size: var(--font-size-small); color: var(--color-text-muted); }
+.week-line__ring{ display: flex; align-items: center; gap: var(--space-1); font-size: var(--font-size-small); color: var(--color-text-muted); }
+.day-tabs{ display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-0-5); margin-top: var(--space-2); }
+.day-tab{ display: grid; align-content: center; gap: 2px; min-height: var(--size-input); padding: var(--space-0-5); border: var(--border-width-control) solid var(--color-card-border); border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-1); cursor: pointer; text-align: center; transition: background-color var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease); }
+.day-tab:hover{ background: var(--color-surface-alt); }
+.day-tab:active{ transform: var(--press-scale); }
+.day-tab__name{ font-weight: var(--font-weight-bold); }
+.day-tab__count{ font-size: var(--font-size-xs); color: var(--color-text-muted); font-family: var(--font-family-numeral); }
+.day-tab[aria-selected="true"]{ background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent); }
+.day-tab[aria-selected="true"] .day-tab__count{ color: inherit; }
+.day-tab.is-today{ box-shadow: var(--shadow-1); }
+.day-tab.is-today .day-tab__name{ text-decoration: underline; text-decoration-thickness: var(--border-width-strong); text-underline-offset: 3px; }
+.progress{ margin-top: var(--space-1-5); display: grid; gap: var(--space-0-5); }
+.progress__rail{ height: var(--size-progress); border-radius: var(--radius-pill); background: var(--color-surface-alt); overflow: hidden; }
+.progress__fill{ height: 100%; width: 0; border-radius: inherit; background: var(--color-success); transition: width var(--duration-slow) var(--ease); }
+.progress__text{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.session-head{ margin-top: var(--space-1-5); display: grid; gap: var(--space-0-5); }
+.session-head__title{ font-size: var(--font-size-large); font-weight: var(--font-weight-bold); }
+.ring__track{ fill: none; stroke: var(--color-surface-alt); stroke-width: var(--ring-stroke); }
+.ring__fill{ fill: none; stroke: var(--color-success); stroke-width: var(--ring-stroke); stroke-linecap: round; transition: stroke-dashoffset var(--duration-slow) var(--ease); }
+.ring__text{ font-family: var(--font-family-numeral); font-size: var(--font-size-xs); font-weight: var(--font-weight-heavy); fill: var(--color-text); }
+.up-next{ margin-top: var(--space-2); display: flex; gap: var(--space-2); align-items: flex-start; padding: var(--space-2); background: var(--color-surface); border: var(--border-width-strong) solid var(--color-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
+.up-next:empty{ display: none; }
+.up-next__body{ flex: 1; display: grid; gap: var(--space-0-5); }
+.up-next__kicker{ font-size: var(--font-size-xs); font-weight: var(--font-weight-heavy); color: var(--color-accent-text); text-transform: uppercase; letter-spacing: .06em; }
+.up-next__title{ font-weight: var(--font-weight-bold); font-size: var(--font-size-large); letter-spacing: var(--letter-spacing-tight); }
+.up-next--missed{ border-color: var(--color-hazard); }
+
+/* =====================================================================
+   EXERCISE ROWS: compact summary that expands to log sets
+   ===================================================================== */
+.exercise-list{ margin-top: var(--space-1-5); display: grid; gap: var(--space-1); }
+.exercise{ background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-med) var(--ease); }
+.exercise.is-open{ border: var(--border-width-strong) solid var(--color-accent); box-shadow: var(--shadow-2); grid-column: 1 / -1; }
+.exercise__summary{ display: flex; align-items: center; gap: var(--space-1-5); width: 100%; min-height: var(--size-input); padding: var(--space-1) var(--space-2); border: 0; background: none; text-align: left; cursor: pointer; border-radius: var(--radius-lg); transition: background-color var(--duration-fast) var(--ease); }
+.exercise__summary:hover{ background: var(--color-surface-alt); }
+.exercise__summary:active{ background: var(--color-surface-alt); }
+.exercise__status{ flex: none; display: grid; place-items: center; width: var(--size-status); height: var(--size-status); border-radius: var(--radius-round); border: var(--border-width-strong) solid var(--color-border-control); font-size: var(--font-size-xs); font-weight: var(--font-weight-heavy); font-family: var(--font-family-numeral); transition: background-color var(--duration-med) var(--ease); }
+.exercise.is-done .exercise__status{ background: var(--color-success); border-color: var(--color-success); color: var(--color-on-success); }
+.exercise.is-missed .exercise__status{ border-style: dashed; border-color: var(--color-missed); color: var(--color-missed); }
+.exercise.is-skipped{ opacity: .7; }
+.exercise__main{ flex: 1; min-width: 0; display: grid; }
+.exercise__name{ font-weight: var(--font-weight-bold); }
+.exercise__target{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.exercise__tag{ display: inline-block; margin-left: var(--space-0-5); padding: 0 var(--space-1); border-radius: var(--radius-pill); background: var(--color-surface-alt); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-text-muted); vertical-align: 2px; }
+.exercise__chevron{ flex: none; width: var(--size-chevron); height: var(--size-chevron); border-right: var(--border-width-strong) solid var(--color-text-muted); border-bottom: var(--border-width-strong) solid var(--color-text-muted); transform: rotate(45deg); margin-right: var(--space-0-5); transition: transform var(--duration-med) var(--ease); }
+.exercise.is-open .exercise__chevron{ transform: rotate(-135deg); }
+.exercise__panel{ display: grid; gap: var(--space-1-5); padding: 0 var(--space-2) var(--space-2); }
+.exercise__details{ font-size: var(--font-size-small); color: var(--color-text-muted); display: grid; gap: var(--space-0-5); }
+.exercise__actions{ display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); }
+.pair-group{ display: grid; gap: var(--space-1); padding: var(--space-1); border: var(--border-width-control) dashed var(--color-border-control); border-radius: var(--radius-lg); }
+.pair-group__label{ font-size: var(--font-size-small); color: var(--color-text-muted); padding: 0 var(--space-0-5); }
+.group-title{ margin-top: var(--space-2); font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-text-muted); }
+@media (min-width: 900px){ body.two-up .exercise-list{ grid-template-columns: 1fr 1fr; align-items: start; } body.two-up .pair-group, body.two-up .group-title{ grid-column: 1 / -1; } }
+
+/* Set rows inside an open exercise */
+.set-row{ display: grid; gap: var(--space-1); padding: var(--space-1-5); border-radius: var(--radius-md); background: var(--color-surface-alt); }
+.set-row.is-warm{ border-left: var(--border-width-marker) solid var(--color-border); }
+.set-row.is-beat{ box-shadow: inset 0 0 0 var(--border-width-strong) var(--color-best-line); }
+.set-row__head{ display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-1); flex-wrap: wrap; }
+.set-row__label{ font-weight: var(--font-weight-bold); }
+.set-row__beat{ display: none; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); padding: 0 var(--space-1); border-radius: var(--radius-pill); background: var(--color-best); color: var(--color-on-best); }
+.set-row.is-beat .set-row__beat{ display: inline-block; }
+.set-row__hint{ font-size: var(--font-size-small); }
+.set-row__hint strong{ font-weight: var(--font-weight-bold); }
+.set-row__fields{ display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.set-row__last{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.set-row__last:empty{ display: none; }
+.stepper-field{ display: grid; gap: var(--space-0-5); flex: 1 1 var(--size-stepper-min); min-width: 0; }
+.stepper{ display: flex; align-items: stretch; border: var(--border-width-control) solid var(--color-border-control); border-radius: var(--radius-md); background: var(--color-surface); overflow: hidden; transition: border-color var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease); }
+.stepper:focus-within{ border-color: var(--color-accent); box-shadow: 0 0 0 var(--focus-width) var(--color-accent-soft); }
+.set-row:has(.error-text:not(:empty)) .stepper{ border-color: var(--color-danger); }
+.stepper__button{ width: var(--size-tap); min-height: var(--size-input-height); border: 0; background: var(--color-surface); color: var(--color-accent-text); font-size: var(--font-size-large); font-weight: var(--font-weight-heavy); cursor: pointer; touch-action: manipulation; transition: background-color var(--duration-fast) var(--ease); }
+.stepper__button:hover{ background: var(--color-surface-alt); }
+.stepper__button:active{ background: var(--color-accent-soft); }
+.stepper__button:focus-visible{ outline-offset: calc(-1 * var(--focus-width)); }
+.stepper__input{ flex: 1; width: auto; min-width: var(--size-tap); min-height: var(--size-input-height); font-family: var(--font-family-numeral); font-size: var(--font-size-numeral); font-weight: var(--font-weight-heavy); border: 0; border-left: var(--border-width) solid var(--color-border); border-right: var(--border-width) solid var(--color-border); text-align: center; background: var(--color-surface); }
+.stepper__input:focus-visible{ outline: none; }
+.select-field{ display: grid; gap: var(--space-0-5); flex: 1 1 var(--size-select-min); }
+.check-row{ display: flex; align-items: center; gap: var(--space-1-5); min-height: var(--size-tap); cursor: pointer; }
+.check-row input{ width: var(--size-check); height: var(--size-check); margin: 0; accent-color: var(--color-success); }
+.sub-panel{ display: grid; gap: var(--space-1-5); padding: var(--space-1-5); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.advice{ padding: var(--space-1-5); border-radius: var(--radius-md); background: var(--color-accent-soft); font-size: var(--font-size-small); }
+.finder-table, .plan-table{ width: 100%; border-collapse: collapse; font-size: var(--font-size-small); }
+.finder-table th, .finder-table td, .plan-table th, .plan-table td{ text-align: left; vertical-align: top; padding: var(--space-1); border-bottom: var(--border-width) solid var(--color-border); }
+.finder-table th, .plan-table th{ color: var(--color-text-muted); font-weight: var(--font-weight-bold); }
+
+/* Catch-up and swaps log */
+.catchup{ margin-top: var(--space-1-5); padding: var(--space-2); border-radius: var(--radius-lg); border: var(--border-width-strong) solid var(--color-hazard); background: var(--color-surface); box-shadow: var(--shadow-2); display: grid; gap: var(--space-1); }
+.catchup__item{ display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); flex-wrap: wrap; }
+.swaps-log{ margin-top: var(--space-2); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.swaps-log summary{ min-height: var(--size-tap); display: flex; align-items: center; padding: 0 var(--space-2); font-weight: var(--font-weight-bold); cursor: pointer; border-radius: var(--radius-lg); transition: background-color var(--duration-fast) var(--ease); }
+.swaps-log summary:hover, .guide summary:hover{ background: var(--color-surface-alt); }
+.swaps-log__body{ padding: 0 var(--space-1-5) var(--space-1-5); display: grid; gap: var(--space-1); }
+.swaps-log ul{ margin: 0; padding-left: var(--space-2); display: grid; gap: var(--space-1); }
+
+/* =====================================================================
+   PLAN VIEW: read-only plan, today card, week tiles, tables
+   ===================================================================== */
+.plan-switch{ margin-top: var(--space-1-5); display: grid; gap: var(--space-1); }
+.today-card{ margin-top: var(--space-1-5); display: grid; gap: var(--space-1); padding: var(--space-2); background: var(--color-surface); border: var(--border-width-strong) solid var(--color-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-2); }
+.week-tiles{ display: grid; grid-auto-flow: column; grid-auto-columns: minmax(var(--size-tile-min), 1fr); gap: var(--space-0-5); margin-top: var(--space-1-5); overflow-x: auto; padding: var(--space-0-5); }
+.week-tile{ display: grid; align-content: space-between; gap: var(--space-0-5); min-height: var(--size-tile); padding: var(--space-1); border-radius: var(--radius-md); background: var(--color-accent); color: var(--color-on-accent); text-decoration: none; font-size: var(--font-size-small); box-shadow: var(--shadow-1); transition: transform var(--duration-fast) var(--ease), filter var(--duration-fast) var(--ease); }
+.week-tile:hover{ filter: brightness(1.06); }
+.week-tile:active{ transform: var(--press-scale); }
+.week-tile__n{ font-size: var(--font-size-large); font-weight: var(--font-weight-heavy); font-family: var(--font-family-numeral); }
+.week-tile--rest{ background: var(--color-surface-alt); color: var(--color-text-muted); }
+.week-tile.is-today{ outline: var(--focus-width) solid var(--color-text); outline-offset: var(--focus-offset); }
+.plan-day{ margin-top: var(--space-3); display: grid; gap: var(--space-1); scroll-margin-top: var(--space-2); }
+.plan-day__head{ display: flex; align-items: center; justify-content: space-between; gap: var(--space-1); flex-wrap: wrap; }
+.table-scroll{ overflow-x: auto; background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-md); box-shadow: var(--shadow-1); }
+.plan-table{ min-width: var(--size-table-min); }
+.plan-summary{ margin-top: var(--space-1-5); }
+.guide{ margin-top: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-md); box-shadow: var(--shadow-1); }
+.guide summary{ min-height: var(--size-tap); display: flex; align-items: center; padding: 0 var(--space-1-5); font-weight: var(--font-weight-bold); cursor: pointer; border-radius: var(--radius-md); transition: background-color var(--duration-fast) var(--ease); }
+.guide__body{ padding: 0 var(--space-1-5) var(--space-1-5); display: grid; gap: var(--space-1); }
+.guide__body ul, .guide__body ol{ margin: 0; padding-left: var(--space-3); display: grid; gap: var(--space-0-5); }
+.to-top{ position: fixed; right: var(--space-2); bottom: calc(var(--size-nav) + var(--space-2) + env(safe-area-inset-bottom, 0px)); z-index: 30; border-radius: var(--radius-pill); box-shadow: var(--shadow-3); }
+
+/* =====================================================================
+   FLOATING: bottom navigation, next-set button, hazard card, toast
+   ===================================================================== */
+.bottom-nav{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; display: grid; grid-template-columns: 1fr 1fr 1fr; height: calc(var(--size-nav) + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--color-surface); border-top: var(--border-width) solid var(--color-border); }
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) and (background: color-mix(in srgb, red 50%, transparent)){
+  .bottom-nav{ background: color-mix(in srgb, var(--color-surface) var(--nav-opacity), transparent); -webkit-backdrop-filter: var(--blur-bar); backdrop-filter: var(--blur-bar); }
+}
+:root[data-contrast="more"] .bottom-nav{ background: var(--color-surface); -webkit-backdrop-filter: none; backdrop-filter: none; }
+@media (prefers-contrast: more){ .bottom-nav{ background: var(--color-surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+.bottom-nav__button{ border: 0; background: none; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-text-muted); cursor: pointer; transition: color var(--duration-fast) var(--ease); }
+.bottom-nav__button:hover{ color: var(--color-text); }
+.bottom-nav__button[aria-current="page"]{ color: var(--color-accent-text); }
+.next-fab{ position: fixed; right: var(--space-2); bottom: calc(var(--size-nav) + var(--space-2) + env(safe-area-inset-bottom, 0px)); z-index: 30; border-radius: var(--radius-pill); box-shadow: var(--shadow-3); }
+body.has-hazard .next-fab, body.has-hazard .to-top{ bottom: calc(var(--size-nav) + var(--space-2) + var(--hazard-height, var(--size-hazard-default))); }
+.hazard-bar{ position: fixed; left: var(--space-1); right: var(--space-1); bottom: calc(var(--size-nav) + var(--space-1) + env(safe-area-inset-bottom, 0px)); z-index: 32; max-width: var(--size-dialog-max); margin: 0 auto; display: grid; gap: var(--space-1); padding: var(--space-1-5) var(--space-2); background: var(--color-hazard); color: var(--color-on-hazard); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); }
+.hazard-bar__title{ font-weight: var(--font-weight-bold); }
+.hazard-bar .button{ background: var(--color-on-hazard); color: var(--color-hazard); border-color: var(--color-on-hazard); }
+.hazard-bar .button--quiet{ background: transparent; color: var(--color-on-hazard); text-decoration: underline; }
+.toast{ position: fixed; left: 50%; top: calc(var(--space-2) + env(safe-area-inset-top, 0px)); z-index: 60; transform: translate(-50%, calc(-1 * var(--space-1))); max-width: calc(100% - var(--space-4)); padding: var(--space-1) var(--space-2); border-radius: var(--radius-pill); background: var(--color-inverse-bg); color: var(--color-inverse-text); font-weight: var(--font-weight-bold); box-shadow: var(--shadow-3); opacity: 0; pointer-events: none; transition: opacity var(--duration-med) var(--ease), transform var(--duration-med) var(--ease); }
+.toast.is-shown{ opacity: 1; transform: translate(-50%, 0); }
+.update-bar{ position: fixed; left: var(--space-1); right: var(--space-1); top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); z-index: 65; max-width: var(--size-dialog-max); margin: 0 auto; display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-1-5); background: var(--color-surface-raised); border: var(--border-width-strong) solid var(--color-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); }
+.update-bar__text{ flex: 1; font-weight: var(--font-weight-bold); }
+.compat-banner{ position: fixed; top: 0; left: 0; right: 0; z-index: 70; padding: calc(var(--space-1-5) + env(safe-area-inset-top, 0px)) var(--space-2) var(--space-1-5); background: var(--color-danger); color: var(--color-on-danger); font-weight: var(--font-weight-bold); }
+
+
+/* =====================================================================
+   QUICK LOGGING: compact set rows, the active set, rest timer
+   ===================================================================== */
+.stepper__input::placeholder{ color: var(--color-text-muted); font-weight: var(--font-weight-normal); }
+.set-row{ border-left: var(--border-width-marker) solid transparent; }
+.set-row:not(.set-row--compact){ border-left-color: var(--color-accent); background: var(--color-accent-soft); }
+.set-row--compact{ padding: 0; background: var(--color-surface-alt); }
+.set-row__compact{ display: flex; align-items: center; gap: var(--space-1-5); width: 100%; min-height: var(--size-input-height); padding: var(--space-1) var(--space-1-5); border: 0; background: none; text-align: left; cursor: pointer; border-radius: var(--radius-md); transition: background-color var(--duration-fast) var(--ease); }
+.set-row__compact:hover{ background: color-mix(in srgb, var(--color-text) 5%, transparent); }
+.set-row__badge{ flex: none; display: grid; place-items: center; width: var(--size-badge); height: var(--size-badge); border-radius: var(--radius-round); border: var(--border-width-strong) solid var(--color-border-control); font-family: var(--font-family-numeral); font-weight: var(--font-weight-heavy); font-size: var(--font-size-xs); }
+.set-row--compact.is-done .set-row__badge{ background: var(--color-success); border-color: var(--color-success); color: var(--color-on-success); }
+.set-row__name{ flex: 1; min-width: 0; }
+.set-row__value{ font-family: var(--font-family-numeral); font-weight: var(--font-weight-heavy); text-align: right; }
+.set-row--compact:not(.is-done) .set-row__value{ font-weight: var(--font-weight-normal); color: var(--color-text-muted); }
+.set-row.is-just-logged{ animation: set-flash var(--duration-med) ease-out; }
+@keyframes set-flash{ from{ background: var(--color-success-soft); } to{ background: var(--color-surface-alt); } }
+.set-row__log{ min-height: var(--size-input-height); font-size: var(--font-size-large); border-radius: var(--radius-md); }
+.exercise__count{ font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); color: var(--color-accent-text); font-family: var(--font-family-numeral); }
+.rest-bar{ position: fixed; left: var(--space-1); right: var(--space-1); top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); z-index: 55; max-width: var(--size-dialog-max); margin: 0 auto; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-1-5); background: var(--color-inverse-bg); color: var(--color-inverse-text); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); overflow: hidden; transition: background-color var(--duration-med) var(--ease); }
+body.has-rest .toast{ top: calc(var(--space-1) + var(--size-rest-clearance) + env(safe-area-inset-top, 0px)); }
+.rest-bar__time{ font-family: var(--font-family-numeral); font-size: var(--font-size-timer); font-weight: var(--font-weight-heavy); min-width: 3.4ch; }
+.rest-bar__next{ font-size: var(--font-size-small); }
+.rest-bar .button{ background: transparent; color: var(--color-inverse-text); border-color: var(--color-inverse-text); border-radius: var(--radius-pill); box-shadow: none; }
+.rest-bar .button:hover{ background: color-mix(in srgb, var(--color-inverse-text) 14%, transparent); }
+.rest-bar__track{ position: absolute; left: 0; right: 0; bottom: 0; height: var(--border-width-marker); }
+.rest-bar__fill{ height: 100%; width: 0; background: var(--color-success); transition: width var(--duration-slow) linear; }
+.rest-bar.is-done{ background: var(--color-success); color: var(--color-on-success); }
+.rest-bar.is-done .button{ color: var(--color-on-success); border-color: var(--color-on-success); }
+.bottom-nav__button{ display: grid; justify-items: center; align-content: center; gap: 2px; }
+.bottom-nav__icon{ width: calc(var(--size-icon) + var(--space-4)); height: calc(var(--size-icon) + var(--space-1)); padding: var(--space-0-5) var(--space-2); border-radius: var(--radius-pill); transition: background-color var(--duration-med) var(--ease); }
+.bottom-nav__button[aria-current="page"] .bottom-nav__icon{ background: var(--color-accent-soft); }
+/* =====================================================================
+   DIALOGS
+   ===================================================================== */
+dialog{ width: calc(100% - var(--space-3)); max-width: var(--size-dialog-max); max-height: calc(100% - var(--space-4)); padding: 0; border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); background: var(--color-surface-raised); color: var(--color-text); box-shadow: var(--shadow-3); overflow: auto; }
+dialog[open]{ animation: dialog-in var(--duration-med) var(--ease); }
+@keyframes dialog-in{ from{ opacity: 0; transform: translateY(var(--space-1)) scale(.98); } to{ opacity: 1; transform: none; } }
+dialog::backdrop{ background: var(--color-scrim); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+dialog:not([open]){ display: none; }
+.dialog--fallback{ position: fixed; top: var(--space-3); left: 0; right: 0; margin: 0 auto; z-index: 80; display: block; box-shadow: 0 0 0 100vmax var(--color-scrim); }
+.dialog__body{ padding: var(--space-2); display: grid; gap: var(--space-1-5); }
+.dialog__actions{ display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-1); }
+.dialog__actions--split{ justify-content: space-between; align-items: center; }
+.dialog__section{ display: grid; gap: var(--space-1); padding-top: var(--space-1-5); border-top: var(--border-width) solid var(--color-border); }
+.file-pick{ position: relative; }
+.file-pick input{ position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+.file-pick input:focus-visible + .button{ outline: var(--focus-width) solid var(--color-focus); outline-offset: 2px; }
+
+/* ---------- History, saved swaps and extras ---------- */
+.remind{ margin: 0; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-md); background: var(--color-surface-alt); font-size: var(--font-size-small); }
+.chip-row{ display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.chip{ min-height: var(--size-tap); padding: 0 var(--space-1-5); border: var(--border-width-control) solid var(--color-border-control); border-radius: var(--radius-pill); background: var(--color-surface); color: var(--color-text); font: inherit; font-weight: var(--font-weight-bold); cursor: pointer; transition: border-color var(--duration-fast) var(--ease), background-color var(--duration-fast) var(--ease), transform var(--duration-fast) var(--ease); }
+.chip:hover{ border-color: var(--color-accent); background: var(--color-accent-soft); }
+.chip:active{ transform: var(--press-scale); }
+.chip__tag{ font-size: var(--font-size-small); font-weight: normal; color: var(--color-text-muted); }
+.extras{ margin-top: var(--space-2); display: grid; gap: var(--space-1); }
+.extra .exercise__status{ border-style: dashed; }
+.hist{ display: grid; gap: var(--space-1-5); margin-top: var(--space-1-5); }
+.hist-day, .hist-progress{ padding: var(--space-2); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); display: grid; gap: var(--space-1); }
+.hist-day__title{ font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
+.hist-list{ margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); }
+.hist-list li{ display: grid; gap: 2px; padding-top: var(--space-1); border-top: var(--border-width) solid var(--color-border); }
+.hist-list li:first-child{ padding-top: 0; border-top: 0; }
+.hist-name{ font-weight: var(--font-weight-bold); }
+.hist-sets{ font-size: var(--font-size-small); color: var(--color-text-muted); }
+.hist-sets strong{ color: var(--color-text); font-family: var(--font-family-numeral); }
+.hist-table{ width: 100%; border-collapse: collapse; font-size: var(--font-size-small); }
+.hist-table th, .hist-table td{ text-align: left; padding: var(--space-1) var(--space-0-5); border-bottom: var(--border-width) solid var(--color-border); vertical-align: top; }
+.hist-table th{ color: var(--color-text-muted); }
+.hist-table tr.is-swap td{ background: var(--color-surface-alt); }
+.empty-state{ padding: var(--space-4) var(--space-2); text-align: center; background: var(--color-surface); border: var(--border-width-control) dashed var(--color-border-control); border-radius: var(--radius-lg); display: grid; gap: var(--space-0-5); justify-items: center; }
+.swap-foot{ display: grid; gap: var(--space-1); }
+
+/* ---------- Numbers, trend pills, progress chart ---------- */
+.trend{ display: inline-flex; align-items: center; gap: var(--space-0-5); padding: 0 var(--space-1); border-radius: var(--radius-pill); background: var(--color-surface-alt); color: var(--color-text); font-weight: var(--font-weight-bold); white-space: nowrap; }
+.trend--up{ background: var(--color-success-soft); }
+.chart{ display: block; width: 100%; height: auto; margin: var(--space-0-5) 0; }
+.chart__grid{ stroke: var(--color-border); stroke-width: var(--border-width); }
+.chart__line{ fill: none; stroke: var(--color-accent); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.chart__dot{ fill: var(--color-surface); stroke: var(--color-accent); stroke-width: 3; }
+.chart__dot--last{ fill: var(--color-accent); }
+.chart__label{ font-size: var(--font-size-xs); fill: var(--color-text-muted); font-family: var(--font-family-body); }
+.hist-table td:nth-child(2), .finder-table strong{ font-family: var(--font-family-numeral); }
+.hist-table td:nth-child(2){ font-weight: var(--font-weight-heavy); }
