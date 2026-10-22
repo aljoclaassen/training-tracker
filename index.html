@@ -1452,7 +1452,7 @@ body.has-sheet{ overflow: hidden; }
 .rest-bar.is-done .rest-bar__time, .rest-bar.is-done .rest-bar__next{ color: var(--color-on-success); }
 .rest-bar.is-done .button{ background: transparent; color: var(--color-on-success); border-color: var(--color-on-success); }
 .rest-bar__track{ left: var(--space-3); right: var(--space-3); }
-body.has-sheet .rest-bar{ top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); bottom: auto; z-index: 55; }
+body.has-sheet .rest-bar, body.has-sheet.has-hazard .rest-bar{ top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); bottom: auto; z-index: 55; }
 body.has-hazard .rest-bar{ bottom: calc(var(--size-nav) + var(--space-1) + var(--hazard-height, var(--size-hazard-default))); }
 body.has-rest .toast{ top: calc(var(--space-2) + env(safe-area-inset-top, 0px)); }
 body.has-sheet.has-rest .toast{ top: calc(var(--space-1) + var(--size-rest-clearance) + env(safe-area-inset-top, 0px)); }
@@ -1485,6 +1485,32 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 /* Theme picker: four colour dots per theme */
 .theme-dots{ display: inline-flex; gap: 3px; margin-right: var(--space-1); vertical-align: -2px; }
 .theme-dots i{ width: 14px; height: 14px; border-radius: var(--radius-round); display: block; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .3); }
+
+/* Supersets: when either half of a pair is open, both open together in one sheet, side by side */
+.pair-group.is-open{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 45; max-width: calc(var(--size-dialog-max) + var(--space-6) * 3); margin: 0 auto; max-height: calc(100% - var(--size-sheet-top) - env(safe-area-inset-top, 0px)); overflow-y: auto; overscroll-behavior: contain;
+  padding: 0 var(--space-1) calc(var(--space-2) + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: var(--radius-lg) var(--radius-lg) 0 0; background: var(--color-bg); box-shadow: var(--shadow-3); animation: sheet-up var(--duration-slow) var(--ease); }
+.pair-group.is-open::before{ content: ""; display: block; width: var(--size-grabber); height: 5px; margin: var(--space-1) auto 0; border-radius: var(--radius-pill); background: var(--color-fill-track); }
+.pair-group.is-open .pair-group__label{ position: sticky; top: 0; z-index: 3; padding: var(--space-1) var(--space-1); background: var(--color-bg); font-weight: var(--font-weight-bold); color: var(--color-text); }
+.pair-group__cols{ display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); align-items: start; }
+.pair-group.is-open .exercise.is-open{ grid-column: auto; min-width: 0; position: static; max-height: none; overflow: visible; margin: 0; border-radius: var(--radius-md); box-shadow: inset 0 0 0 var(--border-width-strong) var(--color-accent); background: var(--color-bg); animation: none; padding-bottom: 0; }
+.pair-group.is-open .exercise.is-open::before{ display: none; }
+.pair-group.is-open .exercise__summary{ position: static; padding: var(--space-1); gap: var(--space-1); min-height: var(--size-tap); background: transparent; }
+.pair-group.is-open .exercise__name{ font-size: var(--font-size-base); }
+.pair-group.is-open .exercise__chevron{ display: none; }
+.pair-group.is-open .exercise__panel{ padding: 0 var(--space-1) var(--space-1); gap: var(--space-1); }
+.pair-group.is-open .exercise__details{ display: none; }
+.pair-group.is-open .set-row{ padding: var(--space-1); }
+.pair-group.is-open .set-row__fields{ flex-direction: column; }
+.pair-group.is-open .stepper-field, .pair-group.is-open .select-field{ flex: none; }
+.pair-group.is-open .exercise__actions{ grid-template-columns: 1fr; }
+.pair-group.is-open .button-row{ flex-direction: column; }
+.pair-group.is-open .set-row__compact{ padding: var(--space-0-5) var(--space-1); gap: var(--space-1); min-height: var(--size-tap); }
+.pair-group.is-open .set-row__name{ font-size: var(--font-size-small); }
+.pair-group.is-open .set-row__value{ font-size: var(--font-size-small); }
+.pair-group.is-open .stepper__button{ width: 40px; }
+.pair-group.is-open .exercise__panel > p.small.muted, .pair-group.is-open .set-row p.small.muted{ display: none; }   /* first-use hints: no room side by side */
+.pair-group.is-open .pair-group__cols > .exercise:first-child [data-act="close"]{ display: none; }   /* one "Save and close" for the pair */
+@media (min-width: 900px){ .pair-group.is-open{ bottom: var(--space-3); border-radius: var(--radius-lg); max-height: calc(100% - var(--space-6) * 2); } }
 </style>
 <script>
 /* Apply the saved theme before the page paints, so it never flashes the wrong colours.
@@ -1862,7 +1888,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-22.2",
+ "appVersion": "2026-10-22.3",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -6031,11 +6057,22 @@ function renderCatchup(c, day){
     (madeHere.length ? '<div class="exercise-list">' + madeHere.map(it => exerciseHTML(c, it)).join("") + "</div>" : "") + "</section>";
 }
 
+// Takes a context and an item. Returns its superset partner's id (the other half of Pair A, B...), or null.
+function pairPartnerId(c, item){
+  if (!item || !item.pair) return null;
+  for (const s of c.sessions) for (const g of (s.groups || [])){
+    if (g.pair && g.items.length > 1 && g.items.some(x => x.id === item.id)){ const o = g.items.filter(x => x.id !== item.id)[0]; return o ? o.id : null; }
+  }
+  return null;
+}
+// An exercise shows open when it is the open one, or when its superset partner is: a pair opens as one sheet
+function isOpenView(c, item){ return state.ui.openEx === item.id || (!!state.ui.openEx && pairPartnerId(c, item) === state.ui.openEx); }
 function sessionListHTML(c, day){
   if (day.rest) return '<p class="muted">Rest day. Nothing to log.</p>';
   return day.groups.map(g => {
     const inner = g.items.map(it => exerciseHTML(c, it)).join("");
-    if (g.pair && g.items.length > 1) return '<div class="pair-group"><p class="pair-group__label">' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest.</p>" + inner + "</div>";
+    const pairOpen = g.pair && g.items.length > 1 && g.items.some(it => it.id === state.ui.openEx);
+    if (g.pair && g.items.length > 1) return '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label">' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
     return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + inner;
   }).join("");
 }
@@ -6069,7 +6106,7 @@ function summaryText(c, item){
 }
 
 function exerciseHTML(c, item){
-  const e = c.slot.entries[item.id], open = state.ui.openEx === item.id;
+  const e = c.slot.entries[item.id], open = isOpenView(c, item);
   const done = isComplete(e), missed = isMissed(e), madeUp = isMadeUp(e);
   const cls = "exercise" + (open ? " is-open" : "") + (done ? " is-done" : "") + (missed ? " is-missed" : "") + (item.skipped ? " is-skipped" : "");
   const status = done ? "✓" : missed ? "–" : (item.pair || "");
@@ -7195,6 +7232,25 @@ function logSet(c, item, e, exEl, i, kind){
   const secs = restSeconds(item.rest, row.role);
   const name = kind === "repl" && e.repl.name.trim() ? e.repl.name.trim() : item.name;
   const day = sessionOf(c, state.ui.day), after = next < 0 && day ? nextSet(c.slot, day, item.id) : null;
+  // Supersets: after the first half, go straight to the partner's set in the same round;
+  // after the second half, the rest timer points back to the first half's next set
+  const partner = pairPartnerId(c, item) ? itemOf(c, pairPartnerId(c, item)) : null;
+  if (partner && $("#ex-" + partner.id + " .exercise__panel:not([hidden])")){
+    const pe = c.slot.entries[partner.id], pk = pe && pe.replaced ? "repl" : "main", psets = pe ? setsFor(pe, pk) : partner.rows.map(emptySet);
+    const pname = pe && pe.replaced && pe.repl.name.trim() ? pe.repl.name.trim() : partner.name;
+    if (item.pair < partner.pair && i < psets.length && !isLogged(psets[i])){
+      activeRows[partner.id] = i;
+      rerenderExercise(partner.id, '[data-kind="' + pk + '"][data-i="' + i + '"] [data-act="log-set"]');
+      toast(plainRowLabel(row.label || "Set") + " logged. Now " + pname + ".");
+      return;
+    }
+    const pn = psets.findIndex(s => !isLogged(s));
+    if (item.pair > partner.pair && pn >= 0){
+      activeRows[partner.id] = pn; rerenderExercise(partner.id);
+      const focusBtn = $("#ex-" + item.id + ' [data-act="log-set"]') || $("#ex-" + partner.id + ' [data-i="' + pn + '"] [data-act="log-set"]'); if (focusBtn) focusBtn.focus();
+      if (secs){ startRest(secs, pname + ", " + plainRowLabel((partner.rows[pn] || {label: "next set"}).label)); return; }
+    }
+  }
   if (secs) startRest(secs, next >= 0 ? name + ", " + plainRowLabel((item.rows[next] || {label: "next set"}).label) : (after ? after.item.name : "you're done for today"));
   else toast(plainRowLabel(row.label || "Set") + " logged.");
 }

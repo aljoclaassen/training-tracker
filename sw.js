@@ -1,7 +1,7 @@
 /* Offline copy of the Training Tracker.
    To release an update: raise VERSION here and CONFIG.appVersion in index.html, then push.
    Phones download the new files in the background and the app offers "Update now". */
-const VERSION = "2026-10-22.2";
+const VERSION = "2026-10-22.3";
 const CACHE = "training-tracker-" + VERSION;
 const FILES = ["./", "index.html", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 
