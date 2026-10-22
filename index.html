@@ -1504,10 +1504,33 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .pair-group.is-open .stepper-field, .pair-group.is-open .select-field{ flex: none; }
 .pair-group.is-open .exercise__actions{ grid-template-columns: 1fr; }
 .pair-group.is-open .button-row{ flex-direction: column; }
-.pair-group.is-open .set-row__compact{ padding: var(--space-0-5) var(--space-1); gap: var(--space-1); min-height: var(--size-tap); }
-.pair-group.is-open .set-row__name{ font-size: var(--font-size-small); }
-.pair-group.is-open .set-row__value{ font-size: var(--font-size-small); }
-.pair-group.is-open .stepper__button{ width: 40px; }
+/* Done and upcoming sets: badge on the left, set name above its numbers, so nothing collides in a narrow column */
+.pair-group.is-open .set-row__compact{ display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "badge name" "badge value"; column-gap: var(--space-1); row-gap: 0; align-items: center; padding: var(--space-0-5) var(--space-1); min-height: var(--size-input-height); }
+.pair-group.is-open .set-row__badge{ grid-area: badge; width: 26px; height: 26px; }
+.pair-group.is-open .set-row__name{ grid-area: name; font-size: var(--font-size-xs); color: var(--color-text-muted); font-weight: var(--font-weight-bold); line-height: 1.2; }
+.pair-group.is-open .set-row__value{ grid-area: value; font-size: var(--font-size-small); text-align: left; line-height: 1.25; overflow-wrap: anywhere; }
+/* Steppers: slimmer buttons and slightly smaller numbers so "102.5" fits */
+.pair-group.is-open .stepper{ min-width: 0; }
+.pair-group.is-open .stepper__button{ width: 36px; flex: none; font-size: var(--font-size-base); }
+.pair-group.is-open .stepper__input{ min-width: 0; font-size: calc(var(--font-size-numeral) * .82); padding: 0; }
+.pair-group.is-open .set-row__head{ display: grid; gap: 2px; }
+.pair-group.is-open .set-row__label, .pair-group.is-open .set-row__hint{ overflow-wrap: anywhere; }
+.pair-group.is-open .exercise__main{ overflow-wrap: anywhere; }
+.pair-group.is-open .segmented{ display: flex; }
+.pair-group.is-open .segmented{ flex-wrap: wrap; }
+.pair-group.is-open .segmented .button{ flex: 1 1 auto; padding: 0 var(--space-1); }
+/* Very narrow columns (small phones, large text): number on top, minus and plus underneath */
+.pair-group.is-open .exercise.is-open{ container-type: inline-size; }
+@container (max-width: 190px){
+  .pair-group.is-open .stepper{ display: grid; grid-template-columns: 1fr 1fr; }
+  .pair-group.is-open .stepper__input{ grid-column: 1 / -1; grid-row: 1; border-left: 0; border-right: 0; border-bottom: var(--border-width) solid var(--color-border); font-size: var(--font-size-numeral); }
+  .pair-group.is-open .stepper__button{ width: auto; grid-row: 2; }
+  .pair-group.is-open .stepper__button:last-child{ border-left: var(--border-width) solid var(--color-border); }
+}
+.pair-group.is-open .exercise.is-open, .pair-group.is-open .exercise.is-open *{ min-width: 0; }
+.pair-group.is-open .exercise.is-open{ overflow-wrap: anywhere; }
+.pair-group.is-open .exercise.is-open :is(input, select, textarea){ max-width: 100%; }
+.pair-group.is-open .chip-row .chip{ max-width: 100%; white-space: normal; text-align: left; }
 .pair-group.is-open .exercise__panel > p.small.muted, .pair-group.is-open .set-row p.small.muted{ display: none; }   /* first-use hints: no room side by side */
 .pair-group.is-open .pair-group__cols > .exercise:first-child [data-act="close"]{ display: none; }   /* one "Save and close" for the pair */
 @media (min-width: 900px){ .pair-group.is-open{ bottom: var(--space-3); border-radius: var(--radius-lg); max-height: calc(100% - var(--space-6) * 2); } }
@@ -1888,7 +1911,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-22.3",
+ "appVersion": "2026-10-22.4",
  "dataVersion": 2,
  "readableVersions": [
   1,
