@@ -16,7 +16,7 @@
   --font-size-timer: 28px;       /* rest timer */
   --font-weight-normal: 400;
   --font-weight-bold: 600;
-  --font-weight-heavy: 800;      /* headings and numbers */
+  --font-weight-heavy: 700;      /* page titles and numbers (was 800: too heavy) */
   --line-height-base: 1.45;
   --line-height-tight: 1.2;
   --letter-spacing-tight: -.02em;
