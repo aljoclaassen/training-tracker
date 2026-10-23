@@ -127,7 +127,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     nextSwap(cycle, iso) : Takes the cycle and a date. Returns {date, plan}: the Monday the plan next changes, and the plan it changes to.
     nextWeekForPlan(cycle, plan, fromISO) : Takes the cycle, a plan id and a date. Returns the first Monday on or after that date scheduled for the plan.
     calendarBlocks(cycle, fromIndex, count) : Takes the cycle, the first block index and how many blocks. Returns those blocks for the calendar: [{index, plan, start, weeks, list: [weekInfo for each week]}]. Blocks of 0 weeks are left out.
-    blockLimits(cycle, b, today) : Takes the cycle, a block index and today. Returns what may change on that block: {locked, step, min, max, why}. Rules: past blocks are fixed. Heavy Duty moves a week at a time, powerbuilding two at a time so Weeks A and B stay paired. The block you're in can't end before this week.
+    blockLimits(cycle, b, today) : Takes the cycle, a block index and today. Returns what may change on that block: {locked, step, min, max, why}. Rules: past blocks are fixed. Both plans move a week at a time; a powerbuilding run that ends on Week A picks up at Week B next time. The block you're in can't end before this week.
     withBlockLength(cycle, b, weeks) : Takes the cycle, a block index and a length in weeks. Returns a new cycle with that block's length set.
     switchCycleNow(cycle, today) : Takes the cycle and today. Returns a new cycle where the other plan starts this week. Rule: weeks already done stay where they are, so labels and powerbuilding progress don't jump.
     resetUpcomingBlocks(cycle, today) : Takes the cycle and today. Returns a new cycle with every block after the current one back to the default length.
@@ -196,6 +196,8 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
   2.10 Next targets
     nextTargetHd(item, i, last, unit, belowStreak, gapWeeks) : Heavy Duty. Takes an item, a row index, last week's same set, the unit, the below-range streak and the weeks away. Returns {text, kg}. Rules (clean reps only): top of range → add the small step; inside range → same weight, one more rep; rest-pause or forced reps → same weight, one more clean rep; stopped short → repeat; below range two weeks running → drop about 7.5%; 3+ weeks away → about 90%.
     nextTopSet(lift, last, plannedLeft, reps, unit) : Powerbuilding top set. Takes the lift id, last top set, the reps left planned for it, this week's planned reps and the unit. Returns {text, kg}. Rules: at least 1 more left than planned → add 5 kg (bench 2.5 kg); as planned → same weight; at least 1 fewer → same weight into the next fortnight.
+    topSetCheck(t, row, last, unit) : Powerbuilding top set, second opinion. Takes the plan rule's target, this week's row, last top set and the unit. Returns the target with a note added when last week's reps left point to a clearly different load. Rule: the plan rule stays the target. When the load that last top set predicts for this week's reps and reps left differs by CONFIG.pbCoaching.predictGapPct or more, say so, and say which way to lean: lower when warm-ups feel slow, higher only when they move fast. Technique comes first: a set that changes shape to make the reps doesn't count as easy.
+    testTarget(item, i, a, lastSets) : Powerbuilding test week. Takes the item, a row index, the row args and last time's sets (in today's unit). Returns {text, kg, reps} for each single, or the guidance for the optional extra try. Rules: the freshest estimate wins, so a single already logged today (with its reps left) re-sets the rest of the singles; otherwise last time's best set is used. Each single is the load that estimate gives for 1 rep with the planned reps left, rounded down. The extra try is only for a final single that moved well with unchanged technique: peaking is not the goal, a clean single is the result that counts.
     backoffTarget(topKg, pct, unit) : Powerbuilding back-off. Takes today's top-set load, the percentage lighter and the unit. Returns {text, kg}.
     nextAccessory(item, i, lastSets, unit) : Powerbuilding accessory. Takes the item, a row index, last time's sets and the unit. Returns {text, kg}. Rules: every set at the top of the range with the planned reps left → add the smallest step; otherwise same weight, one more rep. Nordic: one more rep a week up to 6. Carry: +10 kg when all sets felt like 3 left. Bike and stretching have no targets.
     estimatedMax(kg, reps, left) : Takes kg, reps done and reps left. Returns the estimated max for one rep, rounded to 0.5 kg. Rule: weight × (1 + (reps done + reps left) ÷ 30).
@@ -282,8 +284,9 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     archiveAdd(archive, planId, exp, max) : Takes an archive {hd: [exports], pb: [exports]}, a plan id, an export and the most weeks to keep. Returns a new archive with that week added (replacing the same week if present), newest first.
     weekView(entries, extras, planId) : Takes week entries {id: entry} in export or state shape, that week's extras and a plan id. Returns the week laid out by day: [{day, title, items:[{id, name, unit, sets:[{label, set, working}], swap:{name, unit, sets}|null, missed, madeUp}], extras:[{name, unit, sets}]}]. Unknown ids are ignored.
     historyWeeks(slot, planId, sessions, archive, nowISO) : Takes the slot, plan id, this week's sessions, the archive and the time now. Returns every week there is to show, newest first: [{weekStart, source ("this"|"last"|"archive"), view}]. Rule: one entry per week; this week from the live log, then the archive, then last week if not archived.
-    estMax(kg, reps) : Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first: [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week. Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers. Takes a load and reps. Returns the estimated one-rep max (Epley: load × (1 + reps ÷ 30)), or 0. Rule: a single is its own max. Less exact above about 12 reps, so it is shown as an estimate.
+    estMax(kg, reps, left) : Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first: [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week. Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers. Takes a load, reps done and reps left (blank when not logged). Returns the estimated one-rep max, or 0. Rule: Epley with reps left counted, the reps-in-reserve way a top set is read: load × (1 + (reps + left) ÷ 30). A single with nothing left is its own max. Heavy Duty sets go to failure, so they have nothing left and this is plain Epley. Less exact above about 12 reps, so the app calls it an estimate.
     bestEstMax(sets) : Takes sets. Returns the highest estimated max among the logged ones.
+    loadForReps(em, reps, left, unit) : Takes an estimated max, reps, reps left and the unit. Returns the load that should give those reps with that many left, rounded down so the prediction errs light.
     exerciseProgress(weeks, id) : Takes history weeks and an exercise id. Returns one row per week, oldest first: {weekStart, kind ("planned" or "swap"), name, kg, reps, unit, est, measure}. kg and reps are the heaviest set; est is the best estimated max from any working set that week, so a lighter set with many more reps can count.
 
   2.21 App state shape
@@ -306,8 +309,13 @@ FEATURES AND WHERE THEY LIVE
   Current plan, block week, next swap ............ .app-header; 3.3 renderHeader; weekInfo, nextSwap
   Block alternation, longer blocks ................ 2.3 weekInfo, blockLimits, withBlockLength, switchCycleNow
   Calendar on the Plans page ...................... 3.5b renderCalendar, calBlockNotes, changeBlock, realignSlots
-    Heavy Duty blocks change a week at a time; powerbuilding two at a time and counts its weeks across
-    every powerbuilding block, so a longer block moves through blocks 1, 2, 3 and test week.
+    Both plans change a week at a time. Powerbuilding counts its weeks across every powerbuilding
+    block, so a longer block moves through blocks 1, 2, 3 and test week.
+  History: Progress and Week log tabs ............. 3.6 renderHistory (state.ui.histView), histWeekTag
+    (Week A, B, C… = position in the block), progressHTML, progressChartsHTML, pbOnTrackHTML
+  Strength estimate ................................ 2.x estMax: Epley with reps left; loadForReps
+  Powerbuilding predictions (23 October 2026) ...... topSetCheck (second opinion on top sets),
+    testTarget (test-week singles from the freshest estimate; extra try only after a clean final single)
   Opens on today's session ....................... 3.10 openToday; 3.15 start
   Day tabs, one day at a time ................... 3.4 renderDayTabs; 3.10 selectDay
   Compact exercise rows; the open one is a sheet .. 3.4 exerciseHTML, panelHTML; 3.7 syncExerciseSheet; 3.11 closeAndOpenNext
@@ -1344,6 +1352,16 @@ dialog:not([open]){ display: none; }
 .extras{ margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .extra .exercise__status{ border-style: dashed; }
 .hist{ display: grid; gap: var(--space-1-5); margin-top: var(--space-1-5); }
+.hist-controls{ display: grid; gap: var(--space-1); }
+.hist-controls .segmented{ display: flex; }
+.hist-controls .segmented .button{ flex: 1 1 0; }
+details.hist-day{ padding: 0; gap: 0; }
+.hist-day__summary{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-1); min-height: var(--size-tap); padding: var(--space-1) var(--space-2); cursor: pointer; border-radius: var(--radius-lg); list-style: none; }
+.hist-day__summary::-webkit-details-marker{ display: none; }
+.hist-day__summary::after{ content: ""; width: 10px; height: 10px; border-right: 2px solid var(--color-text-muted); border-bottom: 2px solid var(--color-text-muted); transform: rotate(45deg); transition: transform var(--duration-fast) var(--ease); margin-left: auto; }
+details[open] > .hist-day__summary::after{ transform: rotate(-135deg); }
+details.hist-day > .hist-list{ padding: 0 var(--space-2) var(--space-2); }
+.hist-weeks > summary{ min-height: var(--size-tap); display: flex; align-items: center; font-weight: var(--font-weight-bold); color: var(--color-accent-text); cursor: pointer; }
 .hist-day, .hist-progress{ padding: var(--space-2); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); display: grid; gap: var(--space-1); }
 .hist-day__title{ font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
 .hist-list{ margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-1); }
@@ -1976,7 +1994,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-22.6",
+ "appVersion": "2026-10-23.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -1989,11 +2007,11 @@ const CONFIG = {
  "maxBlockWeeks": 12,
  "blockStep": {
   "hd": 1,
-  "pb": 2
+  "pb": 1
  },
  "minBlockWeeks": {
   "hd": 1,
-  "pb": 2
+  "pb": 1
  },
  "longRunWeeks": 4,
  "calendarBlocks": 4,
@@ -2359,7 +2377,15 @@ const CONFIG = {
   "walk",
   "yoke",
   "sled"
- ]
+ ],
+ "pbCoaching": {
+  "onTrackPct": [
+   2,
+   5
+  ],
+  "flatChecks": 3,
+  "predictGapPct": 3
+ }
 };
 
 const PROGRAMME = {
@@ -4498,8 +4524,8 @@ function calendarBlocks(cycle, fromIndex, count){
 }
 
 // Takes the cycle, a block index and today. Returns what may change on that block:
-// {locked, step, min, max, why}. Rules: past blocks are fixed. Heavy Duty moves a week at a time,
-// powerbuilding two at a time so Weeks A and B stay paired. The block you're in can't end before this week.
+// {locked, step, min, max, why}. Rules: past blocks are fixed. Both plans move a week at a time; a powerbuilding
+// run that ends on Week A picks up at Week B next time. The block you're in can't end before this week.
 function blockLimits(cycle, b, today){
   const plan = blockPlan(cycle, b), now = weekInfo(cycle, today);
   const out = {locked: false, step: CONFIG.blockStep[plan], min: CONFIG.minBlockWeeks[plan], max: CONFIG.maxBlockWeeks, why: ""};
@@ -4988,6 +5014,46 @@ function nextTopSet(lift, last, plannedLeft, reps, unit){
   return {text: "Same weight: " + fmtLoad(kg, unit) + " × " + reps + ". Week B is harder on its own.", kg: kg, reps: Number(reps)};
 }
 
+// Powerbuilding top set, second opinion. Takes the plan rule's target, this week's row, last top set and the unit.
+// Returns the target with a note added when last week's reps left point to a clearly different load.
+// Rule: the plan rule stays the target. When the load that last top set predicts for this week's reps and reps
+//   left differs by CONFIG.pbCoaching.predictGapPct or more, say so, and say which way to lean: lower when
+//   warm-ups feel slow, higher only when they move fast. Technique comes first: a set that changes shape
+//   to make the reps doesn't count as easy.
+function topSetCheck(t, row, last, unit){
+  if (!t.kg || !last || !isLogged(last) || last.left === "" || last.left == null) return t;
+  const em = estMax(last.kg, last.reps, last.left), pl = parseLeft(row.left);
+  if (!em || !pl) return t;
+  const pred = loadForReps(em, row.reps, (pl.min + pl.max) / 2, unit);
+  if (Math.abs(pred - t.kg) / t.kg * 100 < CONFIG.pbCoaching.predictGapPct) return t;
+  const lean = pred < t.kg ? " If the warm-ups feel slow, use that." : " Only go up to it if the warm-ups move fast and look the same as always.";
+  return Object.assign({}, t, {text: t.text + " Your last top set points to about " + fmtLoad(pred, unit) + " for " + row.reps + " with " + row.left + " left." + lean, predicted: pred});
+}
+
+// Powerbuilding test week. Takes the item, a row index, the row args and last time's sets (in today's unit).
+// Returns {text, kg, reps} for each single, or the guidance for the optional extra try.
+// Rules: the freshest estimate wins, so a single already logged today (with its reps left) re-sets the rest
+//   of the singles; otherwise last time's best set is used. Each single is the load that estimate gives for
+//   1 rep with the planned reps left, rounded down. The extra try is only for a final single that moved well
+//   with unchanged technique: peaking is not the goal, a clean single is the result that counts.
+function testTarget(item, i, a, lastSets){
+  const none = {text: "", kg: null}, row = item.rows[i] || {};
+  const done = a.entry ? a.entry.sets.slice(0, i).map((s, k) => ({s: s, row: item.rows[k]})).filter(x => x.row && x.row.role === "test" && isLogged(x.s) && x.s.left !== "" && x.s.left != null) : [];
+  let em = 0, from = "";
+  if (done.length){ const s = done[done.length - 1].s; em = estMax(s.kg, s.reps, s.left); from = "Today's last single"; }
+  if (!em && lastSets){ em = bestEstMax(lastSets); from = "Your last top set"; }
+  if (row.left === ""){
+    const fin = a.entry && a.entry.sets[i - 1];
+    if (!fin || !isLogged(fin) || !(Number(fin.kg) > 0)) return {text: "Only after a clean final single. Skip it if anything felt different.", kg: null};
+    const add = a.unit === "plates" ? 1 : PROGRAMME.plans.pb.mainLifts[item.lift].easyAddKg;
+    return {text: "Only if the final single moved well and looked like every other rep. Try " + fmtLoad(Number(fin.kg) + add, a.unit) + ". Skip it if anything changed: a clean single is the result that counts.", kg: Number(fin.kg) + add, reps: 1};
+  }
+  if (!em) return none;
+  const kg = loadForReps(em, 1, Number(row.left) || 0, a.unit);
+  return {text: "About " + fmtLoad(kg, a.unit) + ". " + from + " points to a max near " + fmtLoad(Math.round(em * 2) / 2, a.unit) + "." +
+    (row.left === "1" ? " Same depth, pause and lockout as every other rep. Stop if your technique changes." : ""), kg: kg, reps: 1};
+}
+
 // Powerbuilding back-off. Takes today's top-set load, the percentage lighter and the unit. Returns {text, kg}.
 function backoffTarget(topKg, pct, unit){
   if (!(topKg > 0)) return {text: "Log your top set first. Back-offs are " + pct + "% lighter.", kg: null};
@@ -5022,9 +5088,8 @@ function nextAccessory(item, i, lastSets, unit){
 // Takes kg, reps done and reps left. Returns the estimated max for one rep, rounded to 0.5 kg.
 // Rule: weight × (1 + (reps done + reps left) ÷ 30).
 function estimatedMax(kg, reps, left){
-  const k = Number(kg), r = Number(reps), l = Number(left) || 0;
-  if (!(k > 0) || !(r > 0)) return null;
-  return Math.round(k * (1 + (r + l) / PROGRAMME.plans.pb.estimatedMax.divisor) * 2) / 2;
+  const e = estMax(kg, reps, left);
+  return e ? Math.round(e * 2) / 2 : null;
 }
 
 // Heavy Duty warm-ups. Takes the percentage, the main-set load and the unit. Returns the warm-up load.
@@ -5552,8 +5617,9 @@ function rowTarget(item, i, a){
   if (item.plan === "hd") return nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
   if (row.role === "top"){
     const lastDate = a.last ? (a.last.fromHistory ? a.last.histDate : a.lastWeekStart) : null;
-    return nextTopSet(item.lift, lastSet, plannedTopLeft(a.cycle, lastDate), row.reps, a.unit);
+    return topSetCheck(nextTopSet(item.lift, lastSet, plannedTopLeft(a.cycle, lastDate), row.reps, a.unit), row, lastSet, a.unit);
   }
+  if (row.role === "test") return testTarget(item, i, a, lastSets);
   if (row.role === "backoff"){
     const todayTop = a.entry && a.entry.sets[0] ? Number(a.entry.sets[0].kg) : 0;
     const topKg = todayTop > 0 ? todayTop : rowTarget(item, 0, a).kg;
@@ -5897,15 +5963,26 @@ function historyWeeks(slot, planId, sessions, archive, nowISO){
 // Takes the weeks from historyWeeks and an exercise id. Returns its progress, oldest first:
 // [{weekStart, kind ("planned"|"swap"), name, kg, reps, unit}] using the heaviest working set each week.
 // Rule: swaps are listed under their own name, never mixed into the planned exercise's numbers.
-// Takes a load and reps. Returns the estimated one-rep max (Epley: load × (1 + reps ÷ 30)), or 0.
-// Rule: a single is its own max. Less exact above about 12 reps, so it is shown as an estimate.
-function estMax(kg, reps){
+// Takes a load, reps done and reps left (blank when not logged). Returns the estimated one-rep max, or 0.
+// Rule: Epley with reps left counted, the reps-in-reserve way a top set is read:
+//   load × (1 + (reps + left) ÷ 30). A single with nothing left is its own max.
+//   Heavy Duty sets go to failure, so they have nothing left and this is plain Epley.
+//   Less exact above about 12 reps, so the app calls it an estimate.
+function estMax(kg, reps, left){
   kg = Number(kg) || 0; reps = Number(reps) || 0;
+  const l = left === "" || left == null ? 0 : Math.max(0, Number(left) || 0);
   if (kg <= 0 || reps <= 0) return 0;
-  return reps === 1 ? kg : Math.round(kg * (1 + reps / 30) * 10) / 10;
+  const total = reps + l;
+  return total <= 1 ? kg : Math.round(kg * (1 + total / PROGRAMME.plans.pb.estimatedMax.divisor) * 10) / 10;
 }
 // Takes sets. Returns the highest estimated max among the logged ones.
-function bestEstMax(sets){ return (sets || []).filter(isLogged).reduce((m, s) => Math.max(m, estMax(s.kg, s.reps)), 0); }
+function bestEstMax(sets){ return (sets || []).filter(isLogged).reduce((m, s) => Math.max(m, estMax(s.kg, s.reps, s.left)), 0); }
+// Takes an estimated max, reps, reps left and the unit. Returns the load that should give those reps with
+// that many left, rounded down so the prediction errs light.
+function loadForReps(em, reps, left, unit){
+  const x = em / (1 + (Number(reps) + Number(left)) / PROGRAMME.plans.pb.estimatedMax.divisor);
+  return unit === "plates" ? Math.max(1, Math.floor(x)) : Math.max(CONFIG.kgStep, Math.floor(x / CONFIG.kgStep) * CONFIG.kgStep);
+}
 
 // Takes history weeks and an exercise id. Returns one row per week, oldest first:
 // {weekStart, kind ("planned" or "swap"), name, kg, reps, unit, est, measure}. kg and reps are the heaviest
@@ -6990,38 +7067,58 @@ function histWeeks(c, plan){
   if (!slot) return [];
   return historyWeeks(slot, plan, sessionsFor(plan, slot, c.cycle), archiveLoad(), new Date().toISOString());
 }
+// Takes a Monday and a plan id. Returns {tag, sub}: the week's letter in its block ("Week C of 4"),
+// plus the powerbuilding programme stage, so Day 1 of one week is never confused with Day 1 of the next.
+function histWeekTag(weekStart, plan){
+  if (!state.cycle) return {tag: "", sub: ""};
+  const w = weekInfo(cycleOf(), weekStart);
+  if (w.before || w.plan !== plan) return {tag: "", sub: ""};
+  const letter = String.fromCharCode(64 + Math.min(26, w.blockWeek));
+  return {tag: "Week " + letter + " of " + w.blockWeeks, sub: plan === "pb" ? calWeekLabel(w) : ""};
+}
 function renderHistory(c){
   const plan = state.ui.histPlan === "hd" || state.ui.histPlan === "pb" ? state.ui.histPlan : c.plan;
+  const view = state.ui.histView === "log" ? "log" : "progress";
   const slot = slotOf(state, plan), weeks = histWeeks(c, plan);
   const seg = p => '<button type="button" class="button" data-hist-plan="' + p + '" aria-pressed="' + (p === plan) + '">' + esc(PLAN_NAMES[p]) + "</button>";
-  let html = '<div class="field"><span class="field__label" id="hist-plan-label">Plan</span><div class="segmented" role="group" aria-labelledby="hist-plan-label">' + seg("hd") + seg("pb") + "</div></div>";
+  const vseg = (v, t) => '<button type="button" class="button" data-hist-view="' + v + '" aria-pressed="' + (v === view) + '">' + t + "</button>";
+  let html = '<div class="hist-controls"><div class="segmented" role="group" aria-label="Plan">' + seg("hd") + seg("pb") + "</div>" +
+    '<div class="segmented" role="group" aria-label="Show">' + vseg("progress", "Progress") + vseg("log", "Week log") + "</div></div>";
   if (!weeks.length){
     $("#hist-body").innerHTML = html + '<div class="empty-state"><p><strong>Nothing logged on ' + esc(PLAN_NAMES[plan]) + " yet.</strong></p><p class=\"small muted\">Every week you log shows here. The app keeps the last " + CONFIG.archiveWeeks + " weeks of each plan on this phone.</p></div>";
     return;
   }
+  if (view === "progress"){ $("#hist-body").innerHTML = html + progressHTML(weeks, plan); return; }
   const ws = weeks.some(w => w.weekStart === state.ui.histWeek) ? state.ui.histWeek : weeks[0].weekStart;
-  const week = weeks.filter(w => w.weekStart === ws)[0];
-  const label = w => (w.source === "this" ? "This week: " : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? "Last week: " : "") + fmtRange(w.weekStart);
+  const week = weeks.filter(w => w.weekStart === ws)[0], tagOf = w => histWeekTag(w.weekStart, plan);
+  // Short enough to fit a phone-width picker: "Week B of 2 · 23 to 29 November · last week"
+  const thisYear = parseISO(c.today).getFullYear();
+  const label = w => { const t = tagOf(w), y = parseISO(w.weekStart).getFullYear();
+    return (t.tag ? t.tag + " · " : "") + fmtWeekShort(w.weekStart) + (y !== thisYear ? " " + y : "") + (w.source === "this" ? " · this week" : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? " · last week" : ""); };
   html += '<div class="field"><label class="field__label" for="hist-week">Week</label><select class="select-input" id="hist-week">' +
     weeks.map(w => '<option value="' + w.weekStart + '"' + (w.weekStart === ws ? " selected" : "") + ">" + esc(label(w)) + "</option>").join("") + "</select></div>";
+  const tag = tagOf(week);
+  if (tag.sub) html += '<p class="small muted">Programme: ' + esc(tag.sub) + ".</p>";
   const nItems = week.view.reduce((a, dd) => a + dd.items.filter(it => it.sets.length || (it.swap && it.swap.sets.length)).length, 0);
   const nSets = week.view.reduce((a, dd) => a + dd.items.reduce((b, it) => b + it.sets.filter(x => x.working).length + (it.swap ? it.swap.sets.length : 0), 0), 0);
-  const tile = (n, label, val, sub) => '<div class="hist-tile"><span class="metric-label metric-' + n + '">' + label + '</span><span class="metric-value metric-' + n + '">' + val + '</span><span class="small muted">' + sub + "</span></div>";
+  const tile = (n, lab, val, sub) => '<div class="hist-tile"><span class="metric-label metric-' + n + '">' + lab + '</span><span class="metric-value metric-' + n + '">' + val + '</span><span class="small muted">' + sub + "</span></div>";
   html += '<div class="hist-tiles">' + tile(2, "Days", week.view.length, "trained") + tile(3, "Exercises", nItems, "logged") + tile(1, "Sets", nSets, "working") + "</div>";
-  html += '<p class="small muted">Working sets are in bold. This phone keeps your last ' + CONFIG.archiveWeeks + " finished weeks of each plan.</p>";
-  html += week.view.map(d => '<article class="hist-day"><h3 class="hist-day__title">Day ' + d.day + ": " + esc(d.title) + "</h3><ul class=\"hist-list\">" +
+  html += '<p class="small muted">Tap a day to see its sets. Working sets are in bold.</p>';
+  html += week.view.map(d => {
+    const n = d.items.filter(it => it.sets.length || (it.swap && it.swap.sets.length)).length + d.extras.length;
+    return '<details class="hist-day"><summary class="hist-day__summary"><span class="hist-day__title">Day ' + d.day + (tag.tag ? " · " + esc(tag.tag.replace(/ of \d+$/, "")) : "") + ": " + esc(d.title) + '</span><span class="small muted">' + n + (n === 1 ? " exercise" : " exercises") + "</span></summary><ul class=\"hist-list\">" +
     d.items.map(it => {
       const meta = EXERCISES[it.id];
       const sets = it.sets.map(x => x.working ? "<strong>" + esc(histSetText(meta, x.set, it.unit)) + "</strong>" : esc(histSetText(meta, x.set, it.unit))).join(", ");
       let line = '<li><span class="hist-name">' + esc(it.name) + (it.madeUp ? ' <span class="exercise__tag">Made up</span>' : "") + "</span>";
       if (it.missed) line += '<span class="hist-sets muted">Skipped</span>';
       if (sets) line += '<span class="hist-sets">' + sets + "</span>";
-      if (it.swap) line += '<span class="hist-sets">Swapped for ' + esc(it.swap.name) + (it.swap.sets.length ? ": <strong>" + it.swap.sets.map(s => esc(swapSetText(s, it.swap.unit, it.swap.measure))).join(", ") + "</strong>" : "") + "</span>";
+      if (it.swap) line += '<span class="hist-sets">Swapped for ' + esc(it.swap.name) + (it.swap.sets.length ? ": <strong>" + it.swap.sets.map(z => esc(swapSetText(z, it.swap.unit, it.swap.measure))).join(", ") + "</strong>" : "") + "</span>";
       return line + "</li>";
     }).join("") +
-    d.extras.map(x => '<li><span class="hist-name">' + esc(x.name || "Extra") + ' <span class="exercise__tag">Extra</span></span><span class="hist-sets">' + x.sets.map(s => esc(histSetText(null, s, x.unit))).join(", ") + "</span></li>").join("") +
-    "</ul></article>").join("");
-  html += progressHTML(weeks, plan);
+    d.extras.map(x => '<li><span class="hist-name">' + esc(x.name || "Extra") + ' <span class="exercise__tag">Extra</span></span><span class="hist-sets">' + x.sets.map(z => esc(histSetText(null, z, x.unit))).join(", ") + "</span></li>").join("") +
+    "</ul></details>"; }).join("");
+  html += '<p class="small muted">This phone keeps your last ' + CONFIG.archiveWeeks + " finished weeks of each plan.</p>";
   $("#hist-body").innerHTML = html;
 }
 // Line chart of the best working set per week (planned exercise only; swaps stay in the table).
@@ -7064,7 +7161,8 @@ function progressChartsHTML(rows, meta){
       head = '<div class="strength-head"><p class="strength-head__label">Estimated max</p><p class="strength-head__value">' + esc(fmtLoad(last.est, unit)) + "</p>" +
         (dir ? '<p class="small"><span class="trend' + (dir === "up" ? " trend--up" : "") + '"><span aria-hidden="true">' + (dir === "up" ? "▲" : dir === "down" ? "▼" : "•") + "</span>" +
           esc(dir === "flat" ? "Same" : (diff > 0 ? "+" : "−") + fmtLoad(Math.abs(diff), unit)) + "</span> since " + esc(fmtDate(first.weekStart)) + "</p>" : "") +
-        '<p class="small muted">Weight and reps combined into one number (Epley formula), so adding reps counts as getting stronger. Less exact above 12 reps.</p></div>';
+        pbOnTrackHTML(pts, meta) +
+        '<p class="small muted">Weight, reps and reps left combined into one number (Epley formula), so adding reps counts as getting stronger. Less exact above 12 reps.</p></div>';
     }
     charts = [
       {cls: "chart--m1", area: true, title: "Strength: estimated max (" + loadWord + ")", data: pts.map(r => ({weekStart: r.weekStart, v: r.est || r.kg}))},
@@ -7078,6 +7176,24 @@ function progressChartsHTML(rows, meta){
   return head + '<div class="chart-stack" tabindex="0" role="group" aria-label="Progress charts. Use the left and right arrow keys to read each week." data-readouts="' + esc(JSON.stringify(readouts)) + '" data-n="' + pts.length + '">' +
     charts.map((c, i) => lineChartSVG(c.data, {cls: c.cls, area: c.area, title: c.title, axisDates: i === charts.length - 1})).join("") +
     '<p class="chart-readout small" aria-live="polite">' + esc(readouts[readouts.length - 1]) + "</p></div>";
+}
+// Powerbuilding main lifts. Takes the planned rows and the meta. Returns the Week B to Week B check, or "".
+// Rules: the programme compares harder (Week B) weeks: a rise of 2 to 5% each time is on track. Below that,
+//   hold the weights where technique stays the same rather than testing more often. No rise across
+//   CONFIG.pbCoaching.flatChecks checks in a row → say so plainly.
+function pbOnTrackHTML(pts, meta){
+  if (!meta || meta.plan !== "pb" || !meta.item.lift || !state.cycle) return "";
+  const cy = cycleOf(), b = pts.filter(r => r.est > 0).filter(r => { const w = weekInfo(cy, r.weekStart); return !w.before && w.plan === "pb" && w.weekLetter === "B" && !w.testWeek; });
+  if (b.length < 2) return '<p class="small muted">Week B check: compare after your next Week B. A rise of ' + CONFIG.pbCoaching.onTrackPct[0] + " to " + CONFIG.pbCoaching.onTrackPct[1] + "% is on track.</p>";
+  const last = b[b.length - 1], prev = b[b.length - 2], pct = Math.round((last.est / prev.est - 1) * 1000) / 10;
+  const [lo, hi] = CONFIG.pbCoaching.onTrackPct, n = CONFIG.pbCoaching.flatChecks;
+  const tail = b.slice(-n), flat = tail.length === n && tail.every((r, k) => k === 0 || r.est <= tail[k - 1].est);
+  let msg;
+  if (flat) msg = "No rise across your last " + n + " Week B checks. Keep the weights where your technique looks the same every rep, and let the next block do the work. Testing more often won't help.";
+  else if (pct < lo) msg = "Below the " + lo + " to " + hi + "% aim. Hold the weights, keep the reps left honest and your technique the same.";
+  else if (pct > hi) msg = "Above the " + lo + " to " + hi + "% aim. Good. Keep your reps left honest so the next targets stay right.";
+  else msg = "On track: the aim is " + lo + " to " + hi + "%.";
+  return '<p class="small"><strong>Week B check: ' + (pct > 0 ? "+" : pct < 0 ? "−" : "") + Math.abs(pct) + "%</strong> since " + esc(fmtDate(prev.weekStart)) + ". " + esc(msg) + "</p>";
 }
 // Takes a chart stack and a week index. Shows that week's guide line and values in every chart.
 function pickChartWeek(stack, k){
@@ -7113,7 +7229,7 @@ function progressHTML(weeks, plan){
     if (ids.indexOf(it.id) < 0 && (it.sets.some(x => x.working) || (it.swap && it.swap.sets.length))){ ids.push(it.id); names[it.id] = "Day " + d.day + ": " + it.name; }
   })));
   ids.sort((a, b) => Object.keys(EXERCISES).indexOf(a) - Object.keys(EXERCISES).indexOf(b));
-  let html = '<section class="hist-progress" aria-labelledby="hist-progress-title"><h3 class="hist-day__title" id="hist-progress-title">Progress per exercise</h3>';
+  let html = '<section class="hist-progress" aria-label="Progress per exercise">';
   if (!ids.length) return html + '<p class="small muted">Log a working set to see your progress here.</p></section>';
   const id = ids.indexOf(state.ui.histEx) >= 0 ? state.ui.histEx : ids[0];
   html += '<div class="field"><label class="field__label" for="hist-ex">Exercise</label><select class="select-input" id="hist-ex">' +
@@ -7121,7 +7237,8 @@ function progressHTML(weeks, plan){
   const rows = exerciseProgress(weeks, id), prev = {};
   if (rows.length < 2) html += '<p class="small muted">One week so far. Next week shows the change.</p>';
   html += progressChartsHTML(rows.filter(r => r.kind === "planned"), EXERCISES[id]);
-  html += '<table class="hist-table"><caption class="visually-hidden">Best working set per week</caption><thead><tr><th scope="col">Week of</th><th scope="col">Best set</th><th scope="col">Change</th></tr></thead><tbody>' +
+  html += '<details class="hist-weeks"><summary>Week by week (' + rows.length + ")</summary>" +
+    '<table class="hist-table"><caption class="visually-hidden">Best working set per week</caption><thead><tr><th scope="col">Week</th><th scope="col">Best set</th><th scope="col">Change</th></tr></thead><tbody>' +
     rows.slice().reverse().map((r, k, all) => {
       // change against the previous week of the same exercise (swaps compare only with the same swap)
       const older = all.slice(k + 1).filter(o => o.kind === r.kind && keyOf(o.name) === keyOf(r.name) && o.unit === r.unit)[0];
@@ -7134,11 +7251,13 @@ function progressHTML(weeks, plan){
       // Trend pill: arrow plus words, so the direction never relies on colour alone
       const dir = !older ? "" : ch.charAt(0) === "+" ? "up" : ch.charAt(0) === "−" ? "down" : "flat";
       const pill = dir ? '<span class="trend' + (dir === "up" ? " trend--up" : "") + '"><span aria-hidden="true">' + (dir === "up" ? "▲" : dir === "down" ? "▼" : "•") + "</span>" + esc(ch) + "</span>" : esc(ch);
-      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + (r.est ? '<br><span class="small muted hist-est">Est. max ' + esc(fmtLoad(r.est, r.unit)) + "</span>" : "") + "</td><td>" + pill + "</td></tr>";
-    }).join("") + "</tbody></table></section>";
+      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + (histWeekTag(r.weekStart, plan).tag ? '<br><span class="small muted">' + esc(histWeekTag(r.weekStart, plan).tag) + "</span>" : "") + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + (r.est ? '<br><span class="small muted hist-est">Est. max ' + esc(fmtLoad(r.est, r.unit)) + "</span>" : "") + "</td><td>" + pill + "</td></tr>";
+    }).join("") + "</tbody></table></details></section>";
   return html;
 }
 $("#view-hist").addEventListener("click", ev => {
+  const v = ev.target.closest("[data-hist-view]");
+  if (v){ state.ui.histView = v.dataset.histView; save(); renderAll(); const f = $('[data-hist-view="' + state.ui.histView + '"]'); if (f) f.focus({preventScroll: true}); return; }
   const p = ev.target.closest("[data-hist-plan]"); if (!p) return;
   state.ui.histPlan = p.dataset.histPlan; state.ui.histWeek = null; state.ui.histEx = null; save(); renderAll();
   const f = $('[data-hist-plan="' + state.ui.histPlan + '"]'); if (f) f.focus();
@@ -7147,7 +7266,11 @@ $("#view-hist").addEventListener("change", ev => {
   if (ev.target.id === "hist-week") state.ui.histWeek = ev.target.value;
   else if (ev.target.id === "hist-ex") state.ui.histEx = ev.target.value;
   else return;
-  const id = ev.target.id; save(); renderAll(); const f = $("#" + id); if (f) f.focus();
+  // Keep the picker where it was on screen, so changing exercise or week never jumps the page
+  const id = ev.target.id, top = ev.target.getBoundingClientRect().top;
+  save(); renderAll();
+  const f = $("#" + id);
+  if (f){ window.scrollBy(0, f.getBoundingClientRect().top - top); f.focus({preventScroll: true}); }
 });
 
 /* ---------- 3.7 Render everything ---------- */
