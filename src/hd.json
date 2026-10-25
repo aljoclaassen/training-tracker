@@ -1,0 +1,982 @@
+{
+ "variants": {
+  "RDFLY": [
+   {
+    "id": "both",
+    "label": "Both arms",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "one",
+    "label": "One arm",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   }
+  ],
+  "ONEARMPD": [
+   {
+    "id": "cable",
+    "label": "Cable",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   },
+   {
+    "id": "machine",
+    "label": "Machine",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   }
+  ],
+  "OHP": [
+   {
+    "id": "btn",
+    "label": "Behind-the-neck press",
+    "rows": [
+     "Warm-up 1",
+     "Warm-up 2",
+     "Working"
+    ]
+   },
+   {
+    "id": "military",
+    "label": "Military press",
+    "rows": [
+     "Warm-up 1",
+     "Warm-up 2",
+     "Working"
+    ]
+   }
+  ],
+  "LATMACH": [
+   {
+    "id": "standing",
+    "label": "Machine, standing",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "plates"
+   },
+   {
+    "id": "seated",
+    "label": "Machine, seated",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "plates"
+   },
+   {
+    "id": "dumbbell",
+    "label": "Dumbbell",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "kg"
+   }
+  ],
+  "CABLELAT": [
+   {
+    "id": "one",
+    "label": "Lateral raise, one arm",
+    "rows": [
+     "Warm-up",
+     "Left arm",
+     "Right arm"
+    ]
+   },
+   {
+    "id": "cross",
+    "label": "Cable cross-body lateral raise",
+    "rows": [
+     "Warm-up",
+     "Left arm",
+     "Right arm"
+    ]
+   }
+  ],
+  "TRIEXT": [
+   {
+    "id": "ez",
+    "label": "EZ bar, standing",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "ez-seated",
+    "label": "EZ bar, seated",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "barbell",
+    "label": "Straight bar, standing",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "barbell-seated",
+    "label": "Straight bar, seated",
+    "rows": [
+     "Working"
+    ]
+   }
+  ],
+  "OHCABLE": [
+   {
+    "id": "bar",
+    "label": "Bar",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "rope",
+    "label": "Rope",
+    "rows": [
+     "Working"
+    ]
+   }
+  ],
+  "JMPRESS": [
+   {
+    "id": "barbell",
+    "label": "Straight bar",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "ez",
+    "label": "EZ bar",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   }
+  ],
+  "SLDL": [
+   {
+    "id": "free",
+    "label": "Barbell or dumbbell",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "smith",
+    "label": "Smith machine",
+    "rows": [
+     "Working"
+    ]
+   }
+  ],
+  "SUMO": [
+   {
+    "id": "barbell",
+    "label": "Sumo deadlift, barbell",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "db-kb",
+    "label": "Sumo deadlift, dumbbell or kettlebell",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   }
+  ],
+  "PUSHDOWN": [
+   {
+    "id": "cable-both",
+    "label": "Cable, bar",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "cable-rope",
+    "label": "Cable, rope",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "machine-both",
+    "label": "Machine",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   }
+  ],
+  "BAYES": [
+   {
+    "id": "bayes-one",
+    "label": "Bayesian cable curl, one arm",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   },
+   {
+    "id": "bayes-both",
+    "label": "Bayesian cable curl, both arms",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "bar",
+    "label": "Cable curl, short straight bar",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "seated",
+    "label": "Seated cable curl",
+    "rows": [
+     "Working"
+    ]
+   }
+  ],
+  "BBROW": [
+   {
+    "id": "away",
+    "label": "Overhand",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "facing",
+    "label": "Underhand",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   }
+  ],
+  "CABLEROW": [
+   {
+    "id": "both",
+    "label": "Cable seated row, both arms",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "one",
+    "label": "Cable seated row, one arm",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   }
+  ],
+  "PULLDOWN": [
+   {
+    "id": "away",
+    "label": "Lat pulldown, overhand, normal grip",
+    "rows": [
+     "One-arm pulldown, left",
+     "Lat pulldown 1",
+     "One-arm pulldown, right",
+     "Lat pulldown 2"
+    ]
+   },
+   {
+    "id": "away-wide",
+    "label": "Lat pulldown, overhand, wide grip",
+    "rows": [
+     "One-arm pulldown, left",
+     "Lat pulldown 1",
+     "One-arm pulldown, right",
+     "Lat pulldown 2"
+    ]
+   },
+   {
+    "id": "facing",
+    "label": "Lat pulldown, underhand, normal grip",
+    "rows": [
+     "One-arm pulldown, left",
+     "Lat pulldown 1",
+     "One-arm pulldown, right",
+     "Lat pulldown 2"
+    ]
+   },
+   {
+    "id": "facing-wide",
+    "label": "Lat pulldown, underhand, wide grip",
+    "rows": [
+     "One-arm pulldown, left",
+     "Lat pulldown 1",
+     "One-arm pulldown, right",
+     "Lat pulldown 2"
+    ]
+   }
+  ],
+  "LATROW": [
+   {
+    "id": "db",
+    "label": "Dumbbell lat row",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "kg"
+   },
+   {
+    "id": "machine",
+    "label": "Machine row, one arm",
+    "rows": [
+     "Warm-up",
+     "Left arm",
+     "Right arm"
+    ],
+    "unit": "plates"
+   },
+   {
+    "id": "machine-both",
+    "label": "Machine row, both arms",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "plates"
+   }
+  ],
+  "PREACHER": [
+   {
+    "id": "straight",
+    "label": "Preacher curl, straight bar",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "ez",
+    "label": "Preacher curl, EZ bar",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "single",
+    "label": "Single-arm preacher curl",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   },
+   {
+    "id": "hammer",
+    "label": "Single-arm hammer preacher curl",
+    "rows": [
+     "Left arm",
+     "Right arm"
+    ]
+   }
+  ]
+ },
+ "days": [
+  {
+   "n": 1,
+   "title": "Legs A",
+   "groups": [
+    {
+     "title": null,
+     "items": [
+      {
+       "id": "d1-0",
+       "name": "Leg Extension",
+       "equip": "Machine",
+       "sets": "2W + 1",
+       "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
+       "rest": "90 s",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d1-1",
+       "name": "Back Squat",
+       "equip": "Barbell",
+       "sets": "2W + 1",
+       "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
+       "rest": "3 min",
+       "notes": "Failure means the last clean rep. Set safety pins."
+      },
+      {
+       "id": "d1-2",
+       "name": "Hack Squat",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "12 @ 60% → 8–10 @ 100%",
+       "rest": "2–3 min",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d1-3",
+       "name": "Leg Curl",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "8–10 @ 60% → 8–10 @ 100%",
+       "rest": "90 s",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d1-4",
+       "name": "Sumo Deadlift",
+       "equip": "Barbell, dumbbell or kettlebell",
+       "sets": "1W + 1",
+       "reps": "8 @ 60% → 6–8 @ 100%",
+       "rest": "3 min",
+       "notes": "Heaviest hinge of the week, placed after two rest days. With a dumbbell or kettlebell, log the weight you hold.",
+       "variants": "SUMO"
+      },
+      {
+       "id": "d1-5",
+       "name": "Single-Leg Leg Curl",
+       "equip": "Machine",
+       "sets": "1 per leg",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "One leg at a time."
+      }
+     ]
+    },
+    {
+     "title": "Calves",
+     "items": [
+      {
+       "id": "d1-6",
+       "name": "Standing Calf Raise",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "10–12 @ 60% → 10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      },
+      {
+       "id": "d1-7",
+       "name": "Seated Calf Raise",
+       "equip": "Machine",
+       "sets": "1",
+       "reps": "10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "n": 2,
+   "title": "Chest, Biceps",
+   "groups": [
+    {
+     "title": "Chest",
+     "items": [
+      {
+       "id": "d2-0",
+       "name": "DB Fly",
+       "equip": "Dumbbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 8 @ 100%",
+       "rest": "90 s",
+       "notes": ""
+      },
+      {
+       "id": "d2-1",
+       "name": "Machine Chest Press",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "2 min",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d2-2",
+       "name": "Barbell Incline Bench Press",
+       "equip": "Barbell",
+       "sets": "3W + 1",
+       "reps": "12 @ 50%, 10 @ 60%, 6–8 @ 70% → 6 @ 100%",
+       "rest": "2–3 min",
+       "notes": "Three warm-ups kept from the original."
+      },
+      {
+       "id": "d2-pec",
+       "name": "Pec Deck",
+       "equip": "Machine",
+       "sets": "1",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Chest already warm from the presses, so no warm-up."
+      },
+      {
+       "id": "d2-4",
+       "name": "Cable Crossover",
+       "equip": "Cable",
+       "sets": "1",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d2-5",
+       "name": "DB Chest Pullover",
+       "equip": "Dumbbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Warm-up protects the shoulder in the stretch."
+      }
+     ]
+    },
+    {
+     "title": "Biceps",
+     "items": [
+      {
+       "id": "d2-6",
+       "name": "Dumbbell Incline Curl",
+       "equip": "Dumbbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": ""
+      },
+      {
+       "id": "d2-7",
+       "name": "Preacher Bench Curl",
+       "equip": "Preacher bench with straight bar, EZ bar or dumbbell",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Pick the variation in the Tracker. Single-arm versions log each arm.",
+       "tag": "R",
+       "variants": "PREACHER"
+      },
+      {
+       "id": "d2-8",
+       "name": "Standing Barbell Curl",
+       "equip": "Barbell or EZ bar",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Straight bar."
+      },
+      {
+       "id": "d2-9",
+       "name": "Bayesian/Cable Curl",
+       "equip": "Cable",
+       "sets": "1 (1 per arm if one-arm)",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Variations: Bayesian one arm or both arms, cable curl with a short straight bar, or seated cable curl.",
+       "variants": "BAYES"
+      },
+      {
+       "id": "d2-10",
+       "name": "DB Hammer Curl",
+       "equip": "Dumbbell",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "n": 3,
+   "title": "Back, Rear Delts, Calves",
+   "groups": [
+    {
+     "title": "Back",
+     "items": [
+      {
+       "id": "d3-0",
+       "name": "Close-Grip Palm-Up Chin-up",
+       "equip": "Pull-up bar",
+       "sets": "3",
+       "reps": "2 shy of failure, 1 shy, max",
+       "rest": "2 min",
+       "notes": "Bodyweight. Three hard sets as written.",
+       "rows": [
+        "2 shy of failure",
+        "1 shy of failure",
+        "Max reps"
+       ]
+      },
+      {
+       "id": "d3-1",
+       "name": "BB Bent-over Row",
+       "equip": "Barbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "2 min",
+       "notes": "Grip: overhand or underhand.",
+       "variants": "BBROW"
+      },
+      {
+       "id": "d3-2",
+       "name": "T-Bar Row",
+       "equip": "T-bar",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "2 min",
+       "notes": "Same pattern as the row before it, so no warm-up."
+      },
+      {
+       "id": "d3-3",
+       "name": "Cable Seated Row",
+       "equip": "Cable",
+       "sets": "1 (1 per arm if one-arm)",
+       "reps": "6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Variations: both arms or one arm.",
+       "tag": "R",
+       "variants": "CABLEROW"
+      },
+      {
+       "id": "d3-4",
+       "name": "One-Arm Pulldown, superset with lat pulldown",
+       "equip": "Cable",
+       "sets": "1 per arm + 2 lat pulldown",
+       "reps": "6–8 @ 100% each",
+       "rest": "90 s",
+       "notes": "Left arm one-arm pulldown, straight into a lat pulldown set. Then the right arm, straight into a second lat pulldown set. Lat pulldown grip: overhand or underhand, normal or wide.",
+       "variants": "PULLDOWN"
+      },
+      {
+       "id": "d3-5",
+       "name": "Lat Row",
+       "equip": "Dumbbell or machine",
+       "sets": "1W + 1 (working set per arm on the machine)",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Variations: dumbbell lat row, or machine row with one arm or both arms.",
+       "variants": "LATROW"
+      }
+     ]
+    },
+    {
+     "title": "Rear Delts",
+     "items": [
+      {
+       "id": "d3-6",
+       "name": "Dumbbell Rear Delt Hammer Fly, superset with barbell rear delt row",
+       "equip": "Dumbbell and barbell",
+       "sets": "1 each",
+       "reps": "6–8 @ 100% each",
+       "rest": "60–90 s",
+       "notes": "Move straight from one to the other.",
+       "rows": [
+        "Hammer fly",
+        "Rear delt row"
+       ]
+      },
+      {
+       "id": "d3-7",
+       "name": "Cable Rear Delt Fly",
+       "equip": "Cable",
+       "sets": "1 (1 per arm if one-arm)",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Both arms, or one arm at a time if the station is busy.",
+       "variants": "RDFLY"
+      },
+      {
+       "id": "d3-facepull",
+       "name": "Face Pulls",
+       "equip": "Cable",
+       "sets": "1",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Rope at face height. Pull to your forehead, elbows high."
+      }
+     ]
+    },
+    {
+     "title": "Lower Back",
+     "items": [
+      {
+       "id": "d3-8",
+       "name": "Back Extension",
+       "equip": "Hyperextension bench, weighted",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Hold a plate."
+      }
+     ]
+    },
+    {
+     "title": "Calves",
+     "items": [
+      {
+       "id": "d3-10",
+       "name": "Seated Calf Raise",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "10–12 @ 60% → 10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      },
+      {
+       "id": "d3-11",
+       "name": "Standing Calf Raise",
+       "equip": "Machine",
+       "sets": "1",
+       "reps": "10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "n": 4,
+   "title": "Shoulders, Triceps",
+   "groups": [
+    {
+     "title": "Shoulders",
+     "items": [
+      {
+       "id": "d4-0",
+       "name": "Behind-the-Neck or Military Press",
+       "equip": "Barbell",
+       "sets": "2W + 1",
+       "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
+       "rest": "2–3 min",
+       "notes": "Pick behind-the-neck or military press in the Tracker.",
+       "variants": "OHP"
+      },
+      {
+       "id": "d4-1",
+       "name": "DB Shoulder Press",
+       "equip": "Dumbbell",
+       "sets": "2W + 1",
+       "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
+       "rest": "2 min",
+       "notes": ""
+      },
+      {
+       "id": "d4-2",
+       "name": "Upright Row",
+       "equip": "Barbell",
+       "sets": "1W + 1",
+       "reps": "12 @ 60% → 8–10 @ 100%",
+       "rest": "90 s",
+       "notes": ""
+      },
+      {
+       "id": "d4-3",
+       "name": "Lateral Raise",
+       "equip": "Machine or dumbbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
+       "variants": "LATMACH"
+      },
+      {
+       "id": "d4-5",
+       "name": "Cable Lateral Raise",
+       "equip": "Cable",
+       "sets": "1W + 1 per arm",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "One arm or cross-body. Warm up once, then a working set for each arm.",
+       "tag": "R",
+       "variants": "CABLELAT"
+      },
+      {
+       "id": "d4-6",
+       "name": "Dumbbell Shrug",
+       "equip": "Dumbbell",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": ""
+      }
+     ]
+    },
+    {
+     "title": "Triceps",
+     "items": [
+      {
+       "id": "d4-7",
+       "name": "Tricep Pushdown",
+       "equip": "Cable or machine",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
+       "tag": "R",
+       "variants": "PUSHDOWN"
+      },
+      {
+       "id": "d4-8",
+       "name": "JM Press",
+       "equip": "Straight bar or EZ bar",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "2 min",
+       "notes": "Pick straight bar or EZ bar in the Tracker.",
+       "variants": "JMPRESS"
+      },
+      {
+       "id": "d4-9",
+       "name": "Tricep Extension",
+       "equip": "EZ bar or straight bar",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "90 s",
+       "notes": "No warm-up: triceps are warm by now. Pick EZ bar or straight bar, seated or standing, in the Tracker.",
+       "variants": "TRIEXT"
+      },
+      {
+       "id": "d4-ohcable",
+       "name": "Overhead Cable Tricep Extension",
+       "equip": "Cable",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
+       "variants": "OHCABLE"
+      },
+      {
+       "id": "d4-10",
+       "name": "One-Arm Pushdown",
+       "equip": "Cable or machine",
+       "sets": "1 per arm",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "A working set for each arm. Pick cable or machine in the Tracker.",
+       "tag": "R",
+       "variants": "ONEARMPD"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "n": 5,
+   "title": "Legs B",
+   "groups": [
+    {
+     "title": null,
+     "items": [
+      {
+       "id": "d5-0",
+       "name": "Leg Extension",
+       "equip": "Machine",
+       "sets": "2W + 1",
+       "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
+       "rest": "90 s",
+       "notes": ""
+      },
+      {
+       "id": "d5-1",
+       "name": "Leg Press",
+       "equip": "Machine",
+       "sets": "2W + 1",
+       "reps": "12 @ 50%, 12 @ 70% → 10–12 @ 100%",
+       "rest": "2 min",
+       "notes": "",
+       "tag": "R"
+      },
+      {
+       "id": "d5-2",
+       "name": "Zercher Squat",
+       "equip": "Barbell",
+       "sets": "1W + 1",
+       "reps": "12 @ 60% → 8–10 @ 100%",
+       "rest": "3 min",
+       "notes": "Failure means the last clean rep. Set safety pins."
+      },
+      {
+       "id": "d5-3",
+       "name": "Pendulum Squat",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "12 @ 60% → 8–10 @ 100%",
+       "rest": "2–3 min",
+       "notes": "One warm-up to find the groove.",
+       "tag": "New"
+      },
+      {
+       "id": "d5-4",
+       "name": "Stiff-Leg or Romanian Deadlift",
+       "equip": "Barbell, dumbbell or Smith machine",
+       "sets": "1",
+       "reps": "10 @ 100%",
+       "rest": "2 min",
+       "notes": "No warm-up in the original. Add 10 @ 60% if needed. Variations: barbell or dumbbell, or Smith machine.",
+       "variants": "SLDL"
+      },
+      {
+       "id": "d5-5",
+       "name": "Single-Leg Curl",
+       "equip": "Machine",
+       "sets": "1 per leg",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "One leg at a time."
+      }
+     ]
+    },
+    {
+     "title": "Calves",
+     "items": [
+      {
+       "id": "d5-6",
+       "name": "Standing Calf Raise",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "10–12 @ 60% → 10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      },
+      {
+       "id": "d5-7",
+       "name": "Seated Calf Raise",
+       "equip": "Machine",
+       "sets": "1",
+       "reps": "10–12 @ 100%",
+       "rest": "60–90 s",
+       "notes": ""
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

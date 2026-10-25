@@ -1,0 +1,395 @@
+{
+  "appId": "heavy-duty-tracker",
+  "appVersion": "2026-10-23.2",
+  "dataVersion": 2,
+  "readableVersions": [
+    1,
+    2
+  ],
+  "storageKey": "heavy-duty-tracker-v1",
+  "defaultCycleStart": "2026-10-05",
+  "defaultFirstPlan": "hd",
+  "blockWeeks": 2,
+  "maxBlockWeeks": 12,
+  "blockStep": {
+    "hd": 1,
+    "pb": 1
+  },
+  "minBlockWeeks": {
+    "hd": 1,
+    "pb": 1
+  },
+  "longRunWeeks": 4,
+  "calendarBlocks": 4,
+  "trainingDays": 5,
+  "kgStep": 2.5,
+  "repsStep": 1,
+  "plateStep": 1,
+  "maxKg": 500,
+  "maxPlates": 50,
+  "maxReps": 100,
+  "maxRepsLeft": 4,
+  "emptyBarKg": 20,
+  "kgMachineWords": [
+    "leg press",
+    "hack squat",
+    "pendulum"
+  ],
+  "recentWeeks": 2,
+  "longGapWeeks": 3,
+  "returnPercent": 0.9,
+  "roundKg": 2.5,
+  "roundKgLight": 0.5,
+  "smallLoadKg": 20,
+  "smallStepKg": 1,
+  "dropPercent": 0.925,
+  "belowStreakToDrop": 2,
+  "saveDelayMs": 300,
+  "toastMs": 2600,
+  "exportPrefix": {
+    "hd": "workout-week",
+    "pb": "powerbuilding-week"
+  },
+  "setEnds": {
+    "clean": "Clean, to failure",
+    "rp": "Rest-pause",
+    "forced": "Forced reps",
+    "short": "Stopped short"
+  },
+  "setEndTags": {
+    "rp": "RP",
+    "forced": "F"
+  },
+  "reasons": {
+    "taken": "Equipment taken",
+    "unavailable": "Equipment unavailable",
+    "injury": "Injury or discomfort",
+    "other": "Other"
+  },
+  "dayMissReasons": {
+    "time": "Ran out of time",
+    "sick": "Sick or injured",
+    "life": "Life got in the way",
+    "other": "Other"
+  },
+  "dayToExerciseReason": {
+    "time": "time",
+    "sick": "injury",
+    "life": "other",
+    "other": "other"
+  },
+  "missedReasons": {
+    "unavailable": "Equipment unavailable",
+    "injury": "Injury or discomfort",
+    "time": "Ran out of time",
+    "other": "Other"
+  },
+  "movedIds": {
+    "d2-11": "d3-11",
+    "d2-12": "d3-10"
+  },
+  "repsLeftScale": [
+    {
+      "left": 4,
+      "short": "Bar moves fast the whole set; a warm-up"
+    },
+    {
+      "left": 3,
+      "short": "Still quick, but you're clearly working"
+    },
+    {
+      "left": 2,
+      "short": "The last rep slows down noticeably"
+    },
+    {
+      "left": 1,
+      "short": "The last rep is a slow grind"
+    },
+    {
+      "left": 0,
+      "short": "To failure: couldn't do another clean rep"
+    }
+  ],
+  "muscleRules": [
+    [
+      "face pull",
+      [
+        "rear delts",
+        "traps"
+      ]
+    ],
+    [
+      "rear delt|rear-delt",
+      [
+        "rear delts"
+      ]
+    ],
+    [
+      "calf",
+      [
+        "calves"
+      ]
+    ],
+    [
+      "nordic|leg curl|single-leg curl",
+      [
+        "hamstrings"
+      ]
+    ],
+    [
+      "deadlift",
+      [
+        "hamstrings",
+        "glutes",
+        "lower back"
+      ]
+    ],
+    [
+      "back extension",
+      [
+        "lower back",
+        "glutes"
+      ]
+    ],
+    [
+      "leg extension",
+      [
+        "quads"
+      ]
+    ],
+    [
+      "squat|leg press",
+      [
+        "quads",
+        "glutes"
+      ]
+    ],
+    [
+      "carry",
+      [
+        "grip",
+        "traps",
+        "lower back"
+      ]
+    ],
+    [
+      "shrug|upright",
+      [
+        "traps",
+        "shoulders"
+      ]
+    ],
+    [
+      "lateral raise",
+      [
+        "shoulders"
+      ]
+    ],
+    [
+      "overhead press|shoulder press|military|behind-the-neck",
+      [
+        "shoulders",
+        "triceps"
+      ]
+    ],
+    [
+      "pushdown|skull|tricep|jm press",
+      [
+        "triceps"
+      ]
+    ],
+    [
+      "chin-up|pulldown|row",
+      [
+        "back",
+        "biceps"
+      ]
+    ],
+    [
+      "curl",
+      [
+        "biceps"
+      ]
+    ],
+    [
+      "dip|push-up|bench|chest press",
+      [
+        "chest",
+        "triceps"
+      ]
+    ],
+    [
+      "fly|crossover|pullover|pec deck",
+      [
+        "chest"
+      ]
+    ],
+    [
+      "ab-wheel|leg raise",
+      [
+        "core"
+      ]
+    ]
+  ],
+  "themes": [
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "desc": "Coral, lime, cyan and amber on true black. The default.",
+      "colours": [
+        "#FF4D6D",
+        "#B6F34A",
+        "#3FD7F5",
+        "#FFC23D"
+      ]
+    },
+    {
+      "id": "dune",
+      "name": "Dune",
+      "desc": "Terracotta, saffron, sage and rose on warm sand.",
+      "colours": [
+        "#EE8A55",
+        "#F2C14E",
+        "#9CC79A",
+        "#F59A9A"
+      ]
+    },
+    {
+      "id": "glacier",
+      "name": "Glacier",
+      "desc": "Ice blue, mint, periwinkle and lemon on cold slate.",
+      "colours": [
+        "#5CC8FF",
+        "#64E6C8",
+        "#A3ABFF",
+        "#E6EE7A"
+      ]
+    },
+    {
+      "id": "forge",
+      "name": "Forge",
+      "desc": "Molten orange, steel blue, brass and ember on graphite.",
+      "colours": [
+        "#FF7A1A",
+        "#6FB6FF",
+        "#E8C468",
+        "#FF6B60"
+      ]
+    },
+    {
+      "id": "bloom",
+      "name": "Bloom",
+      "desc": "Magenta, leaf, sunflower and ocean on soft plum.",
+      "colours": [
+        "#FF5FBF",
+        "#7EE08A",
+        "#FFD447",
+        "#5DB8FF"
+      ]
+    }
+  ],
+  "glossary": {
+    "warmup": "A lighter set to get ready. Stop well before it gets hard.",
+    "mainset": "Your one all-out set. Go until you can't do another clean rep.",
+    "failure": "The point where you can't do another clean rep.",
+    "cleanrep": "A full rep with good form and no help.",
+    "percent": "A share of your main-set weight. The main set is 100%.",
+    "topset": "Your heaviest set of the day.",
+    "backoff": "Lighter sets done straight after your heaviest set.",
+    "repsleft": "How many more clean reps you could still have done.",
+    "pair": "Do the two exercises back to back. Then rest.",
+    "restpause": "A short pause in the middle of a set, then a few more reps.",
+    "forced": "Extra reps a partner helps you finish.",
+    "short": "You stopped before you couldn't do another rep.",
+    "plates": "How many plates you pin on a machine's weight stack.",
+    "weekab": "Week A and Week B: the two weeks of a powerbuilding block. Week B is a bit harder.",
+    "block": "A run of weeks on one plan, two by default. Then you swap to the other plan. Change it in the calendar on the Plans page.",
+    "estmax": "A rough guess at the most you could lift for one rep.",
+    "target": "What to aim for today, worked out from last time.",
+    "swap": "Do a different exercise when yours isn't possible today.",
+    "variation": "Another version of the same exercise, like a rope instead of a bar.",
+    "shy": "Stop that many clean reps before you can't do another.",
+    "makeup": "An exercise from a missed day, done on a later day.",
+    "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
+    "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
+    "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week.",
+    "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
+    "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
+    "hold": "Holds like a plank: log the seconds you held and any weight added. Carries: log the metres walked and the weight. Next time, aim 5 seconds longer, or the same distance."
+  },
+  "carryEffortScale": [
+    {
+      "left": 4,
+      "name": "Easy",
+      "short": "Grip fresh, could walk much further"
+    },
+    {
+      "left": 3,
+      "name": "Steady",
+      "short": "Grip solid, walking tall"
+    },
+    {
+      "left": 2,
+      "name": "Hard",
+      "short": "Grip burning, still walking tall"
+    },
+    {
+      "left": 1,
+      "name": "Very hard",
+      "short": "Grip about to open, or posture slipping"
+    },
+    {
+      "left": 0,
+      "name": "Couldn't go on",
+      "short": "Had to put it down before the end"
+    }
+  ],
+  "hdWeekPairs": [
+    [
+      "d1-0",
+      "d5-0"
+    ],
+    [
+      "d1-6",
+      "d5-6"
+    ],
+    [
+      "d1-7",
+      "d5-7"
+    ]
+  ],
+  "warmupShareRange": [
+    0.3,
+    0.95
+  ],
+  "themeStorageKey": "training-tracker-theme",
+  "themeSwitchMs": 200,
+  "archiveStorageKey": "training-tracker-archive",
+  "archiveWeeks": 12,
+  "maxSaved": 5,
+  "maxExtrasPerDay": 6,
+  "maxSetsPerExtra": 10,
+  "holdWords": [
+    "plank",
+    "hold",
+    "hang",
+    "wall sit",
+    "l-sit",
+    "hollow"
+  ],
+  "holdStepSeconds": 5,
+  "carryWords": [
+    "carry",
+    "walk",
+    "yoke",
+    "sled"
+  ],
+  "pbCoaching": {
+    "onTrackPct": [
+      2,
+      5
+    ],
+    "flatChecks": 3,
+    "predictGapPct": 3
+  }
+}

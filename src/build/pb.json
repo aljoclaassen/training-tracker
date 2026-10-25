@@ -1,0 +1,954 @@
+{
+  "id": "pb",
+  "name": "Powerbuilding",
+  "fullName": "Powerbuilding Plan",
+  "summary": "Five training days, two rest days. Heavy squat, bench press and deadlift, plus muscle-building work. Every session takes 60 to 90 minutes, warm-up and cardio included.",
+  "weekLabels": [
+    "Week A",
+    "Week B"
+  ],
+  "variants": {
+    "PBDL": [
+      {
+        "id": "sumo",
+        "label": "Sumo stance",
+        "rows": null
+      },
+      {
+        "id": "conventional",
+        "label": "Conventional stance",
+        "rows": null
+      }
+    ]
+  },
+  "warmup": {
+    "title": "Warm-up, every day (10 minutes)",
+    "steps": [
+      "Easy bike, 5 minutes.",
+      "Foam roller, 3 to 5 minutes on the areas listed for the day, about 30 to 60 seconds each. Firm, not painful.",
+      "The two warm-up moves listed for the day, 8 to 10 reps each.",
+      "Work up to the top set as in Step 2 above. Ramp the second barbell lift of the day with 2 to 3 lighter sets."
+    ]
+  },
+  "mainLifts": {
+    "squat": {
+      "name": "Squat",
+      "hdSource": "d1-1",
+      "hdFactor": 1.05,
+      "hdNote": "Back squat working weight (Day 1, 8–10 reps to failure)",
+      "guessNote": "That weight + 5%",
+      "tooLightKg": 10,
+      "easyAddKg": 5
+    },
+    "bench": {
+      "name": "Bench",
+      "hdSource": "d2-2",
+      "hdFactor": 1.0,
+      "hdNote": "Incline bench working weight (Day 2, 6 reps)",
+      "guessNote": "The same weight. Flat bench is usually stronger, so this starts on the safe side",
+      "tooLightKg": 5,
+      "easyAddKg": 2.5
+    },
+    "deadlift": {
+      "name": "Deadlift",
+      "hdSource": "d1-4",
+      "hdSourceVariant": "barbell",
+      "hdFactor": 0.95,
+      "hdNote": "Sumo deadlift working weight (Day 1, 6–8 reps)",
+      "guessNote": "That weight − 5%",
+      "noGuessVariants": [
+        "conventional"
+      ],
+      "conventionalStartKg": 40,
+      "tooLightKg": 10,
+      "easyAddKg": 5
+    }
+  },
+  "topSetLadder": [
+    {
+      "set": 1,
+      "weight": "Empty bar (deadlift: 40% of your guess)",
+      "pct": null,
+      "deadliftPct": 40,
+      "reps": "8–10",
+      "rest": "1 min"
+    },
+    {
+      "set": 2,
+      "weight": "About half your guess",
+      "pct": 50,
+      "reps": "5",
+      "rest": "1–2 min"
+    },
+    {
+      "set": 3,
+      "weight": "About 70% of your guess",
+      "pct": 70,
+      "reps": "3",
+      "rest": "2 min"
+    },
+    {
+      "set": 4,
+      "weight": "About 85% of your guess",
+      "pct": 85,
+      "reps": "2",
+      "rest": "3 min"
+    },
+    {
+      "set": 5,
+      "weight": "Your guess",
+      "pct": 100,
+      "reps": "5",
+      "rest": "3–4 min"
+    }
+  ],
+  "topSetOutcome": [
+    {
+      "left": "4 or more",
+      "means": "Too light; that was a warm-up",
+      "action": "Add 10 kg (bench 5 kg) and do 5 again"
+    },
+    {
+      "left": "3",
+      "means": "Spot on for Week A",
+      "action": "That is your top set. Go to the back-offs"
+    },
+    {
+      "left": "2",
+      "means": "Close enough",
+      "action": "Count it as your top set; it is already your Week B weight"
+    },
+    {
+      "left": "1 or 0",
+      "means": "Too heavy",
+      "action": "Stop. Back-offs 10% lighter, and start from this lighter weight next time"
+    }
+  ],
+  "topSetMaxTries": 3,
+  "backoffCheck": [
+    {
+      "reps": "Under 6",
+      "topSet": "Too heavy",
+      "next": "Top set 5% lighter"
+    },
+    {
+      "reps": "6–10",
+      "topSet": "About right",
+      "next": "Keep it"
+    },
+    {
+      "reps": "11–12",
+      "topSet": "A bit light",
+      "next": "Bench +2.5 kg; squat and deadlift +5 kg"
+    },
+    {
+      "reps": "13 or more",
+      "topSet": "Clearly light",
+      "next": "Bench +5 kg; squat and deadlift +10 kg"
+    }
+  ],
+  "backoffCheckNote": "On squat and bench, do the final back-off set for as many clean reps as you can, with safety pins set or a spotter. On deadlift, stop the moment your back position changes. This check is a rule of thumb, not a tested formula.",
+  "fortnights": [
+    {
+      "n": 1,
+      "weeks": "3–4",
+      "top": {
+        "A": {
+          "reps": 5,
+          "left": "3"
+        },
+        "B": {
+          "reps": 5,
+          "left": "2"
+        }
+      },
+      "backoff": {
+        "sets": 3,
+        "reps": 5,
+        "pct": 10,
+        "text": "3 × 5, 10% lighter"
+      },
+      "changes": ""
+    },
+    {
+      "n": 2,
+      "weeks": "7–8",
+      "top": {
+        "A": {
+          "reps": 4,
+          "left": "2–3"
+        },
+        "B": {
+          "reps": 4,
+          "left": "1–2"
+        }
+      },
+      "backoff": {
+        "sets": 3,
+        "reps": 4,
+        "pct": 8,
+        "text": "3 × 4, 8% lighter"
+      },
+      "changes": "+1 set on two chosen muscle groups; carries +10% weight; easy bike +5 min",
+      "cardioAddMin": 5
+    },
+    {
+      "n": 3,
+      "weeks": "11",
+      "top": {
+        "A": {
+          "reps": 1,
+          "left": "2"
+        },
+        "B": "test"
+      },
+      "backoff": {
+        "sets": 3,
+        "reps": 3,
+        "pct": 10,
+        "text": "3 × 3, 10% lighter"
+      },
+      "changes": "About a third fewer accessory sets; no sprints",
+      "skipIds": [
+        "pb-d5-sprints"
+      ]
+    }
+  ],
+  "deadliftBackoffSets": 2,
+  "secondaryPattern": {
+    "ids": [
+      "pb-d1-pbench",
+      "pb-d5-psquat",
+      "pb-d5-cgbench"
+    ],
+    "text": "Paused bench, paused squat and close-grip bench follow the same pattern: one rep fewer and slightly harder in the second fortnight, two sets each in the third.",
+    "repsDelta": {
+      "2": -1,
+      "3": -1
+    },
+    "sets": {
+      "3": 2
+    }
+  },
+  "topSetRules": [
+    {
+      "when": "At least 1 more than planned (it felt easy)",
+      "next": "Add 5 kg to squat or deadlift, 2.5 kg to bench"
+    },
+    {
+      "when": "As planned",
+      "next": "Same weight; Week B is harder on its own"
+    },
+    {
+      "when": "At least 1 fewer than planned (it was a grind)",
+      "next": "Keep this weight into the next fortnight"
+    }
+  ],
+  "accessoryRule": "Accessories: when every set reaches the top of the rep range with the planned reps left, go up by the smallest weight jump next time (the same double progression as Heavy Duty).",
+  "nordicRule": {
+    "addRepsPerWeek": 1,
+    "maxReps": 6,
+    "text": "Nordic curls: add 1 rep per set each week until 2 × 6."
+  },
+  "carryRule": {
+    "addKg": 10,
+    "whenLeft": 3,
+    "text": "Add 10 kg when all sets feel like 3 left."
+  },
+  "estimatedMax": {
+    "divisor": 30,
+    "text": "After each top set: weight × (1 + (reps done + reps left) ÷ 30). Example: 100 kg for 5 reps with 2 left is about 123 kg. Compare Week B numbers in weeks 4 and 8; a rise of 2 to 5% each time is on track. Both the formula and the range are coaching rules of thumb."
+  },
+  "testWeek": {
+    "days": {
+      "1": "squat",
+      "2": "bench",
+      "3": "deadlift"
+    },
+    "lightDay": 4,
+    "restDay": 5,
+    "lightDayIds": [
+      "pb-d4-stretch",
+      "pb-d4-cardio"
+    ],
+    "lightDayNote": "Thu stretching and easy bike only.",
+    "steps": [
+      "Warm up as usual to about 85% of what you hope to lift.",
+      "One single with about 3 left.",
+      "One single with about 2 left.",
+      "Final single with 1 left: full depth, bar paused on the chest for bench, standing fully tall on deadlift. This is the new PR.",
+      "Optional: one more try 2.5 to 5 kg heavier, only with a spotter or safety pins. Then two light accessories and go home."
+    ],
+    "rows": [
+      {
+        "label": "Single, about 3 left",
+        "left": "3"
+      },
+      {
+        "label": "Single, about 2 left",
+        "left": "2"
+      },
+      {
+        "label": "Final single, 1 left",
+        "left": "1"
+      },
+      {
+        "label": "Optional extra try",
+        "left": ""
+      }
+    ]
+  },
+  "badDay": {
+    "questions": [
+      "Slept under 6 hours",
+      "Sore enough to change how you move",
+      "Sick or very stressed",
+      "Warm-up sets feel heavier or slower than usual"
+    ],
+    "rules": [
+      {
+        "count": "None",
+        "do": "Train as written"
+      },
+      {
+        "count": "One",
+        "do": "Lower the top-set weight until you hit the planned reps left. One set fewer on back-offs and each accessory. Easy bike only, no sprints"
+      },
+      {
+        "count": "Two or more",
+        "do": "No top set. Main lift 3 × 3–5 with 4 left. Two easy sets of each accessory. No carries or Nordics. 20 minutes of easy bike, or go home"
+      }
+    ],
+    "extra": [
+      "Two bad days in one week, or the top set getting weaker two sessions in a row: take an easy week, then carry on where you left off.",
+      "Sharp or joint pain: stop that exercise and use its swap at an easy effort. Lasting more than a week: see a physio.",
+      "Missed a day: no doubling up. Drop Day 4 first. Missed Day 3: deadlift on Day 4 and front squat on Day 5.",
+      "Only 45 minutes: warm-up, main-lift top set and back-offs, one accessory, then the carry if the day has one."
+    ]
+  },
+  "days": [
+    {
+      "n": 1,
+      "title": "Heavy Squat",
+      "time": "60–70 min",
+      "roll": "thighs, glutes, upper back",
+      "moves": [
+        "Bodyweight squat with a 3-second pause at the bottom",
+        "Band pull-apart"
+      ],
+      "intro": "",
+      "items": [
+        {
+          "id": "pb-d1-squat",
+          "name": "Back Squat",
+          "kind": "main",
+          "lift": "squat",
+          "log": "lift",
+          "equip": "Barbell",
+          "top": {
+            "sets": "1 × 5",
+            "left": "3 (Wk A), 2 (Wk B)",
+            "rest": "4 min",
+            "notes": "Set safety pins."
+          },
+          "backoff": {
+            "sets": "3 × 5",
+            "left": "About 3",
+            "rest": "3 min",
+            "notes": "10% lighter than the top set"
+          },
+          "swap": "safety-bar or Smith squat"
+        },
+        {
+          "id": "pb-d1-pbench",
+          "name": "Paused Bench Press",
+          "kind": "secondary",
+          "log": "lift",
+          "equip": "Barbell",
+          "sets": "3 × 6",
+          "setCount": 3,
+          "repMin": 6,
+          "repMax": 6,
+          "left": "3",
+          "rest": "2 min",
+          "notes": "Hold still on the chest for 1 second.",
+          "swap": "dumbbell bench"
+        },
+        {
+          "id": "pb-d1-legpress",
+          "name": "Leg Press",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Machine",
+          "sets": "3 × 10–12",
+          "setCount": 3,
+          "repMin": 10,
+          "repMax": 12,
+          "left": "2",
+          "rest": "90 s",
+          "notes": "",
+          "swap": "hack squat"
+        },
+        {
+          "id": "pb-d1-bss",
+          "name": "Bulgarian Split Squat",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 8–10 each leg",
+          "setCount": 2,
+          "repMin": 8,
+          "repMax": 10,
+          "left": "2",
+          "rest": "60 s",
+          "notes": "Back foot on a bench.",
+          "swap": "dumbbell reverse lunge"
+        },
+        {
+          "id": "pb-d1-abwheel",
+          "name": "Ab-Wheel Rollout",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Ab wheel",
+          "sets": "3 × 8–12",
+          "setCount": 3,
+          "repMin": 8,
+          "repMax": 12,
+          "left": "2",
+          "rest": "60 s",
+          "notes": "",
+          "swap": "plank, 3 × 30–45 s"
+        }
+      ]
+    },
+    {
+      "n": 2,
+      "title": "Heavy Bench",
+      "time": "80–90 min",
+      "roll": "upper back, lats, chest",
+      "moves": [
+        "Band shoulder circles",
+        "Push-up with a shoulder-blade squeeze"
+      ],
+      "intro": "",
+      "items": [
+        {
+          "id": "pb-d2-bench",
+          "name": "Bench Press",
+          "kind": "main",
+          "lift": "bench",
+          "log": "lift",
+          "equip": "Barbell",
+          "top": {
+            "sets": "1 × 5",
+            "left": "3 (Wk A), 2 (Wk B)",
+            "rest": "4 min",
+            "notes": "Spotter or safety arms."
+          },
+          "backoff": {
+            "sets": "3 × 5",
+            "left": "About 3",
+            "rest": "3 min",
+            "notes": "10% lighter than the top set"
+          },
+          "swap": "Smith or dumbbell bench"
+        },
+        {
+          "id": "pb-d2-chin",
+          "pair": "A1",
+          "name": "Weighted Chin-up",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Pull-up bar, dip belt",
+          "sets": "3 × 5–8",
+          "setCount": 3,
+          "repMin": 5,
+          "repMax": 8,
+          "left": "2",
+          "rest": "None",
+          "notes": "Palms facing you. Under 5 bodyweight reps: skip the added weight.",
+          "swap": "lat pulldown"
+        },
+        {
+          "id": "pb-d2-dip",
+          "pair": "A2",
+          "name": "Weighted Dip",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Dip station, dip belt",
+          "sets": "3 × 6–10",
+          "setCount": 3,
+          "repMin": 6,
+          "repMax": 10,
+          "left": "2",
+          "rest": "2 min after the pair",
+          "notes": "Stop when upper arms are level with the floor.",
+          "swap": "bodyweight or machine dip"
+        },
+        {
+          "id": "pb-d2-ohp",
+          "name": "Standing Overhead Press",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Barbell",
+          "sets": "3 × 6–8",
+          "setCount": 3,
+          "repMin": 6,
+          "repMax": 8,
+          "left": "3",
+          "rest": "2 min",
+          "notes": "Squeeze glutes; no lean-back.",
+          "swap": "seated dumbbell press"
+        },
+        {
+          "id": "pb-d2-suitcase",
+          "name": "Suitcase Carry",
+          "kind": "carry",
+          "log": "carry",
+          "equip": "Kettlebell or dumbbell, one hand",
+          "sets": "3 × 30 m each side",
+          "setCount": 3,
+          "repMin": 30,
+          "repMax": 30,
+          "left": "3",
+          "rest": "60 s",
+          "notes": "Walk tall without leaning. Start at about a third of bodyweight.",
+          "swap": "hold still 30 s each side"
+        },
+        {
+          "id": "pb-d2-cardio",
+          "name": "Easy Bike",
+          "kind": "cardio",
+          "log": "time",
+          "equip": "Bike",
+          "sets": "20 min",
+          "setCount": 1,
+          "repMin": 20,
+          "repMax": 20,
+          "left": "Can still talk",
+          "rest": "",
+          "notes": "Straight after, or later in the day (better for strength).",
+          "swap": "rower"
+        }
+      ]
+    },
+    {
+      "n": 3,
+      "title": "Deadlift, Back, Hamstrings",
+      "time": "60–70 min",
+      "roll": "glutes, hamstrings, lats",
+      "moves": [
+        "Hip hinge with a broomstick along the back",
+        "Glute bridge"
+      ],
+      "intro": "",
+      "items": [
+        {
+          "id": "pb-d3-deadlift",
+          "name": "Deadlift",
+          "kind": "main",
+          "lift": "deadlift",
+          "log": "lift",
+          "equip": "Barbell",
+          "variants": "PBDL",
+          "top": {
+            "sets": "1 × 5",
+            "left": "3 (Wk A), 2 (Wk B)",
+            "rest": "4 min",
+            "notes": "Stance you will test (sumo by default)."
+          },
+          "backoff": {
+            "sets": "2 × 5",
+            "left": "About 3",
+            "rest": "3 min",
+            "notes": "10% lighter; reset between reps"
+          },
+          "swap": "hex-bar deadlift"
+        },
+        {
+          "id": "pb-d3-rdl",
+          "name": "Romanian Deadlift",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Barbell",
+          "sets": "3 × 8",
+          "setCount": 3,
+          "repMin": 8,
+          "repMax": 8,
+          "left": "3",
+          "rest": "2 min",
+          "notes": "Push hips back, stop before the back rounds.",
+          "swap": "dumbbell version"
+        },
+        {
+          "id": "pb-d3-csrow",
+          "pair": "A1",
+          "name": "Chest-Supported Row",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Bench or machine",
+          "sets": "3 × 8–10",
+          "setCount": 3,
+          "repMin": 8,
+          "repMax": 10,
+          "left": "2",
+          "rest": "None",
+          "notes": "Chest stays on the pad.",
+          "swap": "machine row"
+        },
+        {
+          "id": "pb-d3-pulldown",
+          "pair": "A2",
+          "name": "Lat Pulldown",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Cable",
+          "sets": "3 × 10–12",
+          "setCount": 3,
+          "repMin": 10,
+          "repMax": 12,
+          "left": "1–2",
+          "rest": "90 s after the pair",
+          "notes": "",
+          "swap": "pull-up"
+        },
+        {
+          "id": "pb-d3-legcurl",
+          "name": "Lying Leg Curl",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Machine",
+          "sets": "3 × 10–12",
+          "setCount": 3,
+          "repMin": 10,
+          "repMax": 12,
+          "left": "1",
+          "rest": "60 s",
+          "notes": "Lower slowly.",
+          "swap": "seated leg curl"
+        },
+        {
+          "id": "pb-d3-nordic",
+          "name": "Nordic Hamstring Curl",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Bodyweight",
+          "sets": "2 × 3–5",
+          "setCount": 2,
+          "repMin": 3,
+          "repMax": 5,
+          "left": "Stop when the lowering can't be controlled",
+          "rest": "90 s",
+          "notes": "Kneel, feet held down, lower slowly and catch yourself with your hands.",
+          "swap": "glute-ham raise",
+          "rule": "nordic"
+        }
+      ]
+    },
+    {
+      "n": 4,
+      "title": "Dumbbells, Stretching",
+      "time": "80–90 min",
+      "roll": "lats, chest, thighs, calves",
+      "moves": [
+        "Band pull-apart",
+        "Wall slide"
+      ],
+      "intro": "Exercises run in pairs: A1 then A2, rest, repeat. Where it says \"to failure\", the last set goes until no clean rep is left.",
+      "items": [
+        {
+          "id": "pb-d4-lateral",
+          "pair": "A1",
+          "name": "Lateral Raise",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "3 × 12–20",
+          "setCount": 3,
+          "repMin": 12,
+          "repMax": 20,
+          "left": "1, last set to failure",
+          "rest": "None",
+          "notes": "",
+          "swap": "cable lateral raise"
+        },
+        {
+          "id": "pb-d4-reardelt",
+          "pair": "A2",
+          "name": "Rear-Delt Fly",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell, incline bench",
+          "sets": "3 × 12–20",
+          "setCount": 3,
+          "repMin": 12,
+          "repMax": 20,
+          "left": "1, last set to failure",
+          "rest": "60 s",
+          "notes": "Chest on the bench.",
+          "swap": "reverse pec deck"
+        },
+        {
+          "id": "pb-d4-inccurl",
+          "pair": "B1",
+          "name": "Incline Curl",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "3 × 10–15",
+          "setCount": 3,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1, last set to failure",
+          "rest": "None",
+          "notes": "",
+          "swap": "cable curl"
+        },
+        {
+          "id": "pb-d4-ohext",
+          "pair": "B2",
+          "name": "Overhead Triceps Extension",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "3 × 10–15",
+          "setCount": 3,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1, last set to failure",
+          "rest": "60 s",
+          "notes": "One dumbbell, both hands.",
+          "swap": "cable version"
+        },
+        {
+          "id": "pb-d4-fly",
+          "pair": "C1",
+          "name": "Dumbbell Fly",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 10–15",
+          "setCount": 2,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1–2",
+          "rest": "None",
+          "notes": "",
+          "swap": "pec deck"
+        },
+        {
+          "id": "pb-d4-hammer",
+          "pair": "C2",
+          "name": "Hammer Curl",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 10–15",
+          "setCount": 2,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1, last set to failure",
+          "rest": "60 s",
+          "notes": "",
+          "swap": "rope cable curl"
+        },
+        {
+          "id": "pb-d4-skull",
+          "pair": "D1",
+          "name": "Dumbbell Skull Crusher",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 10–15",
+          "setCount": 2,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1, last set to failure",
+          "rest": "None",
+          "notes": "",
+          "swap": "cable pushdown"
+        },
+        {
+          "id": "pb-d4-shrug",
+          "pair": "D2",
+          "name": "Dumbbell Shrug",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 10–15",
+          "setCount": 2,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1",
+          "rest": "60 s",
+          "notes": "Hold 1 second at the top.",
+          "swap": "trap-bar shrug"
+        },
+        {
+          "id": "pb-d4-calf",
+          "name": "Single-Leg Calf Raise",
+          "kind": "accessory",
+          "log": "lift",
+          "equip": "Dumbbell",
+          "sets": "2 × 10–15 each leg",
+          "setCount": 2,
+          "repMin": 10,
+          "repMax": 15,
+          "left": "1",
+          "rest": "45 s",
+          "notes": "",
+          "swap": "calf machine"
+        },
+        {
+          "id": "pb-d4-stretch",
+          "name": "Stretching",
+          "kind": "stretch",
+          "log": "check",
+          "equip": "Floor, bar",
+          "sets": "10 min",
+          "setCount": 4,
+          "left": "Easy",
+          "rest": "",
+          "notes": "Couch stretch, deep goblet squat hold, doorway chest stretch: 2 × 45 s each. Hang from a bar 2 × 20–40 s",
+          "swap": "",
+          "checklist": [
+            "Couch stretch, 2 × 45 s",
+            "Deep goblet squat hold, 2 × 45 s",
+            "Doorway chest stretch, 2 × 45 s",
+            "Hang from a bar, 2 × 20–40 s"
+          ]
+        },
+        {
+          "id": "pb-d4-cardio",
+          "name": "Easy Bike",
+          "kind": "cardio",
+          "log": "time",
+          "equip": "Bike",
+          "sets": "20–25 min",
+          "setCount": 1,
+          "repMin": 20,
+          "repMax": 25,
+          "left": "Can still talk",
+          "rest": "",
+          "notes": "",
+          "swap": "rower or incline walk"
+        }
+      ]
+    },
+    {
+      "n": 5,
+      "title": "Lighter Squat, Carries",
+      "time": "65–75 min",
+      "roll": "thighs, glutes, upper back",
+      "moves": [
+        "Goblet squat",
+        "Band pull-apart"
+      ],
+      "intro": "",
+      "items": [
+        {
+          "id": "pb-d5-psquat",
+          "name": "Paused Back Squat",
+          "kind": "secondary",
+          "log": "lift",
+          "equip": "Barbell",
+          "sets": "3 × 4",
+          "setCount": 3,
+          "repMin": 4,
+          "repMax": 4,
+          "left": "3–4 (Wk A), 3 (Wk B)",
+          "leftByWeek": {
+            "A": "3–4",
+            "B": "3"
+          },
+          "rest": "3 min",
+          "notes": "Pause 2 seconds at the bottom. Back still tired from Day 3? Front squat instead (see flag 2)",
+          "swap": ""
+        },
+        {
+          "id": "pb-d5-cgbench",
+          "name": "Close-Grip Bench Press",
+          "kind": "secondary",
+          "log": "lift",
+          "equip": "Barbell",
+          "sets": "3 × 6–8",
+          "setCount": 3,
+          "repMin": 6,
+          "repMax": 8,
+          "left": "3 (Wk A), 2 (Wk B)",
+          "leftByWeek": {
+            "A": "3",
+            "B": "2"
+          },
+          "rest": "2 min",
+          "notes": "Hands a thumb's width narrower than usual.",
+          "swap": "dumbbell close-grip press"
+        },
+        {
+          "id": "pb-d5-pushup",
+          "pair": "A1",
+          "name": "Weighted Push-up",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Bodyweight, plate",
+          "sets": "2 × 8–15",
+          "setCount": 2,
+          "repMin": 8,
+          "repMax": 15,
+          "left": "2",
+          "rest": "None",
+          "notes": "Plate on the back.",
+          "swap": "feet-raised push-up"
+        },
+        {
+          "id": "pb-d5-hlr",
+          "pair": "A2",
+          "name": "Hanging Leg Raise",
+          "kind": "accessory",
+          "log": "bw",
+          "equip": "Pull-up bar",
+          "sets": "2 × 8–15",
+          "setCount": 2,
+          "repMin": 8,
+          "repMax": 15,
+          "left": "2",
+          "rest": "90 s after the pair",
+          "notes": "No swinging.",
+          "swap": "knee raise in the dip station"
+        },
+        {
+          "id": "pb-d5-farmer",
+          "name": "Hex-Bar Farmer's Carry",
+          "kind": "carry",
+          "log": "carry",
+          "equip": "Hex bar",
+          "sets": "4 × 20–30 m",
+          "setCount": 4,
+          "repMin": 20,
+          "repMax": 30,
+          "left": "2",
+          "rest": "2 min",
+          "notes": "Start near bodyweight on the bar; add 10 kg when all sets feel like 3 left.",
+          "swap": "two heavy dumbbells",
+          "rule": "carry",
+          "swapNote": "With dumbbells: start at about a third of bodyweight in each hand. Go up one dumbbell size (usually 2–2.5 kg per hand) when every carry is Steady or easier. Log the weight of one dumbbell."
+        },
+        {
+          "id": "pb-d5-sprints",
+          "name": "Bike Sprints",
+          "kind": "cardio",
+          "log": "rounds",
+          "equip": "Bike",
+          "sets": "8 rounds: 20 s hard, 70 s easy",
+          "setCount": 1,
+          "repMin": 8,
+          "repMax": 8,
+          "left": "Hard, not all-out",
+          "rest": "",
+          "notes": "After lifting; the weekend gives recovery.",
+          "swap": "rower. No running"
+        }
+      ]
+    }
+  ]
+}

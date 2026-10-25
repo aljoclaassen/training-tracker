@@ -1,0 +1,647 @@
+/* =====================================================================
+   THEME: design tokens for the whole app (Fitness style, five multi-colour themes)
+   Edit here, then run build.py: it inlines this file into index.html so the
+   app still works as one offline file. Components read only these tokens.
+   ===================================================================== */
+:root{
+  /* Type: system fonts only, nothing downloaded */
+  --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-family-numeral: ui-rounded, "SF Pro Rounded", -apple-system, system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-size-xs: 12px;          /* tags, counts, badges */
+  --font-size-small: 14px;       /* secondary text */
+  --font-size-base: 16px;        /* body */
+  --font-size-large: 20px;       /* section and session titles */
+  --font-size-title: 34px;       /* large page titles */
+  --font-size-section: 22px;     /* section titles */
+  --font-size-metric: 28px;      /* colour-coded numbers */
+  --font-size-numeral: 22px;     /* set inputs */
+  --font-size-timer: 28px;       /* rest timer */
+  --font-weight-normal: 400;
+  --font-weight-bold: 600;
+  --font-weight-heavy: 700;      /* page titles and numbers (was 800: too heavy) */
+  --line-height-base: 1.45;
+  --line-height-tight: 1.2;
+  --letter-spacing-tight: -.02em;
+  /* Spacing: 8px scale with a 4px half step */
+  --space-0-5: 4px;
+  --space-1: 8px;
+  --space-1-5: 12px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --space-5: 40px;
+  --space-6: 48px;
+  /* Sizes */
+  --size-tap: 44px;              /* minimum touch target */
+  --size-input: 56px;
+  --size-input-height: 52px;     /* set inputs and steppers: bigger for sweaty thumbs */
+  --size-badge: 30px;
+  --size-status: 30px;
+  --size-icon: 22px;
+  --size-content-max: 960px;
+  --size-dialog-max: 560px;
+  --size-nav: 64px;
+  --size-ring-summary: 104px;
+  --size-sheet-top: 96px;        /* space kept above the exercise sheet */
+  --size-grabber: 40px;
+  --size-progress: 8px;
+  --size-chevron: 10px;
+  --size-check: 22px;
+  --size-textarea: 120px;
+  --size-tile: 72px;
+  --size-tile-min: 88px;
+  --size-stepper-min: 128px;
+  --size-select-min: 160px;
+  --size-table-min: 640px;
+  --size-rest-clearance: 72px;   /* toast sits below the rest bar */
+  --size-hazard-default: 96px;
+  --border-width: 1px;
+  --border-width-control: 1.5px;
+  --border-width-strong: 2px;
+  --border-width-marker: 4px;
+  --focus-width: 3px;
+  --focus-offset: 2px;
+  --ring-stroke: 6px;
+  /* Shape */
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+  --radius-round: 50%;
+  /* Motion: 150 to 250ms, eased; all off with reduced motion */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --duration-fast: 150ms;
+  --duration-med: 200ms;
+  --duration-slow: 250ms;
+  --press-scale: scale(.97);
+  /* Depth (light): layered shadows */
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, .06);
+  --shadow-2: 0 1px 2px rgba(16, 24, 40, .06), 0 6px 18px rgba(16, 24, 40, .08);
+  --shadow-3: 0 12px 32px rgba(16, 24, 40, .18);
+  --color-card-border: var(--color-border);
+  --blur-bar: saturate(180%) blur(20px);
+  --nav-opacity: 90%;
+}
+/* Depth (dark): no shadows on cards; lighter surfaces on a near-black base do the work */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --shadow-1: none; --shadow-2: none; --shadow-3: 0 12px 32px rgba(0, 0, 0, .6); --color-card-border: transparent; }
+}
+:root[data-theme="dark"]{ --shadow-1: none; --shadow-2: none; --shadow-3: 0 12px 32px rgba(0, 0, 0, .6); --color-card-border: transparent; }
+
+/* =====================================================================
+   COLOUR TOKENS: 5 themes, each in light and dark. Pulse is the default.
+   Roles: bg (page) · surface (cards) · surface-alt (inset rows) · surface-raised (dialogs)
+   text · text-muted (4.5:1+) · border (dividers) · border-control (inputs, 3:1+)
+   accent · on-accent · accent-soft · accent-text · metric-1 to 4 (colour-coded numbers) · grad (progress)
+   success · best (beat last time)
+   missed · danger · hazard (missed-day card) · inverse (toast, rest bar) · focus · scrim
+   ===================================================================== */
+:root{
+  --color-bg: #F2F2F5;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #ECECF1;
+  --color-surface-raised: #FFFFFF;
+  --color-fill-track: #E2E2E8;
+  --color-text: #0B0B0F;
+  --color-text-muted: #585862;
+  --color-border: #D8D8DF;
+  --color-border-control: #7C7C86;
+  --color-accent: #BC0C35;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #F7E2E7;
+  --color-accent-text: #BC0C35;
+  --color-metric-1: #C8123C;
+  --color-metric-2: #3D7300;
+  --color-metric-3: #006F86;
+  --color-metric-4: #8A5800;
+  --color-grad-start: #FF2E63;
+  --color-grad-end: #FF8A5B;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #E8DECC;
+  --color-on-best: #0B0B0F;
+  --color-best-line: #8A5800;
+  --color-missed: #585862;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #0B0B0F;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #0B0B0F;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+:root[data-palette="dune"]{
+  --color-bg: #F6F0E7;
+  --color-surface: #FFFDF9;
+  --color-surface-alt: #F0E8DC;
+  --color-surface-raised: #FFFDF9;
+  --color-fill-track: #E6DCCD;
+  --color-text: #1E150D;
+  --color-text-muted: #625545;
+  --color-border: #DED2C1;
+  --color-border-control: #857560;
+  --color-accent: #A6461B;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #F4E7DE;
+  --color-accent-text: #A6461B;
+  --color-metric-1: #A6461B;
+  --color-metric-2: #855A00;
+  --color-metric-3: #3F6B3D;
+  --color-metric-4: #A33A3A;
+  --color-grad-start: #D9622B;
+  --color-grad-end: #F2B04E;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #EDD6D3;
+  --color-on-best: #1E150D;
+  --color-best-line: #A33A3A;
+  --color-missed: #625545;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #1E150D;
+  --color-inverse-text: #FFFDF9;
+  --color-focus: #1E150D;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+:root[data-palette="glacier"]{
+  --color-bg: #EDF2F7;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #E6EDF4;
+  --color-surface-raised: #FFFFFF;
+  --color-fill-track: #DAE3EC;
+  --color-text: #0A1420;
+  --color-text-muted: #4E5D6E;
+  --color-border: #D2DCE6;
+  --color-border-control: #718395;
+  --color-accent: #0B63A8;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #E2ECF5;
+  --color-accent-text: #0B63A8;
+  --color-metric-1: #0B63A8;
+  --color-metric-2: #00715D;
+  --color-metric-3: #4A49B8;
+  --color-metric-4: #6B6100;
+  --color-grad-start: #1E8FE0;
+  --color-grad-end: #3CCFB4;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #E1DFCC;
+  --color-on-best: #0A1420;
+  --color-best-line: #6B6100;
+  --color-missed: #4E5D6E;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #0A1420;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #0A1420;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+:root[data-palette="forge"]{
+  --color-bg: #ECECEE;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #E5E5E8;
+  --color-surface-raised: #FFFFFF;
+  --color-fill-track: #DADADE;
+  --color-text: #111214;
+  --color-text-muted: #55575D;
+  --color-border: #D2D2D7;
+  --color-border-control: #76787F;
+  --color-accent: #A84200;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #F5E8E0;
+  --color-accent-text: #A84200;
+  --color-metric-1: #A84200;
+  --color-metric-2: #1D5FA8;
+  --color-metric-3: #7A5800;
+  --color-metric-4: #B3261E;
+  --color-grad-start: #E85D04;
+  --color-grad-end: #FFB02E;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #F0D4D2;
+  --color-on-best: #111214;
+  --color-best-line: #B3261E;
+  --color-missed: #55575D;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #111214;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #111214;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+:root[data-palette="bloom"]{
+  --color-bg: #F6F0F7;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #EFE7F1;
+  --color-surface-raised: #FFFFFF;
+  --color-fill-track: #E5DAE8;
+  --color-text: #1A0F1F;
+  --color-text-muted: #5E5066;
+  --color-border: #DDD0E1;
+  --color-border-control: #7D6F85;
+  --color-accent: #B0127A;
+  --color-on-accent: #FFFFFF;
+  --color-accent-soft: #F6E3EF;
+  --color-accent-text: #B0127A;
+  --color-metric-1: #B0127A;
+  --color-metric-2: #2D7535;
+  --color-metric-3: #7A5800;
+  --color-metric-4: #0A62A8;
+  --color-grad-start: #E0258F;
+  --color-grad-end: #8A5CF6;
+  --color-success: #1C7440;
+  --color-on-success: #FFFFFF;
+  --color-success-soft: #DDF2E5;
+  --color-best: #CEE0EE;
+  --color-on-best: #1A0F1F;
+  --color-best-line: #0A62A8;
+  --color-missed: #5E5066;
+  --color-danger: #B42318;
+  --color-on-danger: #FFFFFF;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #1A0F1F;
+  --color-inverse-text: #FFFFFF;
+  --color-focus: #1A0F1F;
+  --color-scrim: rgba(8, 10, 14, .45);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --color-bg: #000000;
+    --color-surface: #1A1A1E;
+    --color-surface-alt: #26262B;
+    --color-surface-raised: #222227;
+    --color-fill-track: #2E2E34;
+    --color-text: #F5F5F7;
+    --color-text-muted: #A1A1AA;
+    --color-border: #2C2C32;
+    --color-border-control: #6E6E78;
+    --color-accent: #FF4D6D;
+    --color-on-accent: #1A0009;
+    --color-accent-soft: #43232C;
+    --color-accent-text: #FF6883;
+    --color-metric-1: #FF4D6D;
+    --color-metric-2: #B6F34A;
+    --color-metric-3: #3FD7F5;
+    --color-metric-4: #FFC23D;
+    --color-grad-start: #FF2E63;
+    --color-grad-end: #FF9A6B;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #514225;
+    --color-on-best: #F5F5F7;
+    --color-best-line: #FFC23D;
+    --color-missed: #A1A1AA;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F5F5F7;
+    --color-inverse-text: #1A1A1E;
+    --color-focus: #F5F5F7;
+    --color-scrim: rgba(0, 0, 0, .65);
+  }
+  :root[data-palette="dune"]:not([data-theme="light"]){
+    --color-bg: #0D0A07;
+    --color-surface: #1E1914;
+    --color-surface-alt: #2A231C;
+    --color-surface-raised: #251F19;
+    --color-fill-track: #322A22;
+    --color-text: #F7F0E6;
+    --color-text-muted: #B5A893;
+    --color-border: #3A3028;
+    --color-border-control: #7E705E;
+    --color-accent: #EE8A55;
+    --color-on-accent: #1E0B02;
+    --color-accent-soft: #432D20;
+    --color-accent-text: #F19C6E;
+    --color-metric-1: #EE8A55;
+    --color-metric-2: #F2C14E;
+    --color-metric-3: #9CC79A;
+    --color-metric-4: #F59A9A;
+    --color-grad-start: #EE7A45;
+    --color-grad-end: #F2C14E;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #523834;
+    --color-on-best: #F7F0E6;
+    --color-best-line: #F59A9A;
+    --color-missed: #B5A893;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F7F0E6;
+    --color-inverse-text: #1E1914;
+    --color-focus: #F7F0E6;
+    --color-scrim: rgba(0, 0, 0, .65);
+  }
+  :root[data-palette="glacier"]:not([data-theme="light"]){
+    --color-bg: #04080C;
+    --color-surface: #111A22;
+    --color-surface-alt: #1B2630;
+    --color-surface-raised: #16202A;
+    --color-fill-track: #22303C;
+    --color-text: #EEF4F9;
+    --color-text-muted: #9DAEBF;
+    --color-border: #25333F;
+    --color-border-control: #647A8E;
+    --color-accent: #5CC8FF;
+    --color-on-accent: #00121F;
+    --color-accent-soft: #1E394A;
+    --color-accent-text: #74D0FF;
+    --color-metric-1: #5CC8FF;
+    --color-metric-2: #64E6C8;
+    --color-metric-3: #A3ABFF;
+    --color-metric-4: #E6EE7A;
+    --color-grad-start: #4FB4FF;
+    --color-grad-end: #64E6C8;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #444D37;
+    --color-on-best: #EEF4F9;
+    --color-best-line: #E6EE7A;
+    --color-missed: #9DAEBF;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #EEF4F9;
+    --color-inverse-text: #111A22;
+    --color-focus: #EEF4F9;
+    --color-scrim: rgba(0, 0, 0, .65);
+  }
+  :root[data-palette="forge"]:not([data-theme="light"]){
+    --color-bg: #090909;
+    --color-surface: #1A1B1D;
+    --color-surface-alt: #252629;
+    --color-surface-raised: #202124;
+    --color-fill-track: #2D2E32;
+    --color-text: #F4F4F5;
+    --color-text-muted: #A3A5AB;
+    --color-border: #2E2F33;
+    --color-border-control: #6F7178;
+    --color-accent: #FF7A1A;
+    --color-on-accent: #1A0A00;
+    --color-accent-soft: #432C1C;
+    --color-accent-text: #FF8E3C;
+    --color-metric-1: #FF7A1A;
+    --color-metric-2: #6FB6FF;
+    --color-metric-3: #E8C468;
+    --color-metric-4: #FF6B60;
+    --color-grad-start: #FF6A00;
+    --color-grad-end: #FFC04D;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #512E2D;
+    --color-on-best: #F4F4F5;
+    --color-best-line: #FF6B60;
+    --color-missed: #A3A5AB;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F4F4F5;
+    --color-inverse-text: #1A1B1D;
+    --color-focus: #F4F4F5;
+    --color-scrim: rgba(0, 0, 0, .65);
+  }
+  :root[data-palette="bloom"]:not([data-theme="light"]){
+    --color-bg: #0A0610;
+    --color-surface: #1C1424;
+    --color-surface-alt: #271D31;
+    --color-surface-raised: #22192B;
+    --color-fill-track: #30253B;
+    --color-text: #F8F0FA;
+    --color-text-muted: #B4A3BF;
+    --color-border: #33283E;
+    --color-border-control: #7A6C86;
+    --color-accent: #FF5FBF;
+    --color-on-accent: #1F0014;
+    --color-accent-soft: #452240;
+    --color-accent-text: #FF77C9;
+    --color-metric-1: #FF5FBF;
+    --color-metric-2: #7EE08A;
+    --color-metric-3: #FFD447;
+    --color-metric-4: #5DB8FF;
+    --color-grad-start: #FF4FB8;
+    --color-grad-end: #A47CFF;
+    --color-success: #3CCB79;
+    --color-on-success: #03140A;
+    --color-success-soft: #10291B;
+    --color-best: #2C3B59;
+    --color-on-best: #F8F0FA;
+    --color-best-line: #5DB8FF;
+    --color-missed: #B4A3BF;
+    --color-danger: #FF7B6F;
+    --color-on-danger: #1A0503;
+    --color-hazard: #FFD21F;
+    --color-on-hazard: #111111;
+    --color-inverse-bg: #F8F0FA;
+    --color-inverse-text: #1C1424;
+    --color-focus: #F8F0FA;
+    --color-scrim: rgba(0, 0, 0, .65);
+  }
+}
+:root[data-theme="dark"]{
+  --color-bg: #000000;
+  --color-surface: #1A1A1E;
+  --color-surface-alt: #26262B;
+  --color-surface-raised: #222227;
+  --color-fill-track: #2E2E34;
+  --color-text: #F5F5F7;
+  --color-text-muted: #A1A1AA;
+  --color-border: #2C2C32;
+  --color-border-control: #6E6E78;
+  --color-accent: #FF4D6D;
+  --color-on-accent: #1A0009;
+  --color-accent-soft: #43232C;
+  --color-accent-text: #FF6883;
+  --color-metric-1: #FF4D6D;
+  --color-metric-2: #B6F34A;
+  --color-metric-3: #3FD7F5;
+  --color-metric-4: #FFC23D;
+  --color-grad-start: #FF2E63;
+  --color-grad-end: #FF9A6B;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #514225;
+  --color-on-best: #F5F5F7;
+  --color-best-line: #FFC23D;
+  --color-missed: #A1A1AA;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F5F5F7;
+  --color-inverse-text: #1A1A1E;
+  --color-focus: #F5F5F7;
+  --color-scrim: rgba(0, 0, 0, .65);
+}
+:root[data-palette="dune"][data-theme="dark"]{
+  --color-bg: #0D0A07;
+  --color-surface: #1E1914;
+  --color-surface-alt: #2A231C;
+  --color-surface-raised: #251F19;
+  --color-fill-track: #322A22;
+  --color-text: #F7F0E6;
+  --color-text-muted: #B5A893;
+  --color-border: #3A3028;
+  --color-border-control: #7E705E;
+  --color-accent: #EE8A55;
+  --color-on-accent: #1E0B02;
+  --color-accent-soft: #432D20;
+  --color-accent-text: #F19C6E;
+  --color-metric-1: #EE8A55;
+  --color-metric-2: #F2C14E;
+  --color-metric-3: #9CC79A;
+  --color-metric-4: #F59A9A;
+  --color-grad-start: #EE7A45;
+  --color-grad-end: #F2C14E;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #523834;
+  --color-on-best: #F7F0E6;
+  --color-best-line: #F59A9A;
+  --color-missed: #B5A893;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F7F0E6;
+  --color-inverse-text: #1E1914;
+  --color-focus: #F7F0E6;
+  --color-scrim: rgba(0, 0, 0, .65);
+}
+:root[data-palette="glacier"][data-theme="dark"]{
+  --color-bg: #04080C;
+  --color-surface: #111A22;
+  --color-surface-alt: #1B2630;
+  --color-surface-raised: #16202A;
+  --color-fill-track: #22303C;
+  --color-text: #EEF4F9;
+  --color-text-muted: #9DAEBF;
+  --color-border: #25333F;
+  --color-border-control: #647A8E;
+  --color-accent: #5CC8FF;
+  --color-on-accent: #00121F;
+  --color-accent-soft: #1E394A;
+  --color-accent-text: #74D0FF;
+  --color-metric-1: #5CC8FF;
+  --color-metric-2: #64E6C8;
+  --color-metric-3: #A3ABFF;
+  --color-metric-4: #E6EE7A;
+  --color-grad-start: #4FB4FF;
+  --color-grad-end: #64E6C8;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #444D37;
+  --color-on-best: #EEF4F9;
+  --color-best-line: #E6EE7A;
+  --color-missed: #9DAEBF;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #EEF4F9;
+  --color-inverse-text: #111A22;
+  --color-focus: #EEF4F9;
+  --color-scrim: rgba(0, 0, 0, .65);
+}
+:root[data-palette="forge"][data-theme="dark"]{
+  --color-bg: #090909;
+  --color-surface: #1A1B1D;
+  --color-surface-alt: #252629;
+  --color-surface-raised: #202124;
+  --color-fill-track: #2D2E32;
+  --color-text: #F4F4F5;
+  --color-text-muted: #A3A5AB;
+  --color-border: #2E2F33;
+  --color-border-control: #6F7178;
+  --color-accent: #FF7A1A;
+  --color-on-accent: #1A0A00;
+  --color-accent-soft: #432C1C;
+  --color-accent-text: #FF8E3C;
+  --color-metric-1: #FF7A1A;
+  --color-metric-2: #6FB6FF;
+  --color-metric-3: #E8C468;
+  --color-metric-4: #FF6B60;
+  --color-grad-start: #FF6A00;
+  --color-grad-end: #FFC04D;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #512E2D;
+  --color-on-best: #F4F4F5;
+  --color-best-line: #FF6B60;
+  --color-missed: #A3A5AB;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F4F4F5;
+  --color-inverse-text: #1A1B1D;
+  --color-focus: #F4F4F5;
+  --color-scrim: rgba(0, 0, 0, .65);
+}
+:root[data-palette="bloom"][data-theme="dark"]{
+  --color-bg: #0A0610;
+  --color-surface: #1C1424;
+  --color-surface-alt: #271D31;
+  --color-surface-raised: #22192B;
+  --color-fill-track: #30253B;
+  --color-text: #F8F0FA;
+  --color-text-muted: #B4A3BF;
+  --color-border: #33283E;
+  --color-border-control: #7A6C86;
+  --color-accent: #FF5FBF;
+  --color-on-accent: #1F0014;
+  --color-accent-soft: #452240;
+  --color-accent-text: #FF77C9;
+  --color-metric-1: #FF5FBF;
+  --color-metric-2: #7EE08A;
+  --color-metric-3: #FFD447;
+  --color-metric-4: #5DB8FF;
+  --color-grad-start: #FF4FB8;
+  --color-grad-end: #A47CFF;
+  --color-success: #3CCB79;
+  --color-on-success: #03140A;
+  --color-success-soft: #10291B;
+  --color-best: #2C3B59;
+  --color-on-best: #F8F0FA;
+  --color-best-line: #5DB8FF;
+  --color-missed: #B4A3BF;
+  --color-danger: #FF7B6F;
+  --color-on-danger: #1A0503;
+  --color-hazard: #FFD21F;
+  --color-on-hazard: #111111;
+  --color-inverse-bg: #F8F0FA;
+  --color-inverse-text: #1C1424;
+  --color-focus: #F8F0FA;
+  --color-scrim: rgba(0, 0, 0, .65);
+}
+/* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength, cards keep outlines. */
+@media (prefers-contrast: more){
+  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+}
+:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+/* Theme switch: a short cross-fade, off when motion is reduced */
+:root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after{ transition: background-color var(--duration-med) var(--ease), color var(--duration-med) var(--ease), border-color var(--duration-med) var(--ease), fill var(--duration-med) var(--ease), stroke var(--duration-med) var(--ease) !important; }

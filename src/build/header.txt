@@ -1,0 +1,174 @@
+<!--
+=======================================================================
+TRAINING TRACKER: HEAVY DUTY + POWERBUILDING
+Handover notes for the CSS team and the Python team.
+=======================================================================
+
+WHAT THE APP DOES
+  One offline page for logging gym sessions on two plans that swap every
+  two weeks: Heavy Duty (one all-out set per exercise) and Powerbuilding
+  (top set + back-offs on squat, bench and deadlift, set by "reps left").
+  It opens on today's session, logs reps and weight per set, compares
+  with last time, suggests next targets, handles swapped, skipped and
+  missed exercises and days, and exports a weekly file.
+  No libraries, no network. Works from a saved .html file in a phone browser.
+
+FILE LAYOUT
+  <style>            Design tokens first (theme.css, inlined at build: type, 8px spacing, radii,
+                     layered shadows, motion, 5 multi-colour themes in light and dark), then sections;
+                     the Fitness-style layout layer (summary card, weekday buttons, exercise sheet,
+                     live bar) is the last section
+                     base, buttons and forms, header, panels, train view,
+                     exercise rows, plan view, floating controls, dialogs.
+  <body>             Semantic markup, one commented block per section.
+  <script>           Layer 0  compatibility fixes
+                     Layer 1  DATA: CONFIG and PROGRAMME (pure JSON)
+                     Layer 2  LOGIC: pure functions (2.1 to 2.21)
+                     Layer 2b STORAGE: the only code that saves or loads
+                     Layer 3  DISPLAY: rendering and event handlers (3.1 to 3.16)
+  Display never calculates; it calls logic. Logic never touches the page.
+
+DATA STRUCTURE (Layer 1)
+  CONFIG     Settings, labels, reasons, reps-left scale, themes, glossary,
+             muscle rules (regex text), export file prefixes.
+  PROGRAMME  {version, plans: {hd, pb}}
+    plans.hd {id, name, summary, legend, weekLabels, variants{KEY:[{id,label,rows,unit?}]},
+              days[{n, title, groups[{title, items[{id, name, equip, sets, reps, rest, notes,
+              tag?, rows?, variants? (KEY), optional?}]}]}]}
+              "sets" uses the plan's notation ("2W + 1"); "reps" holds the
+              prescription with percentages ("15 @ 50%, 12 @ 70% → 10–12 @ 100%").
+    plans.pb {id, name, summary, weekLabels, variants, warmup, mainLifts, topSetLadder,
+              topSetOutcome, backoffCheck, fortnights[{n, top{A,B}, backoff{sets,reps,pct}, changes}],
+              secondaryPattern, topSetRules, accessoryRule, nordicRule, carryRule, estimatedMax,
+              testWeek, badDay, days[{n, title, time, roll, moves, intro, items[...]}]}
+              Item: {id, name, kind (main|secondary|accessory|carry|cardio|stretch), log
+              (lift|bw|carry|time|rounds|check), equip, sets, setCount, repMin, repMax, left,
+              leftByWeek?, rest, notes, swap, pair? ("A1"), lift? (main lifts), top/backoff (main lifts),
+              checklist? (stretching), rule? (nordic|carry)}
+  Exercise ids never change. Heavy Duty: d1-0 ... d5-7 (plus d2-pec, d3-facepull,
+  d4-ohcable). Removed ids stay unused: d4-underpd (underhand pushdown), d3-9 (optional
+  deadlift, removed 11 October 2026); old logs for them are ignored. Powerbuilding: pb-d1-squat ... pb-d5-sprints, plus pb-dN-warmup
+  for each day's warm-up checklist (new, not counted toward progress).
+
+STORAGE KEYS
+  localStorage "heavy-duty-tracker-v1": the whole state, JSON. Unchanged key.
+  State = the Heavy Duty slot at the top level (exactly the version 1 shape, so
+  old saves load untouched) plus:
+    cycle {start (Monday, YYYY-MM-DD), first ("hd"|"pb"), lengths [weeks per block, 0 to 12]}   set on first use;
+          missing lengths mean two weeks, so older saves load unchanged
+    pb    a second slot with the same shape, for powerbuilding
+    ui    {tab ("train"|"plan"|"history"), day, openEx, openExtra, theme, mode, cols, helpSeen,
+           planView, finder, varOpen, makeupDay, lastOpened, dismissedMiss, histPlan, histWeek, histEx}
+  Slot = {weekStart, entries{id: entry}, units{id or id:variant: "kg"|"plates"},
+          lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, ui{dismissedMiss},
+          extras{dayN: [{id, name, unit, sets[], doneAt}]},
+          savedSwaps{id: [{name, unit, sets[], date, regular}]}   newest first, at most CONFIG.maxSaved,
+          savedExtras{dayN: [{name, unit, sets[], date}]}}       kept per plan and per day, never shared}
+  Entry = {sets[{reps, kg, end?, extra?, left?}], variant?, doneAt, replaced,
+           repl{name, reason, date, unit?, measure? ("reps"|"time": seconds held|"distance": metres), sets[]}, missed{on, reason, date, madeUp{day,date}?, viaDay?}}
+  "reps" holds the main count: reps, metres (carries), minutes (bike),
+  rounds (sprints) or "1" for a ticked checklist line. "left" = reps left 0 to 4.
+  localStorage "training-tracker-archive": {hd: [week], pb: [week]}, newest first, the last
+    CONFIG.archiveWeeks finished weeks per plan. Week = {weekStart, entries (export shape), extras}.
+    Filled by Start new week, Load last week and Restore. Not part of the export file.
+  localStorage "training-tracker-theme": {palette, mode, contrast, v}. Not part of the export file.
+    v 2 (21 October 2026): Tempo became the default theme; a saved "steel" without v moved to Tempo once.
+    v 3 (22 October 2026): five themes (pulse default, dune, glacier, forge, bloom); older ids move once
+    via themeMove: tempo, volt → pulse; steel, tide, iron → glacier; ember, mono → forge; bush → dune;
+    ultraviolet → bloom.
+  Offline copy: the browser's Cache Storage, cache "training-tracker-<appVersion>" (sw.js).
+  "localStorage-test" is written and removed once to check saving works.
+
+EXPORT FORMAT (unchanged from version 1, with additions)
+  File name: workout-week-START-to-END.json (Heavy Duty, as before) or
+  powerbuilding-week-START-to-END.json.
+  {app: "heavy-duty-tracker", version: 2, plan: "hd"|"pb", exportedAt, weekStart, weekEnd,
+   entries{id: {plan, day, exercise, rows[], sets[], unit, variant?, doneAt, replaced,
+                replacement|null, missed|null}},
+   streaks{}, history{}, varHistory{}, variations[], missedDays[{day, title, date, reason,
+   total, madeUp[], note}], extras{dayN: [...]},
+   backup{lastWeek, history, varHistory, loadedStreaks, pastVariations, missedDays, units,
+          savedSwaps, savedExtras, otherPlan: {plan, slot} | null}}
+  Version 1 files (no "plan") import as Heavy Duty. Every session is tagged with
+  its plan, and comparisons only ever use the same plan's slot.
+
+LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applies
+{{FUNCTIONS}}
+
+  Layer 2b STORAGE
+    storageAvailable() : true when the browser can save
+    storageLoad() : the saved state or null
+    storageSave(state) : saves; true on success
+    storageDownload(obj, filename) : promise of "saved" | "cancelled" | "busy" | "fallback"
+    archiveLoad() : {hd: [], pb: []}       archiveSave(archive) : true on success
+    themeLoad() / themeSave(t) : the theme choice
+
+FEATURES AND WHERE THEY LIVE
+  First-use setup (start date, first plan) ...... #setup-panel; 3.9 button-setup-save; checkStartDate
+  "How this works" 3 steps, reopen from Help ..... #help-panel; 3.3 renderHelp; 3.9
+  Current plan, block week, next swap ............ .app-header; 3.3 renderHeader; weekInfo, nextSwap
+  Block alternation, longer blocks ................ 2.3 weekInfo, blockLimits, withBlockLength, switchCycleNow
+  Calendar on the Plans page ...................... 3.5b renderCalendar, calBlockNotes, changeBlock, realignSlots
+    Both plans change a week at a time. Powerbuilding counts its weeks across every powerbuilding
+    block, so a longer block moves through blocks 1, 2, 3 and test week.
+  History: Progress and Week log tabs ............. 3.6 renderHistory (state.ui.histView), histWeekTag
+    (Week A, B, C… = position in the block), progressHTML, progressChartsHTML, pbOnTrackHTML
+  Strength estimate ................................ 2.x estMax: Epley with reps left; loadForReps
+  Powerbuilding predictions (23 October 2026) ...... topSetCheck (second opinion on top sets),
+    testTarget (test-week singles from the freshest estimate; extra try only after a clean final single)
+  Opens on today's session ....................... 3.10 openToday; 3.15 start
+  Day tabs, one day at a time ................... 3.4 renderDayTabs; 3.10 selectDay
+  Compact exercise rows; the open one is a sheet .. 3.4 exerciseHTML, panelHTML; 3.7 syncExerciseSheet; 3.11 closeAndOpenNext
+  Summary card: day ring, sets, exercises, week ... 3.4 renderSummary (called from renderProgress)
+  Supersets (pairs) .............................. 2.5 buildPbSession; 3.4 sessionListHTML
+  Set logging with steppers ...................... 3.4 setRowHTML, fieldsHTML; 3.11 applyValue
+  Reps-left picker (powerbuilding) ............... 3.4 fieldsHTML; CONFIG.repsLeftScale
+  How the set ended (Heavy Duty) ................. 3.4 fieldsHTML; CONFIG.setEnds
+  Warm-up weights from percentages ............... 2.17 hdWarmup; 3.4 setRowHTML
+  Last time, beat last time, next targets ........ 2.9 lastEntryFor, compareToLast; 2.10; 2.17 rowTarget
+  Back-off weights ............................... 2.10 backoffTarget
+  Find my top set ................................ 2.11; 3.4 finderHTML; 3.11 finder-* actions
+  Estimated max .................................. 2.10 estimatedMax; 3.4 setRowHTML
+  Test week, heavy week, fortnight changes ....... 2.5 buildPbSession
+  Warm-up and stretching checklists .............. 2.1 warmupItem; 3.4 setRowHTML (check rows)
+  kg or plates per exercise ...................... 2.7; 3.11 "unit" action
+  Variations with their own memory ............... 2.5 variantFor; 2.9 lastEntryFor; 3.2 variantChoice
+  Swap exercise (replacement) with advice ........ 3.4 swapPanelHTML; 2.12 replacementAdvice
+  Skip exercise (missed) with advice ............. 3.4 missedPanelHTML; 2.12
+  Catch-up panel with recovery flag .............. 3.4 renderCatchup, makeupNoteHTML; 2.12 recoveryNote
+  Missed whole day: yellow card and make-ups ..... 2.13; 3.5 renderHazard; 3.13
+  Swaps and skips log ............................ 2.14; 3.4 renderSwapsLog
+  Up next card and live bar (next set or rest) .... 3.4 renderUpNext; 3.5 renderFab; 3.11 goToNextSet; 3.11b startRest
+  Progress bar, day and week rings ............... 2.6 dayProgress, weekDaysDone; 3.4
+  Week options: Export, Load last week, Start new
+  week, Restore from backup ...................... 2.16; 3.14
+  Plan page: today card, week tiles, day tables,
+  guides, read-only view of either plan .......... 3.6 renderPlanView
+  Back to top .................................... 3.10 updateToTop
+  Glossary: tap a dotted word .................... CONFIG.glossary; 3.1 term; 3.8
+  5 themes (Pulse default), Light/Dark/Match phone,
+  extra contrast, layout .......................... theme.css; 3.9 applyTheme, applyMode, applyContrast, applyLayout
+  Saving and the "not saving" warning ............ 2b; 3.2 save; 3.3 renderStorageWarning
+  Older Android and Huawei fallbacks ............. Layer 0; 3.8 openDialog fallback
+  One active set, other sets one line each ..... 3.4 setRowHTML, compactRowHTML; 3.4 activeRowOf; 2.18 firstOpenRow
+  "Log set" with grey suggested values ......... 3.11 logSet; 2.18 suggestedSet, planRowReps
+  Sets done per exercise ("2/4 sets") .......... 3.4 exerciseHTML; 2.18 setsProgress
+  Rest timer after each set ..................... 3.11b startRest; 2.18 restSeconds (memory only, not saved)
+  Saved swaps: "Swap again", quick picks,
+  Swaps log in the replaced exercise's own set rows
+  (same count, labels, targets, Log set, rest) ..... 2.19 startSwap; 3.4 swapPanelHTML, setRowHTML
+  Swaps counted in reps, seconds (plank) or metres
+  (carries), with weight ......................... 2.19 measureFor, swapSetText; CONFIG.holdWords, carryWords
+  "Do this instead every week", swap targets ..... 2.19 harvestSaved, setRegularSwap, applyRegularSwaps, swapTarget; 3.4 swapPanelHTML
+  Extra exercises with "Add again" reminder ...... 2.19 cleanExtras, newExtra; 3.4b renderExtras (not counted in progress)
+  History tab: any kept week, by day ............. 2.20 historyWeeks, weekView; 3.6b renderHistory
+  12-week archive on the phone ................... 2.20 archiveAdd; 2b archiveLoad/archiveSave; 3.14 archiveWeek
+  Progress per exercise .......................... 2.20 exerciseProgress; 3.6b progressHTML
+  Offline copy and "Update now" bar .............. sw.js; 3.15 setupOffline; CONFIG.appVersion
+
+HOSTING AND UPDATES (GitHub Pages)
+  Files: index.html (this file), sw.js, manifest.webmanifest, icon-192.png, icon-512.png.
+  To release: change the app, raise CONFIG.appVersion, and set the same value as VERSION
+  in sw.js. Push. Phones fetch the new copy next time they are online and show "Update now".
+=======================================================================
+-->
