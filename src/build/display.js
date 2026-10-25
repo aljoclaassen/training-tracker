@@ -118,9 +118,17 @@ function itemOf(c, id){
   for (let k = 0; k < c.sessions.length; k++){ const hit = sessionItems(c.sessions[k]).filter(it => it.id === id)[0]; if (hit) return hit; }
   return null;
 }
+// Heavy Duty. Takes the view context and an item. Returns this week's result on the item's partner day with
+// its weekday name, or null (Powerbuilding has no partner days: its targets come from the programme).
+function partnerFor(c, item){
+  if (item.plan !== "hd") return null;
+  const wp = weekPartner(c.slot, item.id);
+  return wp ? Object.assign({}, wp, {weekday: weekdayName(addDays(c.slot.weekStart, wp.day - 1))}) : null;
+}
 function rowArgs(c, item){
   return {entry: c.slot.entries[item.id], last: lastEntryFor(c.slot, item, c.today, c.cycle), unit: unitOf(c.slot.units, item),
-    streak: (c.slot.loadedStreaks || {})[item.id] || 0, cycle: c.cycle, lastWeekStart: c.slot.lastWeek ? c.slot.lastWeek.weekStart : null};
+    streak: (c.slot.loadedStreaks || {})[item.id] || 0, cycle: c.cycle, lastWeekStart: c.slot.lastWeek ? c.slot.lastWeek.weekStart : null,
+    partner: partnerFor(c, item)};
 }
 // Training day number for today in this slot's week, or 0
 function todaysDay(c){ return c.slot.weekStart === c.now.weekStart && !c.now.before && dayOfWeek(c.today) <= CONFIG.trainingDays ? dayOfWeek(c.today) : 0; }
@@ -464,7 +472,7 @@ function setRowHTML(c, item, kind, i, s, a){
   if (kind === "repl" && w) html += '<p class="set-row__hint">Use <strong>' + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of your target " + esc(fmtLoad(w.workKg, unit)) + ".</p>";
   if (kind === "main" && item.plan === "hd" && row.role === "work"){
     const wp = weekPartner(c.slot, item.id);
-    if (wp) html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
+    if (wp && t.from !== "partner") html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
       esc(wp.kg > 0 ? fmtLoad(wp.kg, wp.unit) + " × " + wp.reps : wp.reps + " reps") + ". " + (wp.day < item.day ? "Aim to hold this." : "Your baseline for the week.") + "</p>";
   }
   if (w && kind === "main"){

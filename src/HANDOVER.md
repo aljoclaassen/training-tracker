@@ -6,7 +6,7 @@
 
 **One phone app runs both programmes, Heavy Duty (HD) and Powerbuilding (PB), in alternating blocks, works offline, and is shared with friends.** This chat took it from the first powerbuilding build to the current version: a redesigned look, supersets side by side, a calendar where either plan can run longer, strength charts in History, and Powerbuilding predictions. This is a personal project (gym), not BOA Foundation or Cango Wildlife work output.
 
-**Pick up here:** version **2026-10-23.2** is built and tested but **not committed**. The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
+**Pick up here:** version **2026-10-25.1** is deployed (2026-10-23.2 plus Legs A to Legs B suggestions). The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
 
 ### Where things live
 
@@ -114,3 +114,8 @@
    - whether the Word plan gets a PB section.
 
 *General training guidance, not medical advice.*
+
+## 25 October 2026 addition
+
+- **Legs A to Legs B (HD only):** once Legs A is logged, the Legs B main set for Leg Extension, Standing and Seated Calf Raise (`CONFIG.hdWeekPairs`) starts from that result (weight and reps, same unit only, missed partners ignored). Code: `rowTarget` (`from: "partner"`) and `partnerFor` in display.js. Test: `tests/p4/legsab.py`. Powerbuilding is deliberately untouched: its targets come from the programme.
+- **Open:** the owner is considering removing one calf day in HD (probably the Day 3 one). Not started.

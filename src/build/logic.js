@@ -1278,7 +1278,15 @@ function rowTarget(item, i, a){
   const lastSets = a.last && a.last.sets ? a.last.sets.map(s => sameUnit(withUnit(s, a.last.unit), a.unit)) : null;
   const lastSet = lastSets ? lastSets[i] : null;
   const row = item.rows[i] || {};
-  if (item.plan === "hd") return nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
+  if (item.plan === "hd"){
+    const own = nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
+    const p = a.partner;
+    // Same exercise earlier this week (Legs A → Legs B): start from that result. Main set only, same unit only.
+    if (p && p.day < item.day && i === firstWorkRow(item) && Number(p.kg) > 0 && p.unit === a.unit && Number(p.reps) > 0)
+      return {text: "Same as your Day " + p.day + (p.weekday ? " (" + p.weekday + ")" : "") + " this week: " + fmtLoad(p.kg, a.unit) + " × " + p.reps + " clean.",
+        kg: Number(p.kg), reps: Number(p.reps), from: "partner"};
+    return own;
+  }
   if (row.role === "top"){
     const lastDate = a.last ? (a.last.fromHistory ? a.last.histDate : a.lastWeekStart) : null;
     return topSetCheck(nextTopSet(item.lift, lastSet, plannedTopLeft(a.cycle, lastDate), row.reps, a.unit), row, lastSet, a.unit);

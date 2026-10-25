@@ -126,6 +126,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     weekInfo(cycle, iso) : Takes the cycle and any date. Returns where that date sits: {before, weekStart, weekIndex, blockIndex, blockStart, blockWeeks, plan, blockWeek (1 to blockWeeks), weekLetter ("A" or "B"), pbWeek, fortnight (powerbuilding only: 1, 2 or 3), heavyWeek, testWeek}. Rules: Heavy Duty weeks are all the same, numbered within the block. Powerbuilding weeks count on across every powerbuilding block, so a longer block moves on through the programme: weeks pair into A and B, pairs count blocks 1, 2 and 3, then repeat. Block 3's Week A is the heavy week and its Week B is test week.
     nextSwap(cycle, iso) : Takes the cycle and a date. Returns {date, plan}: the Monday the plan next changes, and the plan it changes to.
     nextWeekForPlan(cycle, plan, fromISO) : Takes the cycle, a plan id and a date. Returns the first Monday on or after that date scheduled for the plan.
+    planRun(cycle, b) : Takes the cycle and a block index. Returns which run of its plan the block is: 1 for the first Heavy Duty block, 2 for the second, and so on. Skipped (0-week) blocks don't count.
     calendarBlocks(cycle, fromIndex, count) : Takes the cycle, the first block index and how many blocks. Returns those blocks for the calendar: [{index, plan, start, weeks, list: [weekInfo for each week]}]. Blocks of 0 weeks are left out.
     blockLimits(cycle, b, today) : Takes the cycle, a block index and today. Returns what may change on that block: {locked, step, min, max, why}. Rules: past blocks are fixed. Both plans move a week at a time; a powerbuilding run that ends on Week A picks up at Week B next time. The block you're in can't end before this week.
     withBlockLength(cycle, b, weeks) : Takes the cycle, a block index and a length in weeks. Returns a new cycle with that block's length set.
@@ -1352,6 +1353,13 @@ dialog:not([open]){ display: none; }
 .extras{ margin-top: var(--space-2); display: grid; gap: var(--space-1); }
 .extra .exercise__status{ border-style: dashed; }
 .hist{ display: grid; gap: var(--space-1-5); margin-top: var(--space-1-5); }
+/* Plan badges: HD and PB in their calendar colours. The letters carry the meaning; the colour only helps */
+.plan-badge{ display: inline-flex; align-items: center; justify-content: center; min-width: 2.4em; padding: 1px 6px; border-radius: var(--radius-sm); border: 2px solid var(--plan-c); background: color-mix(in srgb, var(--plan-c) 16%, var(--color-surface)); color: var(--color-text); font-size: var(--font-size-xs); font-weight: var(--font-weight-heavy); letter-spacing: .04em; line-height: 1.4; vertical-align: middle; }
+.plan-badge--hd{ --plan-c: var(--color-metric-1); }
+.plan-badge--pb{ --plan-c: var(--color-metric-3); }
+.cal-block__run{ font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-text-muted); }
+.hist-weekline{ display: flex; gap: var(--space-1); align-items: flex-start; margin: 0; }
+.hist-day__title .plan-badge{ margin-right: 2px; }
 .hist-controls{ display: grid; gap: var(--space-1); }
 .hist-controls .segmented{ display: flex; }
 .hist-controls .segmented .button{ flex: 1 1 0; }
@@ -1994,7 +2002,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-23.1",
+ "appVersion": "2026-10-25.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2306,7 +2314,7 @@ const CONFIG = {
   "makeup": "An exercise from a missed day, done on a later day.",
   "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
   "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
-  "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week.",
+  "weekbase": "Your result on the same exercise earlier this week. When the later session is Legs B, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
   "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
   "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
   "hold": "Holds like a plank: log the seconds you held and any weight added. Carries: log the metres walked and the weight. Next time, aim 5 seconds longer, or the same distance."
@@ -4509,6 +4517,14 @@ function nextWeekForPlan(cycle, plan, fromISO){
   return w;
 }
 
+// Takes the cycle and a block index. Returns which run of its plan the block is: 1 for the first Heavy Duty
+// block, 2 for the second, and so on. Skipped (0-week) blocks don't count.
+function planRun(cycle, b){
+  const plan = blockPlan(cycle, b);
+  let n = 0;
+  for (let i = 0; i <= b; i++) if (blockPlan(cycle, i) === plan && blockLength(cycle, i) > 0) n++;
+  return Math.max(1, n);
+}
 // Takes the cycle, the first block index and how many blocks. Returns those blocks for the calendar:
 // [{index, plan, start, weeks, list: [weekInfo for each week]}]. Blocks of 0 weeks are left out.
 function calendarBlocks(cycle, fromIndex, count){
@@ -5614,7 +5630,15 @@ function rowTarget(item, i, a){
   const lastSets = a.last && a.last.sets ? a.last.sets.map(s => sameUnit(withUnit(s, a.last.unit), a.unit)) : null;
   const lastSet = lastSets ? lastSets[i] : null;
   const row = item.rows[i] || {};
-  if (item.plan === "hd") return nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
+  if (item.plan === "hd"){
+    const own = nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
+    const p = a.partner;
+    // Same exercise earlier this week (Legs A → Legs B): start from that result. Main set only, same unit only.
+    if (p && p.day < item.day && i === firstWorkRow(item) && Number(p.kg) > 0 && p.unit === a.unit && Number(p.reps) > 0)
+      return {text: "Same as your Day " + p.day + (p.weekday ? " (" + p.weekday + ")" : "") + " this week: " + fmtLoad(p.kg, a.unit) + " × " + p.reps + " clean.",
+        kg: Number(p.kg), reps: Number(p.reps), from: "partner"};
+    return own;
+  }
   if (row.role === "top"){
     const lastDate = a.last ? (a.last.fromHistory ? a.last.histDate : a.lastWeekStart) : null;
     return topSetCheck(nextTopSet(item.lift, lastSet, plannedTopLeft(a.cycle, lastDate), row.reps, a.unit), row, lastSet, a.unit);
@@ -6167,9 +6191,17 @@ function itemOf(c, id){
   for (let k = 0; k < c.sessions.length; k++){ const hit = sessionItems(c.sessions[k]).filter(it => it.id === id)[0]; if (hit) return hit; }
   return null;
 }
+// Heavy Duty. Takes the view context and an item. Returns this week's result on the item's partner day with
+// its weekday name, or null (Powerbuilding has no partner days: its targets come from the programme).
+function partnerFor(c, item){
+  if (item.plan !== "hd") return null;
+  const wp = weekPartner(c.slot, item.id);
+  return wp ? Object.assign({}, wp, {weekday: weekdayName(addDays(c.slot.weekStart, wp.day - 1))}) : null;
+}
 function rowArgs(c, item){
   return {entry: c.slot.entries[item.id], last: lastEntryFor(c.slot, item, c.today, c.cycle), unit: unitOf(c.slot.units, item),
-    streak: (c.slot.loadedStreaks || {})[item.id] || 0, cycle: c.cycle, lastWeekStart: c.slot.lastWeek ? c.slot.lastWeek.weekStart : null};
+    streak: (c.slot.loadedStreaks || {})[item.id] || 0, cycle: c.cycle, lastWeekStart: c.slot.lastWeek ? c.slot.lastWeek.weekStart : null,
+    partner: partnerFor(c, item)};
 }
 // Training day number for today in this slot's week, or 0
 function todaysDay(c){ return c.slot.weekStart === c.now.weekStart && !c.now.before && dayOfWeek(c.today) <= CONFIG.trainingDays ? dayOfWeek(c.today) : 0; }
@@ -6513,7 +6545,7 @@ function setRowHTML(c, item, kind, i, s, a){
   if (kind === "repl" && w) html += '<p class="set-row__hint">Use <strong>' + esc(fmtLoad(w.kg, unit)) + "</strong>: " + term("percent", w.pct + "%") + " of your target " + esc(fmtLoad(w.workKg, unit)) + ".</p>";
   if (kind === "main" && item.plan === "hd" && row.role === "work"){
     const wp = weekPartner(c.slot, item.id);
-    if (wp) html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
+    if (wp && t.from !== "partner") html += '<p class="set-row__hint">' + term("weekbase", "This week") + ", Day " + wp.day + " (" + esc(weekdayName(addDays(c.slot.weekStart, wp.day - 1))) + "): " +
       esc(wp.kg > 0 ? fmtLoad(wp.kg, wp.unit) + " × " + wp.reps : wp.reps + " reps") + ". " + (wp.day < item.day ? "Aim to hold this." : "Your baseline for the week.") + "</p>";
   }
   if (w && kind === "main"){
@@ -6915,7 +6947,7 @@ function renderCalendar(c){
     if (!canAdd && !lim.locked) why = (why ? why + " " : "") + "The longest block is " + weekWord(lim.max) + ".";
     html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + '" aria-labelledby="' + headId + '">' +
       '<div class="cal-block__head"><span class="cal-block__bar" aria-hidden="true"></span><div>' +
-      '<h3 class="cal-block__title" id="' + headId + '" tabindex="-1">' + esc(PLAN_NAMES[bl.plan]) + (isNow ? ' <span class="cal-tag">Now</span>' : "") + "</h3>" +
+      '<h3 class="cal-block__title" id="' + headId + '" tabindex="-1">' + planBadge(bl.plan) + esc(PLAN_NAMES[bl.plan]) + '<span class="cal-block__run">run ' + planRun(c.cycle, bl.index) + "</span>" + (isNow ? ' <span class="cal-tag">Now</span>' : "") + "</h3>" +
       '<p class="small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks)) + "</p></div></div>" +
       '<ol class="cal-weeks">' + bl.list.map(w => {
         const past = nowWeek && w.weekStart < nowWeek, cur = w.weekStart === nowWeek;
@@ -7067,14 +7099,19 @@ function histWeeks(c, plan){
   if (!slot) return [];
   return historyWeeks(slot, plan, sessionsFor(plan, slot, c.cycle), archiveLoad(), new Date().toISOString());
 }
-// Takes a Monday and a plan id. Returns {tag, sub}: the week's letter in its block ("Week C of 4"),
-// plus the powerbuilding programme stage, so Day 1 of one week is never confused with Day 1 of the next.
+// Takes a plan id. Returns its short, colour-coded badge. The letters carry the meaning; colour only helps.
+const PLAN_CODES = {hd: "HD", pb: "PB"};
+function planBadge(plan){ return '<span class="plan-badge plan-badge--' + plan + '" title="' + esc(PLAN_NAMES[plan]) + '">' + PLAN_CODES[plan] + "</span>"; }
+// Takes a Monday and a plan id. Returns {tag, short, run, code, sub}: "Week 3 of 4", "Week 3", which run of
+// the plan the block is, "HD run 2", and the powerbuilding programme stage. Day 1 of one week is then
+// never confused with Day 1 of the next, and runs of the same plan can be told apart.
 function histWeekTag(weekStart, plan){
-  if (!state.cycle) return {tag: "", sub: ""};
-  const w = weekInfo(cycleOf(), weekStart);
-  if (w.before || w.plan !== plan) return {tag: "", sub: ""};
-  const letter = String.fromCharCode(64 + Math.min(26, w.blockWeek));
-  return {tag: "Week " + letter + " of " + w.blockWeeks, sub: plan === "pb" ? calWeekLabel(w) : ""};
+  const none = {tag: "", short: "", run: 0, code: "", sub: ""};
+  if (!state.cycle) return none;
+  const cy = cycleOf(), w = weekInfo(cy, weekStart);
+  if (w.before || w.plan !== plan) return none;
+  const run = planRun(cy, w.blockIndex);
+  return {tag: "Week " + w.blockWeek + " of " + w.blockWeeks, short: "Week " + w.blockWeek, run: run, code: PLAN_CODES[plan] + " run " + run, sub: plan === "pb" ? calWeekLabel(w) : ""};
 }
 function renderHistory(c){
   const plan = state.ui.histPlan === "hd" || state.ui.histPlan === "pb" ? state.ui.histPlan : c.plan;
@@ -7094,11 +7131,15 @@ function renderHistory(c){
   // Short enough to fit a phone-width picker: "Week B of 2 · 23 to 29 November · last week"
   const thisYear = parseISO(c.today).getFullYear();
   const label = w => { const t = tagOf(w), y = parseISO(w.weekStart).getFullYear();
-    return (t.tag ? t.tag + " · " : "") + fmtWeekShort(w.weekStart) + (y !== thisYear ? " " + y : "") + (w.source === "this" ? " · this week" : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? " · last week" : ""); };
+    const d1 = parseISO(w.weekStart), d2 = parseISO(addDays(w.weekStart, 6)), mon = d => MONTHS[d.getMonth()].slice(0, 3);
+    const span = d1.getMonth() === d2.getMonth() ? d1.getDate() + "–" + d2.getDate() + " " + mon(d2) : d1.getDate() + " " + mon(d1) + "–" + d2.getDate() + " " + mon(d2);
+    return (t.tag ? t.code + " · " + t.short + " · " : "") + span + (y !== thisYear ? " " + y : "") + (w.source === "this" ? " · now" : ""); };
+  const when = w => w.source === "this" ? "This week" : slot.lastWeek && slot.lastWeek.weekStart === w.weekStart ? "Last week" : "";
   html += '<div class="field"><label class="field__label" for="hist-week">Week</label><select class="select-input" id="hist-week">' +
     weeks.map(w => '<option value="' + w.weekStart + '"' + (w.weekStart === ws ? " selected" : "") + ">" + esc(label(w)) + "</option>").join("") + "</select></div>";
   const tag = tagOf(week);
-  if (tag.sub) html += '<p class="small muted">Programme: ' + esc(tag.sub) + ".</p>";
+  if (tag.tag) html += '<p class="hist-weekline">' + planBadge(plan) + '<span><strong>' + esc(PLAN_NAMES[plan] + ", run " + tag.run + " · " + tag.tag) + "</strong>" +
+    '<span class="small muted"> · ' + esc(fmtRange(week.weekStart)) + (when(week) ? " (" + when(week).toLowerCase() + ")" : "") + (tag.sub ? ". Programme: " + esc(tag.sub) : "") + "</span></span></p>";
   const nItems = week.view.reduce((a, dd) => a + dd.items.filter(it => it.sets.length || (it.swap && it.swap.sets.length)).length, 0);
   const nSets = week.view.reduce((a, dd) => a + dd.items.reduce((b, it) => b + it.sets.filter(x => x.working).length + (it.swap ? it.swap.sets.length : 0), 0), 0);
   const tile = (n, lab, val, sub) => '<div class="hist-tile"><span class="metric-label metric-' + n + '">' + lab + '</span><span class="metric-value metric-' + n + '">' + val + '</span><span class="small muted">' + sub + "</span></div>";
@@ -7106,7 +7147,7 @@ function renderHistory(c){
   html += '<p class="small muted">Tap a day to see its sets. Working sets are in bold.</p>';
   html += week.view.map(d => {
     const n = d.items.filter(it => it.sets.length || (it.swap && it.swap.sets.length)).length + d.extras.length;
-    return '<details class="hist-day"><summary class="hist-day__summary"><span class="hist-day__title">Day ' + d.day + (tag.tag ? " · " + esc(tag.tag.replace(/ of \d+$/, "")) : "") + ": " + esc(d.title) + '</span><span class="small muted">' + n + (n === 1 ? " exercise" : " exercises") + "</span></summary><ul class=\"hist-list\">" +
+    return '<details class="hist-day"><summary class="hist-day__summary"><span class="hist-day__title">' + planBadge(plan) + " Day " + d.day + (tag.short ? " · " + esc(tag.short) : "") + ": " + esc(d.title) + '</span><span class="small muted">' + n + (n === 1 ? " exercise" : " exercises") + "</span></summary><ul class=\"hist-list\">" +
     d.items.map(it => {
       const meta = EXERCISES[it.id];
       const sets = it.sets.map(x => x.working ? "<strong>" + esc(histSetText(meta, x.set, it.unit)) + "</strong>" : esc(histSetText(meta, x.set, it.unit))).join(", ");
@@ -7251,7 +7292,7 @@ function progressHTML(weeks, plan){
       // Trend pill: arrow plus words, so the direction never relies on colour alone
       const dir = !older ? "" : ch.charAt(0) === "+" ? "up" : ch.charAt(0) === "−" ? "down" : "flat";
       const pill = dir ? '<span class="trend' + (dir === "up" ? " trend--up" : "") + '"><span aria-hidden="true">' + (dir === "up" ? "▲" : dir === "down" ? "▼" : "•") + "</span>" + esc(ch) + "</span>" : esc(ch);
-      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + (histWeekTag(r.weekStart, plan).tag ? '<br><span class="small muted">' + esc(histWeekTag(r.weekStart, plan).tag) + "</span>" : "") + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + (r.est ? '<br><span class="small muted hist-est">Est. max ' + esc(fmtLoad(r.est, r.unit)) + "</span>" : "") + "</td><td>" + pill + "</td></tr>";
+      return "<tr" + (r.kind === "swap" ? ' class="is-swap"' : "") + "><td>" + esc(fmtDate(r.weekStart)) + (histWeekTag(r.weekStart, plan).tag ? '<br><span class="small muted">' + esc(histWeekTag(r.weekStart, plan).code + " · " + histWeekTag(r.weekStart, plan).short) + "</span>" : "") + "</td><td>" + (r.kind === "swap" ? '<span class="small">Swap: ' + esc(r.name) + "</span><br>" : "") + esc(best) + (r.est ? '<br><span class="small muted hist-est">Est. max ' + esc(fmtLoad(r.est, r.unit)) + "</span>" : "") + "</td><td>" + pill + "</td></tr>";
     }).join("") + "</tbody></table></details></section>";
   return html;
 }

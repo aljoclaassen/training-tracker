@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-10-23.2",
+  "appVersion": "2026-10-25.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -312,7 +312,7 @@
     "makeup": "An exercise from a missed day, done on a later day.",
     "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
     "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
-    "weekbase": "Your result on the same exercise earlier this week. Holding it on a less-rested day shows you're strong in that range. Your target still comes from last week.",
+    "weekbase": "Your result on the same exercise earlier this week. When the later session is Legs B, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
     "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
     "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
     "hold": "Holds like a plank: log the seconds you held and any weight added. Carries: log the metres walked and the weight. Next time, aim 5 seconds longer, or the same distance."
