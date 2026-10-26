@@ -6,7 +6,7 @@
 
 **One phone app runs both programmes, Heavy Duty (HD) and Powerbuilding (PB), in alternating blocks, works offline, and is shared with friends.** This chat took it from the first powerbuilding build to the current version: a redesigned look, supersets side by side, a calendar where either plan can run longer, strength charts in History, and Powerbuilding predictions. This is a personal project (gym), not BOA Foundation or Cango Wildlife work output.
 
-**Pick up here:** version **2026-10-26.1** is deployed (adds the Superset label and the extras picker). The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
+**Pick up here:** version **2026-10-26.2** is deployed (adds the Superset label, the extras picker and Heavy Duty session times). The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
 
 ### Where things live
 
@@ -121,3 +121,4 @@
 - **Open:** the owner is considering removing one calf day in HD (probably the Day 3 one). Not started.
 - **Superset label (26 October 2026):** paired groups start with a red "Superset" tag in both plans.
 - **Extras picker (26 October 2026):** "Add extra exercise" opens a picker. Suggestions come from `CONFIG.extraSuggestions` (per plan and day, 10 each, trimmed of anything already in the day or added). Swap options come from the plan's swap text (PB), saved swaps and other versions of an exercise (HD), each shown as "instead of X" and skipping holds. "Type my own" is the old blank form. Lunges are offered as Dumbbell Walking Lunges, Barbell Walking Lunges and Zercher Lunge. Code: `extraPickOptions`, `extraPickerHTML` in display.js. Test: `tests/p4/extras.py`. The suggestion lists were written by Claude and are for the owner to edit.
+- **HD session time (26 October 2026):** each HD day shows "Takes about 50–60 min, warm-up sets and rests included." It is an estimate from the plan's sets and rests (`hdSessionTime` in logic.js, numbers in `CONFIG.hdTime`), with no general warm-up counted. Owner to time real sessions and tune `hdTime`. Test: `tests/p4/hdtime.py`.

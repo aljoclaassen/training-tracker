@@ -339,7 +339,34 @@ function buildHdSession(dayN, variantChoice){
       repMin: null, repMax: null, reps: item.reps, sourceSets: item.sets
     };
   })}));
-  return {plan: "hd", n: dayN, title: day.title, time: "", intro: "", notes: [], rest: false, groups: groups};
+  return {plan: "hd", n: dayN, title: day.title, time: hdSessionTime(groups), timeEstimated: true, intro: "", notes: [], rest: false, groups: groups};
+}
+
+// Takes a rest text like "90 s", "60–90 s" or "2–3 min". Returns the middle of it in seconds ("None" is 0).
+function restMidSeconds(text){
+  const t = String(text || "");
+  if (/^\s*none/i.test(t)) return 0;
+  const m = t.match(/(\d+)(?:\s*[–-]\s*(\d+))?\s*(s|min)\b/);
+  if (!m) return CONFIG.hdTime.defaultRestSeconds;
+  return ((+m[1] + (m[2] ? +m[2] : +m[1])) / 2) * (m[3] === "min" ? 60 : 1);
+}
+// Heavy Duty. Takes a day's groups. Returns the estimated session length as text, e.g. "50–60 min".
+// Rules (all numbers in CONFIG.hdTime): each warm-up set takes warmSetSeconds then warmRestSeconds; each
+// main set takes workSetSeconds then the exercise's own rest (the middle of its range); each exercise adds
+// transitionSeconds for moving, loading and setting up; the last rest and move are not counted. The result is
+// shown as a range of spreadMinutes either side, rounded to roundMinutes.
+function hdSessionTime(groups){
+  const t = CONFIG.hdTime; let sec = 0, tail = 0;
+  groups.forEach(g => g.items.forEach(item => {
+    if (item.optional) return;
+    const rest = restMidSeconds(item.rest);
+    item.rows.forEach(r => { sec += r.role === "warm" ? t.warmSetSeconds + t.warmRestSeconds : t.workSetSeconds + rest; });
+    sec += t.transitionSeconds; tail = rest + t.transitionSeconds;
+  }));
+  const mid = (sec - tail) / 60, r = t.roundMinutes;
+  const low = Math.max(r, Math.round((mid - t.spreadMinutes) / r) * r);
+  const high = Math.max(low + r, Math.round((mid + t.spreadMinutes) / r) * r);
+  return low + "–" + high + " min";
 }
 
 function buildPbSession(dayN, week, variantChoice){

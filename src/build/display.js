@@ -214,7 +214,7 @@ function renderSessionHead(c, day){
   const lwDay = c.slot.lastWeek && c.slot.lastWeek.missedDays ? c.slot.lastWeek.missedDays[day.n] : null;
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
   $("#session-head").innerHTML = '<h2 class="session-head__title">Day ' + day.n + ": " + esc(day.title) + (todaysDay(c) === day.n ? " (today)" : "") + "</h2>" +
-    (day.time ? '<p class="small muted">Takes ' + esc(day.time) + ", warm-up included.</p>" : "") +
+    (day.time ? '<p class="small muted">Takes ' + (day.timeEstimated ? "about " : "") + esc(day.time) + (day.timeEstimated ? ", warm-up sets and rests included." : ", warm-up included.") + "</p>" : "") +
     (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
     (lwDay ? '<p class="small muted">Last week: ' + esc(lwDay.note.replace(/^Day \d+: /, "")) + ".</p>" : "");
 }

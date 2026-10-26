@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-10-26.1",
+  "appVersion": "2026-10-26.2",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -753,5 +753,14 @@
     ],
     "flatChecks": 3,
     "predictGapPct": 3
+  },
+  "hdTime": {
+    "warmSetSeconds": 45,
+    "workSetSeconds": 75,
+    "warmRestSeconds": 75,
+    "transitionSeconds": 120,
+    "defaultRestSeconds": 90,
+    "spreadMinutes": 5,
+    "roundMinutes": 5
   }
 }
