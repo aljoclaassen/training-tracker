@@ -35,7 +35,7 @@ with sync_playwright() as p:
     # log a squat top set
     pg.click("#ex-pb-d1-squat .exercise__summary"); pg.fill("#pb-d1-squat-main-0-reps","5"); pg.fill("#pb-d1-squat-main-0-kg","100"); pg.click('#ex-pb-d1-squat [data-i="0"] [data-act="log-set"]'); pg.wait_for_timeout(200)
     # extra exercise
-    pg.click('#extras [data-act="extra-add"]'); xid=pg.evaluate("state.pb.extras[1][0].id")
+    pg.click('#extras [data-act="extra-add"]'); pg.click('#extras [data-act="extra-blank"]'); xid=pg.evaluate("state.pb.extras[1][0].id")
     pg.fill("#extra-"+xid+"-name","Push-ups"); pg.fill("#extra-"+xid+"-0-reps","25"); pg.locator("#extra-"+xid+"-0-reps").blur(); pg.wait_for_timeout(400)
     print("extras card:", pg.inner_text("#extras").replace("\n"," | ")[:200])
     pg.screenshot(path="shots/90-extras.png", full_page=True)

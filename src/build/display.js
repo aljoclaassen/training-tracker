@@ -215,7 +215,7 @@ function renderSessionHead(c, day){
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
   $("#session-head").innerHTML = '<h2 class="session-head__title">Day ' + day.n + ": " + esc(day.title) + (todaysDay(c) === day.n ? " (today)" : "") + "</h2>" +
     (day.time ? '<p class="small muted">Takes ' + esc(day.time) + ", warm-up included.</p>" : "") +
-    (day.intro ? '<p class="small">' + term("pair", "Pairs") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
+    (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
     (lwDay ? '<p class="small muted">Last week: ' + esc(lwDay.note.replace(/^Day \d+: /, "")) + ".</p>" : "");
 }
 // Summary card: a ring for today's exercises and three colour-coded counts (sets, exercises, week)
@@ -317,7 +317,7 @@ function sessionListHTML(c, day){
   return day.groups.map(g => {
     const inner = g.items.map(it => exerciseHTML(c, it)).join("");
     const pairOpen = g.pair && g.items.length > 1 && g.items.some(it => it.id === state.ui.openEx);
-    if (g.pair && g.items.length > 1) return '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label">' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
+    if (g.pair && g.items.length > 1) return '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Superset, Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label"><span class="exercise__tag pair-group__tag">Superset</span> ' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
     return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + inner;
   }).join("");
 }
@@ -650,6 +650,49 @@ function renderSwapsLog(c, day){
 function extrasOf(c, n){ c.slot.extras = c.slot.extras || {}; return c.slot.extras[n] || (c.slot.extras[n] = []); }
 // Last time's record for an extra with this name on this day, or null
 function savedExtraFor(c, n, name){ return name.trim() ? ((c.slot.savedExtras || {})[n] || []).filter(x => keyOf(x.name) === keyOf(name))[0] || null : null; }
+// Which day's "add an extra" picker is open (0 = none). Kept in memory only.
+let extraPickDay = 0;
+// Takes the view context and a day. Returns {suggested, swaps}: what the "add an extra" picker offers.
+// suggested: the plan's list for this day (CONFIG.extraSuggestions), without anything already in the day or added.
+// swaps: the plan's swap for each exercise of the day, your saved swaps for it, and (Heavy Duty) its other versions.
+// Each entry is {name, unit, sets, from}, from being the exercise it would replace ("" for suggestions).
+function extraPickOptions(c, day){
+  const items = sessionItems(day), list = (c.slot.extras || {})[day.n] || [];
+  const taken = {};
+  items.forEach(it => { taken[keyOf(it.name)] = true; });
+  list.forEach(x => { taken[keyOf(x.name)] = true; });
+  const take = name => { const k = keyOf(name); if (!k || taken[k]) return false; taken[k] = true; return true; };
+  const plan = (items[0] && items[0].plan) || c.plan;
+  const raw = ((CONFIG.extraSuggestions[plan] || {})[String(day.n)] || []);
+  const suggested = [];
+  raw.forEach(x => { if (suggested.length < CONFIG.maxSuggestions && take(x.name)) suggested.push({name: x.name, unit: x.unit === "plates" ? "plates" : "kg", sets: CONFIG.suggestSets, from: ""}); });
+  const swaps = [];
+  items.forEach(it => {
+    if (!it.rows || it.log === "time" || it.log === "rounds" || it.log === "check" || it.log === "carry") return;
+    const sets = Math.max(1, Math.min(CONFIG.maxSetsPerExtra, it.rows.filter((r, i) => isWorkingRow(it, i)).length || 1));
+    const unit = unitOf(c.slot.units, it);
+    ((c.slot.savedSwaps || {})[it.id] || []).forEach(x => { if ((!x.measure || x.measure === "reps") && take(x.name)) swaps.push({name: x.name, unit: x.unit === "plates" ? "plates" : "kg", sets: sets, from: it.name}); });
+    if (it.swap){ const n = planSwapName(it.swap).split(/\.\s/)[0]; if (measureFor(n) === "reps" && take(n)) swaps.push({name: n, unit: unit, sets: sets, from: it.name}); }
+    const last = keyOf(it.name).split(/\s+/).pop();
+    (it.variants || []).forEach(v => {
+      if (v.id === it.variant) return;
+      // A label that already names the exercise stands alone ("Military press"); otherwise it follows the name.
+      const n = keyOf(v.label).indexOf(last) >= 0 ? v.label.charAt(0).toUpperCase() + v.label.slice(1) : it.name + ", " + v.label.charAt(0).toLowerCase() + v.label.slice(1);
+      if (take(n)) swaps.push({name: n, unit: unit, sets: sets, from: it.name});
+    });
+  });
+  return {suggested: suggested, swaps: swaps};
+}
+function extraPickerHTML(c, day){
+  const o = extraPickOptions(c, day);
+  const chip = (k, x) => '<button type="button" class="chip" data-act="extra-pick" data-k="' + k + '">' + esc(x.name) + (x.from ? ' <span class="chip__tag">instead of ' + esc(x.from) + "</span>" : "") + "</button>";
+  return '<div class="sub-panel extra-picker" role="group" aria-labelledby="extra-pick-title"><h4 id="extra-pick-title">Add an extra exercise</h4>' +
+    (o.suggested.length ? '<p class="small" id="extra-pick-sug">Suggested for Day ' + day.n + ", from this day's muscles and accessories:</p>" +
+      '<div class="chip-row" role="group" aria-labelledby="extra-pick-sug">' + o.suggested.map((x, i) => chip("s" + i, x)).join("") + "</div>" : "") +
+    (o.swaps.length ? '<p class="small" id="extra-pick-swaps">Or one of the swap options for today\u2019s exercises:</p>' +
+      '<div class="chip-row" role="group" aria-labelledby="extra-pick-swaps">' + o.swaps.map((x, i) => chip("w" + i, x)).join("") + "</div>" : "") +
+    '<div class="button-row"><button type="button" class="button" data-act="extra-blank">Type my own</button><button type="button" class="button" data-act="extra-pick-cancel">Cancel</button></div></div>';
+}
 function renderExtras(c, day){
   const box = $("#extras");
   if (day.rest){ box.innerHTML = ""; return; }
@@ -662,8 +705,10 @@ function renderExtras(c, day){
       '. <button type="button" class="link-button" data-act="extra-again" data-name="' + esc(x.name) + '">Add again<span class="visually-hidden">: ' + esc(x.name) + "</span></button></p>";
   }).join("");
   html += list.map(x => extraHTML(c, day.n, x)).join("");
-  html += (list.length < CONFIG.maxExtrasPerDay ? '<button type="button" class="button button--full" data-act="extra-add">Add extra exercise</button>' : "") +
-    (list.length || reminders.length ? "" : '<p class="small muted">For a burnout set or anything else you add. It won’t change your progress or targets.</p>');
+  const picking = extraPickDay === day.n && list.length < CONFIG.maxExtrasPerDay;
+  if (picking) html += extraPickerHTML(c, day);
+  html += (list.length < CONFIG.maxExtrasPerDay && !picking ? '<button type="button" class="button button--full" data-act="extra-add">Add extra exercise</button>' : "") +
+    (list.length || reminders.length || picking ? "" : '<p class="small muted">Pick from a list for this day, or add a burnout set or anything else. It won’t change your progress or targets.</p>');
   box.innerHTML = html;
 }
 function extraHTML(c, n, x){
@@ -715,12 +760,23 @@ let extraTimer = null;
     clearTimeout(extraTimer);
     const btn = ev.target.closest("[data-act]"); if (!btn) return;
     const act = btn.dataset.act;
-    if (act === "extra-add" || act === "extra-again"){
-      const c = ctx(), list = extrasOf(c, state.ui.day), rec = act === "extra-again" ? savedExtraFor(c, state.ui.day, btn.dataset.name) : null;
-      const x = newExtra(rec ? rec.name : "", rec ? rec.unit : "kg", rec ? rec.sets.length : 1, Date.now().toString(36));
+    if (act === "extra-add"){ extraPickDay = state.ui.day; rerenderExtras('[data-act="extra-pick"], [data-act="extra-blank"]'); return; }
+    if (act === "extra-pick-cancel"){ extraPickDay = 0; rerenderExtras('[data-act="extra-add"]'); return; }
+    if (act === "extra-blank" || act === "extra-again" || act === "extra-pick"){
+      const c = ctx(), list = extrasOf(c, state.ui.day);
+      let rec = act === "extra-again" ? savedExtraFor(c, state.ui.day, btn.dataset.name) : null, pick = null;
+      if (act === "extra-pick"){
+        const o = extraPickOptions(c, sessionOf(c, state.ui.day));
+        pick = (btn.dataset.k[0] === "s" ? o.suggested : o.swaps)[+btn.dataset.k.slice(1)] || null;
+        if (!pick){ extraPickDay = 0; rerenderExtras('[data-act="extra-add"]'); return; }
+        rec = savedExtraFor(c, state.ui.day, pick.name);
+      }
+      const x = pick ? newExtra(pick.name, rec ? rec.unit : pick.unit, rec ? rec.sets.length : pick.sets, Date.now().toString(36))
+        : newExtra(rec ? rec.name : "", rec ? rec.unit : "kg", rec ? rec.sets.length : 1, Date.now().toString(36));
+      extraPickDay = 0;
       list.push(x); state.ui.openExtra = x.id; state.ui.openEx = null; save(); renderAll();
-      rerenderExtras(rec ? "#extra-" + x.id + "-0-reps" : "#extra-" + x.id + "-name");
-      if (rec) toast(rec.name + " added. Last time's numbers are in grey.");
+      rerenderExtras(rec || pick ? "#extra-" + x.id + "-0-reps" : "#extra-" + x.id + "-name");
+      if (rec) toast(x.name + " added. Last time's numbers are in grey.");
       return;
     }
     const h = find(btn); if (!h) return;

@@ -22,11 +22,11 @@ with sync_playwright() as p:
         for mode in ["light","dark"]:
             for more in [False, True]:
                 pg.evaluate(f"applyTheme('{pal}'); applyMode('{mode}'); applyContrast({'true' if more else 'false'})"); pg.wait_for_timeout(260)
-                for tab in ["train","plan","history","sheet"]:
-                    pg.evaluate(f"showTab('{tab}')" if tab!='sheet' else "showTab('train'); state.ui.day=2; state.ui.openEx=\x27pb-d2-chin\x27; renderAll(); startRest(90,\x27Weighted Dip\x27)"); pg.wait_for_timeout(40)
+                for tab in ["train","plan","history","sheet","picker"]:
+                    pg.evaluate(f"showTab('{tab}')" if tab not in ('sheet','picker') else ("showTab('train'); state.ui.day=2; state.ui.openEx=null; extraPickDay=2; renderAll()" if tab=='picker' else "showTab('train'); state.ui.day=2; state.ui.openEx=\x27pb-d2-chin\x27; renderAll(); startRest(90,\x27Weighted Dip\x27)")); pg.wait_for_timeout(40)
                     r=pg.evaluate(AUDIT); n+=r["n"]
                     if r["bad"]: fails.append((pal,mode,more,tab,r["bad"][:4]))
-                pg.evaluate("state.ui.openEx=null; stopRest(); showTab('train')")
+                pg.evaluate("state.ui.openEx=null; extraPickDay=0; stopRest(); showTab('train')")
                 pg.click("#button-settings"); pg.wait_for_timeout(60)
                 r=pg.evaluate(AUDIT); n+=r["n"]
                 if r["bad"]: fails.append((pal,mode,more,"settings",r["bad"][:4]))

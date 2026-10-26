@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-10-25.1",
+  "appVersion": "2026-10-26.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -367,6 +367,368 @@
   "archiveStorageKey": "training-tracker-archive",
   "archiveWeeks": 12,
   "maxSaved": 5,
+  "extraSuggestions": {
+    "hd": {
+      "1": [
+        {
+          "name": "Leg Press",
+          "unit": "plates"
+        },
+        {
+          "name": "Pendulum Squat",
+          "unit": "plates"
+        },
+        {
+          "name": "Zercher Squat"
+        },
+        {
+          "name": "Stiff-Leg Deadlift"
+        },
+        {
+          "name": "Dumbbell Walking Lunges"
+        },
+        {
+          "name": "Barbell Walking Lunges"
+        },
+        {
+          "name": "Zercher Lunge"
+        },
+        {
+          "name": "Hip Adductor Machine",
+          "unit": "plates"
+        },
+        {
+          "name": "Hip Thrust"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        }
+      ],
+      "2": [
+        {
+          "name": "Incline Dumbbell Press"
+        },
+        {
+          "name": "Dips"
+        },
+        {
+          "name": "Low-to-High Cable Fly",
+          "unit": "plates"
+        },
+        {
+          "name": "Push-up to Failure"
+        },
+        {
+          "name": "Spider Curl"
+        },
+        {
+          "name": "Concentration Curl"
+        },
+        {
+          "name": "Cable Curl",
+          "unit": "plates"
+        },
+        {
+          "name": "Reverse Curl"
+        },
+        {
+          "name": "Wrist Curl"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        }
+      ],
+      "3": [
+        {
+          "name": "Pull-up"
+        },
+        {
+          "name": "Straight-Arm Pulldown",
+          "unit": "plates"
+        },
+        {
+          "name": "Chest-Supported Row",
+          "unit": "plates"
+        },
+        {
+          "name": "Meadows Row"
+        },
+        {
+          "name": "Reverse Pec Deck",
+          "unit": "plates"
+        },
+        {
+          "name": "Barbell Shrug"
+        },
+        {
+          "name": "Rack Pull"
+        },
+        {
+          "name": "Wrist Curl"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        }
+      ],
+      "4": [
+        {
+          "name": "Arnold Press"
+        },
+        {
+          "name": "Machine Shoulder Press",
+          "unit": "plates"
+        },
+        {
+          "name": "Cable Y-Raise",
+          "unit": "plates"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        },
+        {
+          "name": "Skull Crusher"
+        },
+        {
+          "name": "Close-Grip Bench Press"
+        },
+        {
+          "name": "Triceps Dips"
+        },
+        {
+          "name": "Diamond Push-up"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        }
+      ],
+      "5": [
+        {
+          "name": "Back Squat"
+        },
+        {
+          "name": "Hack Squat"
+        },
+        {
+          "name": "Leg Curl",
+          "unit": "plates"
+        },
+        {
+          "name": "Sumo Deadlift"
+        },
+        {
+          "name": "Dumbbell Walking Lunges"
+        },
+        {
+          "name": "Barbell Walking Lunges"
+        },
+        {
+          "name": "Zercher Lunge"
+        },
+        {
+          "name": "Hip Adductor Machine",
+          "unit": "plates"
+        },
+        {
+          "name": "Hip Thrust"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        }
+      ]
+    },
+    "pb": {
+      "1": [
+        {
+          "name": "Leg Extension",
+          "unit": "plates"
+        },
+        {
+          "name": "Hip Thrust"
+        },
+        {
+          "name": "Goblet Squat"
+        },
+        {
+          "name": "Dumbbell Walking Lunges"
+        },
+        {
+          "name": "Barbell Walking Lunges"
+        },
+        {
+          "name": "Zercher Lunge"
+        },
+        {
+          "name": "Hip Adductor Machine",
+          "unit": "plates"
+        },
+        {
+          "name": "Standing Calf Raise"
+        },
+        {
+          "name": "Back Extension"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        }
+      ],
+      "2": [
+        {
+          "name": "Incline Dumbbell Press"
+        },
+        {
+          "name": "Cable Fly",
+          "unit": "plates"
+        },
+        {
+          "name": "Triceps Pushdown",
+          "unit": "plates"
+        },
+        {
+          "name": "Dumbbell Row"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        },
+        {
+          "name": "Barbell Curl"
+        },
+        {
+          "name": "Lateral Raise"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        },
+        {
+          "name": "Pallof Press",
+          "unit": "plates"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        }
+      ],
+      "3": [
+        {
+          "name": "Seated Leg Curl",
+          "unit": "plates"
+        },
+        {
+          "name": "Back Extension"
+        },
+        {
+          "name": "Straight-Arm Pulldown",
+          "unit": "plates"
+        },
+        {
+          "name": "Single-Arm Dumbbell Row"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        },
+        {
+          "name": "Hip Thrust"
+        },
+        {
+          "name": "Barbell Shrug"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        },
+        {
+          "name": "Standing Calf Raise"
+        },
+        {
+          "name": "Reverse Curl"
+        }
+      ],
+      "4": [
+        {
+          "name": "Dumbbell Shoulder Press"
+        },
+        {
+          "name": "Arnold Press"
+        },
+        {
+          "name": "Cable Curl",
+          "unit": "plates"
+        },
+        {
+          "name": "Preacher Curl"
+        },
+        {
+          "name": "Triceps Pushdown",
+          "unit": "plates"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        },
+        {
+          "name": "Dumbbell Row"
+        },
+        {
+          "name": "Seated Calf Raise"
+        },
+        {
+          "name": "Wrist Curl"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        }
+      ],
+      "5": [
+        {
+          "name": "Goblet Squat"
+        },
+        {
+          "name": "Leg Extension",
+          "unit": "plates"
+        },
+        {
+          "name": "Dumbbell Walking Lunges"
+        },
+        {
+          "name": "Barbell Walking Lunges"
+        },
+        {
+          "name": "Zercher Lunge"
+        },
+        {
+          "name": "Dumbbell Row"
+        },
+        {
+          "name": "Face Pull",
+          "unit": "plates"
+        },
+        {
+          "name": "Triceps Pushdown",
+          "unit": "plates"
+        },
+        {
+          "name": "Barbell Curl"
+        },
+        {
+          "name": "Standing Calf Raise"
+        }
+      ]
+    }
+  },
+  "maxSuggestions": 10,
+  "suggestSets": 2,
   "maxExtrasPerDay": 6,
   "maxSetsPerExtra": 10,
   "holdWords": [

@@ -1,6 +1,6 @@
 import datetime
 from playwright.sync_api import sync_playwright
-URL = "file:///tmp/claude-0/-home-claude/ef2ea838-edd3-5f9a-a5d3-1743d048fa9e/scratchpad/work/site/new.html"; SH = "/tmp/claude-0/-home-claude/ef2ea838-edd3-5f9a-a5d3-1743d048fa9e/scratchpad/work/shots/"
+URL = "file:///tmp/claude-0/-home-claude/254544d4-b786-5ad2-a8ac-aef5d5b30988/scratchpad/site/new.html"; SH = "/tmp/claude-0/-home-claude/254544d4-b786-5ad2-a8ac-aef5d5b30988/scratchpad/shots/"
 LOG = """([id, kg, reps]) => { const c = ctx(); const item = itemOf(c, id); const w = firstWorkRow(item);
   const e = ensureEntry(c.slot, item); e.sets = item.rows.map((r, i) => i === w ? {reps: String(reps), kg: String(kg), end: 'clean'} : {reps: '', kg: ''}); save(); }"""
 with sync_playwright() as p:

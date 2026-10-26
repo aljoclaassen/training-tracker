@@ -1,6 +1,6 @@
 import datetime
 from playwright.sync_api import sync_playwright
-URL = "file:///tmp/claude-0/-home-claude/ef2ea838-edd3-5f9a-a5d3-1743d048fa9e/scratchpad/work/site/new.html"; SH = "/tmp/claude-0/-home-claude/ef2ea838-edd3-5f9a-a5d3-1743d048fa9e/scratchpad/work/shots/"
+URL = "file:///tmp/claude-0/-home-claude/254544d4-b786-5ad2-a8ac-aef5d5b30988/scratchpad/site/new.html"; SH = "/tmp/claude-0/-home-claude/254544d4-b786-5ad2-a8ac-aef5d5b30988/scratchpad/shots/"
 fails = []
 def check(n, ok, info=""):
     print(("PASS " if ok else "FAIL ") + n, "" if ok else info)

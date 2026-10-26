@@ -179,6 +179,7 @@ button, input, select, textarea{ font: inherit; color: inherit; }
 .exercise__details{ font-size: var(--font-size-small); color: var(--color-text-muted); display: grid; gap: var(--space-0-5); }
 .exercise__actions{ display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); }
 .pair-group{ display: grid; gap: var(--space-1); padding: var(--space-1); border: var(--border-width-control) dashed var(--color-border-control); border-radius: var(--radius-lg); }
+.pair-group__tag{ margin-left: 0; margin-right: var(--space-0-5); background: var(--color-accent-soft); color: var(--color-accent-text); }
 .pair-group__label{ font-size: var(--font-size-small); color: var(--color-text-muted); padding: 0 var(--space-0-5); }
 .group-title{ margin-top: var(--space-2); font-size: var(--font-size-small); font-weight: var(--font-weight-bold); color: var(--color-text-muted); }
 @media (min-width: 900px){ body.two-up .exercise-list{ grid-template-columns: 1fr 1fr; align-items: start; } body.two-up .pair-group, body.two-up .group-title{ grid-column: 1 / -1; } }
@@ -328,6 +329,8 @@ dialog:not([open]){ display: none; }
 .chip:active{ transform: var(--press-scale); }
 .chip__tag{ font-size: var(--font-size-small); font-weight: normal; color: var(--color-text-muted); }
 .extras{ margin-top: var(--space-2); display: grid; gap: var(--space-1); }
+.extra-picker h4{ margin: 0; }
+.extra-picker .chip{ text-align: left; }
 .extra .exercise__status{ border-style: dashed; }
 .hist{ display: grid; gap: var(--space-1-5); margin-top: var(--space-1-5); }
 /* Plan badges: HD and PB in their calendar colours. The letters carry the meaning; the colour only helps */
