@@ -10,7 +10,7 @@ def mix(h1, h2, t):
 
 ORDER = ["bg", "surface", "surface-alt", "surface-raised", "fill-track", "text", "text-muted", "border", "border-control", "accent", "on-accent", "accent-soft", "accent-text",
          "metric-1", "metric-2", "metric-3", "metric-4", "grad-start", "grad-end",
-         "success", "on-success", "success-soft", "best", "on-best", "best-line", "missed", "danger", "on-danger", "hazard", "on-hazard", "inverse-bg", "inverse-text", "focus", "scrim"]
+         "success", "on-success", "success-soft", "best", "on-best", "best-line", "missed", "danger", "on-danger", "hazard", "on-hazard", "inverse-bg", "inverse-text", "focus", "scrim", "canvas"]
 # Five multi-colour themes (from the Fitness-style concept, 22 October 2026). Metric colours always mean:
 # 1 sets and volume, 2 rest and time, 3 exercises and the week, 4 personal bests.
 SETS = {
@@ -41,11 +41,27 @@ def roles(p, mode):
          "best": mix(p["surface"], p["m4"], .2 if mode == "light" else .24), "on-best": p["text"], "best-line": p["m4"], "missed": p["muted"],
          "inverse-bg": p["text"], "inverse-text": p["surface"], "focus": p["text"]}
     d.update(COMMON[mode]); return d
-PAL = {k: {"light": roles(v[2], "light"), "dark": roles(v[3], "dark")} for k, v in SETS.items()}
+
+# Canvas: the picture under the cards, one per theme (a stack of CSS gradients, nothing downloaded).
+# Every layer is a low-strength tint of the theme's own colours, so text sitting straight on the canvas keeps its contrast.
+def tint(var, pct): return "color-mix(in srgb, var(--color-%s) %d%%, transparent)" % (var, pct)
+def canvas(name, mode):
+    s = 1 if mode == "light" else 1.25
+    t = lambda var, pct: tint(var, round(pct * s))
+    if name == "pulse":   # two glows: coral from the top right, cyan from the bottom left
+        return "radial-gradient(110%% 55%% at 100%% 0%%, %s, transparent 70%%), radial-gradient(90%% 50%% at 0%% 100%%, %s, transparent 70%%)" % (t("grad-start", 16), t("metric-3", 11))
+    if name == "dune":    # warm sun over soft sand ripples
+        return "radial-gradient(130%% 45%% at 50%% 0%%, %s, transparent 70%%), repeating-linear-gradient(168deg, transparent 0 26px, %s 26px 27px)" % (t("grad-end", 20), t("accent", 6))
+    if name == "glacier": # cold light from above over a faint ice grid
+        return "linear-gradient(180deg, %s, transparent 45%%), linear-gradient(90deg, %s 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(0deg, %s 1px, transparent 1px) 0 0 / 32px 32px" % (t("grad-start", 14), t("metric-1", 7), t("metric-1", 7))
+    if name == "forge":   # diagonal steel hatch with embers glowing from the bottom
+        return "radial-gradient(110%% 40%% at 50%% 100%%, %s, transparent 70%%), repeating-linear-gradient(135deg, transparent 0 11px, %s 11px 12px)" % (t("grad-start", 16), t("text", 4))
+    return "radial-gradient(70%% 40%% at 12%% 8%%, %s, transparent 70%%), radial-gradient(60%% 40%% at 95%% 45%%, %s, transparent 70%%), radial-gradient(70%% 40%% at 15%% 95%%, %s, transparent 70%%)" % (t("grad-start", 15), t("grad-end", 13), t("metric-3", 9))   # bloom: soft petals
+PAL = {k: {"light": dict(roles(v[2], "light"), canvas=canvas(k, "light")), "dark": dict(roles(v[3], "dark"), canvas=canvas(k, "dark"))} for k, v in SETS.items()}
 NAMES = [k for k in SETS if k != "pulse"]
 
 def block(d, indent="  "):
-    return "\n".join("%s--color-%s: %s;" % (indent, k, d[k]) for k in ORDER)
+    return "\n".join("%s--%s%s: %s;" % (indent, "" if k == "canvas" else "color-", k, d[k]) for k in ORDER)
 
 css = ['''/* =====================================================================
    THEME: design tokens for the whole app (Fitness style, five multi-colour themes)
@@ -158,9 +174,9 @@ for k in NAMES:
     css.append(':root[data-palette="%s"][data-theme="dark"]{\n%s\n}\n' % (k, block(PAL[k]["dark"])))
 css.append('''/* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength, cards keep outlines. */
 @media (prefers-contrast: more){
-  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --canvas: none; --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 }
-:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --canvas: none; --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 /* Theme switch: a short cross-fade, off when motion is reduced */
 :root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after{ transition: background-color var(--duration-med) var(--ease), color var(--duration-med) var(--ease), border-color var(--duration-med) var(--ease), fill var(--duration-med) var(--ease), stroke var(--duration-med) var(--ease) !important; }
 ''')

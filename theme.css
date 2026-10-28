@@ -131,6 +131,7 @@
   --color-inverse-text: #FFFFFF;
   --color-focus: #0B0B0F;
   --color-scrim: rgba(8, 10, 14, .45);
+  --canvas: radial-gradient(110% 55% at 100% 0%, color-mix(in srgb, var(--color-grad-start) 16%, transparent), transparent 70%), radial-gradient(90% 50% at 0% 100%, color-mix(in srgb, var(--color-metric-3) 11%, transparent), transparent 70%);
 }
 :root[data-palette="dune"]{
   --color-bg: #F6F0E7;
@@ -167,6 +168,7 @@
   --color-inverse-text: #FFFDF9;
   --color-focus: #1E150D;
   --color-scrim: rgba(8, 10, 14, .45);
+  --canvas: radial-gradient(130% 45% at 50% 0%, color-mix(in srgb, var(--color-grad-end) 20%, transparent), transparent 70%), repeating-linear-gradient(168deg, transparent 0 26px, color-mix(in srgb, var(--color-accent) 6%, transparent) 26px 27px);
 }
 :root[data-palette="glacier"]{
   --color-bg: #EDF2F7;
@@ -203,6 +205,7 @@
   --color-inverse-text: #FFFFFF;
   --color-focus: #0A1420;
   --color-scrim: rgba(8, 10, 14, .45);
+  --canvas: linear-gradient(180deg, color-mix(in srgb, var(--color-grad-start) 14%, transparent), transparent 45%), linear-gradient(90deg, color-mix(in srgb, var(--color-metric-1) 7%, transparent) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(0deg, color-mix(in srgb, var(--color-metric-1) 7%, transparent) 1px, transparent 1px) 0 0 / 32px 32px;
 }
 :root[data-palette="forge"]{
   --color-bg: #ECECEE;
@@ -239,6 +242,7 @@
   --color-inverse-text: #FFFFFF;
   --color-focus: #111214;
   --color-scrim: rgba(8, 10, 14, .45);
+  --canvas: radial-gradient(110% 40% at 50% 100%, color-mix(in srgb, var(--color-grad-start) 16%, transparent), transparent 70%), repeating-linear-gradient(135deg, transparent 0 11px, color-mix(in srgb, var(--color-text) 4%, transparent) 11px 12px);
 }
 :root[data-palette="bloom"]{
   --color-bg: #F6F0F7;
@@ -275,6 +279,7 @@
   --color-inverse-text: #FFFFFF;
   --color-focus: #1A0F1F;
   --color-scrim: rgba(8, 10, 14, .45);
+  --canvas: radial-gradient(70% 40% at 12% 8%, color-mix(in srgb, var(--color-grad-start) 15%, transparent), transparent 70%), radial-gradient(60% 40% at 95% 45%, color-mix(in srgb, var(--color-grad-end) 13%, transparent), transparent 70%), radial-gradient(70% 40% at 15% 95%, color-mix(in srgb, var(--color-metric-3) 9%, transparent), transparent 70%);
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -312,6 +317,7 @@
     --color-inverse-text: #1A1A1E;
     --color-focus: #F5F5F7;
     --color-scrim: rgba(0, 0, 0, .65);
+    --canvas: radial-gradient(110% 55% at 100% 0%, color-mix(in srgb, var(--color-grad-start) 20%, transparent), transparent 70%), radial-gradient(90% 50% at 0% 100%, color-mix(in srgb, var(--color-metric-3) 14%, transparent), transparent 70%);
   }
   :root[data-palette="dune"]:not([data-theme="light"]){
     --color-bg: #0D0A07;
@@ -348,6 +354,7 @@
     --color-inverse-text: #1E1914;
     --color-focus: #F7F0E6;
     --color-scrim: rgba(0, 0, 0, .65);
+    --canvas: radial-gradient(130% 45% at 50% 0%, color-mix(in srgb, var(--color-grad-end) 25%, transparent), transparent 70%), repeating-linear-gradient(168deg, transparent 0 26px, color-mix(in srgb, var(--color-accent) 8%, transparent) 26px 27px);
   }
   :root[data-palette="glacier"]:not([data-theme="light"]){
     --color-bg: #04080C;
@@ -384,6 +391,7 @@
     --color-inverse-text: #111A22;
     --color-focus: #EEF4F9;
     --color-scrim: rgba(0, 0, 0, .65);
+    --canvas: linear-gradient(180deg, color-mix(in srgb, var(--color-grad-start) 18%, transparent), transparent 45%), linear-gradient(90deg, color-mix(in srgb, var(--color-metric-1) 9%, transparent) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(0deg, color-mix(in srgb, var(--color-metric-1) 9%, transparent) 1px, transparent 1px) 0 0 / 32px 32px;
   }
   :root[data-palette="forge"]:not([data-theme="light"]){
     --color-bg: #090909;
@@ -420,6 +428,7 @@
     --color-inverse-text: #1A1B1D;
     --color-focus: #F4F4F5;
     --color-scrim: rgba(0, 0, 0, .65);
+    --canvas: radial-gradient(110% 40% at 50% 100%, color-mix(in srgb, var(--color-grad-start) 20%, transparent), transparent 70%), repeating-linear-gradient(135deg, transparent 0 11px, color-mix(in srgb, var(--color-text) 5%, transparent) 11px 12px);
   }
   :root[data-palette="bloom"]:not([data-theme="light"]){
     --color-bg: #0A0610;
@@ -456,6 +465,7 @@
     --color-inverse-text: #1C1424;
     --color-focus: #F8F0FA;
     --color-scrim: rgba(0, 0, 0, .65);
+    --canvas: radial-gradient(70% 40% at 12% 8%, color-mix(in srgb, var(--color-grad-start) 19%, transparent), transparent 70%), radial-gradient(60% 40% at 95% 45%, color-mix(in srgb, var(--color-grad-end) 16%, transparent), transparent 70%), radial-gradient(70% 40% at 15% 95%, color-mix(in srgb, var(--color-metric-3) 11%, transparent), transparent 70%);
   }
 }
 :root[data-theme="dark"]{
@@ -493,6 +503,7 @@
   --color-inverse-text: #1A1A1E;
   --color-focus: #F5F5F7;
   --color-scrim: rgba(0, 0, 0, .65);
+  --canvas: radial-gradient(110% 55% at 100% 0%, color-mix(in srgb, var(--color-grad-start) 20%, transparent), transparent 70%), radial-gradient(90% 50% at 0% 100%, color-mix(in srgb, var(--color-metric-3) 14%, transparent), transparent 70%);
 }
 :root[data-palette="dune"][data-theme="dark"]{
   --color-bg: #0D0A07;
@@ -529,6 +540,7 @@
   --color-inverse-text: #1E1914;
   --color-focus: #F7F0E6;
   --color-scrim: rgba(0, 0, 0, .65);
+  --canvas: radial-gradient(130% 45% at 50% 0%, color-mix(in srgb, var(--color-grad-end) 25%, transparent), transparent 70%), repeating-linear-gradient(168deg, transparent 0 26px, color-mix(in srgb, var(--color-accent) 8%, transparent) 26px 27px);
 }
 :root[data-palette="glacier"][data-theme="dark"]{
   --color-bg: #04080C;
@@ -565,6 +577,7 @@
   --color-inverse-text: #111A22;
   --color-focus: #EEF4F9;
   --color-scrim: rgba(0, 0, 0, .65);
+  --canvas: linear-gradient(180deg, color-mix(in srgb, var(--color-grad-start) 18%, transparent), transparent 45%), linear-gradient(90deg, color-mix(in srgb, var(--color-metric-1) 9%, transparent) 1px, transparent 1px) 0 0 / 32px 32px, linear-gradient(0deg, color-mix(in srgb, var(--color-metric-1) 9%, transparent) 1px, transparent 1px) 0 0 / 32px 32px;
 }
 :root[data-palette="forge"][data-theme="dark"]{
   --color-bg: #090909;
@@ -601,6 +614,7 @@
   --color-inverse-text: #1A1B1D;
   --color-focus: #F4F4F5;
   --color-scrim: rgba(0, 0, 0, .65);
+  --canvas: radial-gradient(110% 40% at 50% 100%, color-mix(in srgb, var(--color-grad-start) 20%, transparent), transparent 70%), repeating-linear-gradient(135deg, transparent 0 11px, color-mix(in srgb, var(--color-text) 5%, transparent) 11px 12px);
 }
 :root[data-palette="bloom"][data-theme="dark"]{
   --color-bg: #0A0610;
@@ -637,11 +651,12 @@
   --color-inverse-text: #1C1424;
   --color-focus: #F8F0FA;
   --color-scrim: rgba(0, 0, 0, .65);
+  --canvas: radial-gradient(70% 40% at 12% 8%, color-mix(in srgb, var(--color-grad-start) 19%, transparent), transparent 70%), radial-gradient(60% 40% at 95% 45%, color-mix(in srgb, var(--color-grad-end) 16%, transparent), transparent 70%), radial-gradient(70% 40% at 15% 95%, color-mix(in srgb, var(--color-metric-3) 11%, transparent), transparent 70%);
 }
 /* Extra contrast: phone setting or the app's own switch. Secondary text and dividers take full strength, cards keep outlines. */
 @media (prefers-contrast: more){
-  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+  :root, :root[data-palette], :root[data-theme], :root[data-palette][data-theme]{ --canvas: none; --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 }
-:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
+:root[data-contrast="more"], :root[data-contrast="more"][data-palette], :root[data-contrast="more"][data-theme], :root[data-contrast="more"][data-palette][data-theme]{ --canvas: none; --color-text-muted: var(--color-text); --color-border: var(--color-border-control); --color-border-control: var(--color-text); --color-card-border: var(--color-border-control); }
 /* Theme switch: a short cross-fade, off when motion is reduced */
 :root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after{ transition: background-color var(--duration-med) var(--ease), color var(--duration-med) var(--ease), border-color var(--duration-med) var(--ease), fill var(--duration-med) var(--ease), stroke var(--duration-med) var(--ease) !important; }

@@ -134,7 +134,8 @@ function rowArgs(c, item){
 function todaysDay(c){ return c.slot.weekStart === c.now.weekStart && !c.now.before && dayOfWeek(c.today) <= CONFIG.trainingDays ? dayOfWeek(c.today) : 0; }
 function weekLabel(plan, w){
   if (w.before) return "Starts " + fmtDayDate(w.weekStart);
-  if (plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks;
+  if (plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks + (w.easy ? " · easy week" : "");
+  if (w.easy) return "Easy week";
   if (w.testWeek) return "Test week";
   return PROGRAMME.plans.pb.weekLabels[w.weekLetter === "A" ? 0 : 1] + (w.heavyWeek ? ", heavy week" : "") + " · block " + w.fortnight + " of 3";
 }
@@ -197,6 +198,12 @@ function renderWeekBanner(c){
   else if (c.slot.weekStart < c.now.weekStart) html = '<div class="notice notice--warn"><p>This log is for ' + esc(fmtRange(c.slot.weekStart)) + ". Start a new week to log this week.</p>" +
     '<div class="button-row"><button type="button" class="button button--primary" data-open-new-week>Start new week</button><button type="button" class="button" data-export>Export this week first</button></div></div>';
   else if (c.slot.weekStart > c.now.weekStart) html = '<div class="notice"><p>This log starts ' + esc(fmtDayDate(c.slot.weekStart)) + ".</p></div>";
+  if (!c.now.before && c.slot.weekStart === c.now.weekStart){
+    if (c.slotWeek.easy) html += '<div class="notice"><p><strong>Easy week.</strong> ' + (c.plan === "hd"
+      ? "Same weights as last time, fewer exercises, and every main set stops about " + CONFIG.easy.hd.left + " reps short of failure. Nothing to beat this week."
+      : "Same exercises, lighter. Main lifts " + CONFIG.easy.pb.mainSets + " × " + CONFIG.easy.pb.mainReps + ", about half the other sets, no carries or sprints. Nothing to beat this week.") + "</p></div>";
+    else if (easyNudgeText(c)) html += '<div class="notice notice--warn"><p>' + esc(easyNudgeText(c)) + '</p><div class="button-row"><button type="button" class="button" data-go-calendar>Choose an easy week</button></div></div>';
+  }
   $("#week-banner").innerHTML = html;
 }
 function renderDayTabs(c){
@@ -862,23 +869,36 @@ function fmtSpan(a, b){
 }
 // Takes a week (from weekInfo). Returns its calendar label.
 function calWeekLabel(w){
-  if (w.plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks;
+  if (w.plan === "hd") return "Week " + w.blockWeek + " of " + w.blockWeeks + (w.easy ? " · easy week" : "");
+  if (w.easy) return "Easy week" + (w.easyAuto ? " · after test week" : "");
   if (w.testWeek) return "Test week";
   if (w.heavyWeek) return "Heavy week · block 3";
   return "Week " + w.weekLetter + " · block " + w.fortnight;
 }
 function weekRange(a, b){ return a === b ? "Week " + a : "Weeks " + a + " to " + b; }
+// Takes a block and a list of lines. Adds one line for the block's easy weeks, if it has any. Changes the list in place.
+function calEasyNotes(block, out){
+  const easy = block.list.map((w, i) => w.easy ? i + 1 : 0).filter(Boolean);
+  if (!easy.length) return;
+  const what = block.plan === "pb"
+    ? "same exercises, main lifts " + CONFIG.easy.pb.mainSets + " × " + CONFIG.easy.pb.mainReps + ", about half the other sets, no carries or sprints"
+    : "same weights, fewer exercises, every main set stops about " + CONFIG.easy.hd.left + " reps short of failure";
+  out.push((easy.length === 1 ? "Week " + easy[0] : "Weeks " + listWords(easy.map(String))) + ": easy week, " + what + ".");
+}
 // Takes a block. Returns what the plan's own rules do across it, as short lines.
 function calBlockNotes(block){
   if (block.plan === "hd"){
+    const out0 = [];
+    calEasyNotes(block, out0);
     const drop = Math.round((1 - CONFIG.dropPercent) * 1000) / 10;
     const out = ["Same five sessions every week: one all-out set per exercise.",
       "Reach the top of the rep range and your next target adds weight. Below the range " + weekWord(CONFIG.belowStreakToDrop) + " running, it drops about " + drop + "%."];
     if (block.weeks >= CONFIG.longRunWeeks) out.push("Long run: if a lift stalls for two weeks, add a rest day before you cut the weight.");
-    return out;
+    return out.concat(out0);
   }
   const pb = PROGRAMME.plans.pb, out = [], groups = [];
   block.list.forEach((w, i) => {
+    if (w.easy) return;
     const key = Math.floor(w.pbWeek / 2), g = groups[groups.length - 1];
     if (g && g.key === key) g.weeks.push(i + 1), g.letters.push(w.weekLetter); else groups.push({key: key, f: w.fortnight, weeks: [i + 1], letters: [w.weekLetter]});
   });
@@ -899,6 +919,7 @@ function calBlockNotes(block){
     out.push(line);
     if (g.letters.indexOf("B") >= 0 && g.f === 3 && gi < groups.length - 1) out.push("After test week, block 1 starts again from your new maxes.");
   });
+  calEasyNotes(block, out);
   return out;
 }
 // Takes the cycle, a block and today. Returns a line when the plan returns after a long run on the other plan.
@@ -913,13 +934,27 @@ function calReturnNote(cycle, block, today){
   }
   return "";
 }
+// Takes the view context and a plan id. Returns true when this week's log for that plan already has sets or missed days in it.
+function planLogStarted(c, plan){
+  const slot = slotOf(state, plan);
+  if (!slot || slot.weekStart !== c.now.weekStart) return false;
+  return Object.keys(slot.entries || {}).some(id => isAccounted(slot.entries[id])) || Object.keys(slot.missedDays || {}).length > 0;
+}
+// Takes the view context. Returns the line to show when you have trained hard for a long stretch, else "".
+function easyNudgeText(c){
+  if (!state.cycle || c.now.before || c.now.easy || c.now.hardRun < CONFIG.easy.nudgeWeeks) return "";
+  // An easy week already planned for the next two weeks (after a test week, say) makes the nudge unnecessary
+  for (let k = 1; k <= 2; k++) if (weekInfo(c.cycle, addDays(c.now.weekStart, 7 * k)).easy) return "";
+  return "You have trained hard for " + weekWord(c.now.hardRun) + " in a row. An easy week now helps your next hard weeks go better.";
+}
 function renderCalendar(c){
   const box = $("#calendar");
   if (!box) return;
   const show = Math.min(24, state.ui.calShow || CONFIG.calendarBlocks);
   const blocks = calendarBlocks(c.cycle, c.now.before ? 0 : c.now.blockIndex, show), nowWeek = c.now.before ? "" : c.now.weekStart;
   let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Calendar</h2>' +
-    '<p class="small muted">Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules.</p></div><ol class="cal-blocks">';
+    '<p class="small muted">Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules. The week after a Powerbuilding test week is an easy week. You can make any other week easy too, and turn an easy week back to normal.</p>' +
+    (easyNudgeText(c) ? '<p class="notice notice--warn small">' + esc(easyNudgeText(c)) + "</p>" : "") + '</div><ol class="cal-blocks">';
   blocks.forEach(bl => {
     const lim = blockLimits(c.cycle, bl.index, c.today), isNow = bl.list.some(w => w.weekStart === nowWeek);
     const end = addDays(bl.start, 7 * bl.weeks - 1), step = lim.step, unitWord = step === 1 ? "a week" : step + " weeks";
@@ -934,10 +969,13 @@ function renderCalendar(c){
       '<p class="small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks)) + "</p></div></div>" +
       '<ol class="cal-weeks">' + bl.list.map(w => {
         const past = nowWeek && w.weekStart < nowWeek, cur = w.weekStart === nowWeek;
-        return '<li class="cal-week' + (past ? " is-past" : "") + (cur ? " is-now" : "") + (w.testWeek ? " is-test" : "") + '"' + (cur ? ' aria-current="date"' : "") + '>' +
+        const canEasy = !!state.cycle && !past && !(cur && planLogStarted(c, w.plan));
+        const act = canEasy ? '<button type="button" class="button button--quiet cal-week__act" data-cal-easy="' + w.weekIndex + '" aria-pressed="' + w.easy + '" aria-label="' +
+          (w.easy ? "Make the week of " + esc(fmtDate(w.weekStart)) + " a normal week" : "Make the week of " + esc(fmtDate(w.weekStart)) + " an easy week") + '">' + (w.easy ? "Make normal" : "Make easy") + "</button>" : "";
+        return '<li class="cal-week' + (past ? " is-past" : "") + (cur ? " is-now" : "") + (w.testWeek ? " is-test" : "") + (w.easy ? " is-easy" : "") + (act ? " cal-week--act" : "") + '"' + (cur ? ' aria-current="date"' : "") + '>' +
           '<span class="cal-week__date">' + esc(fmtWeekShort(w.weekStart)) + "</span>" +
           '<span class="cal-week__label">' + esc(calWeekLabel(w)) + "</span>" +
-          '<span class="cal-week__state">' + (cur ? "This week" : past ? "Done" : "") + "</span></li>";
+          '<span class="cal-week__state">' + (cur ? "This week" : past ? "Done" : "") + "</span>" + act + "</li>";
       }).join("") + "</ol>" +
       '<ul class="cal-notes small">' + calBlockNotes(bl).map(t => "<li>" + esc(t) + "</li>").join("") + (ret ? "<li>" + esc(ret) + "</li>" : "") + "</ul>" +
       (lim.locked ? "" : '<div class="button-row cal-block__actions">' +
@@ -981,7 +1019,18 @@ function changeBlock(b, dir){
   const target = same && !same.disabled ? same : other && !other.disabled ? other : $("#cal-b-" + b);
   if (target) target.focus({preventScroll: true});
 }
+// Takes a week number from the start. Flips that week between easy and normal, then re-renders and keeps focus.
+function toggleEasy(i){
+  const c = ctx(), date = addDays(mondayOf(c.cycle.start), 7 * i), now = weekInfo(c.cycle, date);
+  const planned = weekInfo(withEasyWeek(c.cycle, i, null), date).easy, want = !now.easy;
+  state.cycle = withEasyWeek(c.cycle, i, want === planned ? null : want);
+  save(); renderAll();
+  toast(want ? "Easy week set for " + fmtRange(date) + "." : "Normal week set for " + fmtRange(date) + ".");
+  const b = $('[data-cal-easy="' + i + '"]'); if (b) b.focus({preventScroll: true});
+}
 $("#view-plan").addEventListener("click", ev => {
+  const e = ev.target.closest("[data-cal-easy]");
+  if (e){ toggleEasy(+e.dataset.calEasy); return; }
   const b = ev.target.closest("[data-cal-b]");
   if (b){ changeBlock(+b.dataset.calB, +b.dataset.calD); return; }
   if (ev.target.closest("[data-cal-more]")){ state.ui.calShow = Math.min(24, (state.ui.calShow || CONFIG.calendarBlocks) + CONFIG.calendarBlocks); save(); renderAll(); const m = $("[data-cal-more]"); if (m) m.focus({preventScroll: true}); return; }
@@ -1207,7 +1256,7 @@ function progressChartsHTML(rows, meta){
 //   CONFIG.pbCoaching.flatChecks checks in a row → say so plainly.
 function pbOnTrackHTML(pts, meta){
   if (!meta || meta.plan !== "pb" || !meta.item.lift || !state.cycle) return "";
-  const cy = cycleOf(), b = pts.filter(r => r.est > 0).filter(r => { const w = weekInfo(cy, r.weekStart); return !w.before && w.plan === "pb" && w.weekLetter === "B" && !w.testWeek; });
+  const cy = cycleOf(), b = pts.filter(r => r.est > 0).filter(r => { const w = weekInfo(cy, r.weekStart); return !w.before && w.plan === "pb" && w.weekLetter === "B" && !w.testWeek && !w.easy; });
   if (b.length < 2) return '<p class="small muted">Week B check: compare after your next Week B. A rise of ' + CONFIG.pbCoaching.onTrackPct[0] + " to " + CONFIG.pbCoaching.onTrackPct[1] + "% is on track.</p>";
   const last = b[b.length - 1], prev = b[b.length - 2], pct = Math.round((last.est / prev.est - 1) * 1000) / 10;
   const [lo, hi] = CONFIG.pbCoaching.onTrackPct, n = CONFIG.pbCoaching.flatChecks;
@@ -1335,7 +1384,24 @@ function syncExerciseSheet(){
   const open = state.ui.tab === "train" && !!state.cycle && ((!!state.ui.openEx && !!$("#ex-" + state.ui.openEx)) || (!!state.ui.openExtra && !!$("#extra-" + state.ui.openExtra)));
   $("#sheet-scrim").hidden = !open;
   document.body.classList.toggle("has-sheet", open);
+  syncSheetHistory(open);
 }
+// Phone Back closes an open exercise sheet instead of leaving the app: opening a sheet adds one history entry,
+// and Back (the popstate below) closes the sheet. Closing it any other way removes that entry again.
+let sheetHist = false;
+function syncSheetHistory(open){
+  try {
+    if (open && !sheetHist){ history.pushState({sheet: 1}, ""); sheetHist = true; }
+    else if (!open && sheetHist){ sheetHist = false; history.back(); }
+  } catch (e){ sheetHist = false; }
+}
+window.addEventListener("popstate", () => {
+  if (!sheetHist) return;
+  sheetHist = false;
+  if (!(state.ui.openEx || state.ui.openExtra)) return;
+  if ($("dialog[open]")){ history.pushState({sheet: 1}, ""); sheetHist = true; return; }
+  closeExerciseSheet();
+});
 function closeExerciseSheet(){
   if (state.ui.openExtra){ const x = state.ui.openExtra; state.ui.openExtra = null; save(); renderAll(); const s = $("#extra-" + x + " .exercise__summary"); if (s) s.focus({preventScroll: true}); return; }
   const id = state.ui.openEx; if (!id) return;
@@ -1419,6 +1485,7 @@ $("#button-schedule-save").addEventListener("click", () => {
   const first = ($('input[name="settings-first"]:checked') || {}).value || CONFIG.defaultFirstPlan, old = state.cycle;
   const same = old && old.start === r.value && old.first === first;
   state.cycle = {start: r.value, first: first, lengths: same && Array.isArray(old.lengths) ? old.lengths : []};
+  if (same && old.easy) state.cycle.easy = old.easy;
   ensurePbSlot(state, todayISO());
   realignSlots(todayISO());
   save(); renderAll();

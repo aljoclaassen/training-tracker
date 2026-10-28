@@ -114,31 +114,59 @@ function blockAtWeek(cycle, weekIndex){
   }
 }
 
+// Takes the cycle and a week number counted from the start. Returns true or false when you set that week
+// by hand (cycle.easy is {weekNumber: true | false}), else null.
+function easyOverride(cycle, i){
+  const e = cycle.easy;
+  return e && typeof e === "object" && !Array.isArray(e) && typeof e[i] === "boolean" ? e[i] : null;
+}
+// Takes the cycle. Returns the week number (counted from the start) where easy weeks begin to be planned.
+function easyFromWeek(cycle){
+  return Math.max(0, Math.floor(daysBetween(mondayOf(cycle.start), mondayOf(CONFIG.easy.autoFrom)) / 7));
+}
+
 // Takes the cycle and any date.
 // Returns where that date sits: {before, weekStart, weekIndex, blockIndex, blockStart, blockWeeks, plan,
 //   blockWeek (1 to blockWeeks), weekLetter ("A" or "B"), pbWeek, fortnight (powerbuilding only: 1, 2 or 3),
-//   heavyWeek, testWeek}.
+//   heavyWeek, testWeek, easy, easyAuto, hardRun}.
 // Rules: Heavy Duty weeks are all the same, numbered within the block. Powerbuilding weeks count on across
 //   every powerbuilding block, so a longer block moves on through the programme: weeks pair into A and B,
 //   pairs count blocks 1, 2 and 3, then repeat. Block 3's Week A is the heavy week and its Week B is test week.
+//   Easy weeks: the week after a test week is easy (a lighter week, for either plan) unless you turn it off,
+//   and you can make any other week easy. A powerbuilding easy week does not use up a place in the
+//   block cycle: the cycle carries on where it left off. hardRun counts the weeks in a row before this one
+//   that were not easy, from CONFIG.easy.autoFrom on.
 function weekInfo(cycle, iso){
   const start = mondayOf(cycle.start), week = mondayOf(iso);
   const before = daysBetween(start, week) < 0;
   const weekIndex = before ? 0 : Math.floor(daysBetween(start, week) / 7);
-  const k = blockAtWeek(cycle, weekIndex);
-  const plan = blockPlan(cycle, k.b), blockWeek = weekIndex - k.at + 1;
-  const info = {before: before, weekStart: before ? start : week, weekIndex: weekIndex, blockIndex: k.b, blockStart: addDays(start, 7 * k.at),
-    blockWeeks: k.len, plan: plan, blockWeek: blockWeek, weekLetter: blockWeek % 2 === 1 ? "A" : "B", pbWeek: null,
-    fortnight: null, heavyWeek: false, testWeek: false};
-  if (plan === "pb"){
-    const n = k.pbWeeks + blockWeek - 1;
-    info.pbWeek = n;
-    info.weekLetter = n % 2 === 0 ? "A" : "B";
-    info.fortnight = (Math.floor(n / 2) % PROGRAMME.plans.pb.fortnights.length) + 1;
-    info.heavyWeek = info.fortnight === 3 && info.weekLetter === "A";
-    info.testWeek = info.fortnight === 3 && info.weekLetter === "B";
+  const from = easyFromWeek(cycle), blocks = PROGRAMME.plans.pb.fortnights.length;
+  let pbN = 0, prevTest = false, hard = 0, out = null;
+  for (let b = 0, at = 0; b <= 5000 && !out; b++){
+    const len = blockLength(cycle, b), plan = blockPlan(cycle, b);
+    for (let j = 0; j < len; j++){
+      const i = at + j, ov = easyOverride(cycle, i), auto = i >= from && prevTest;
+      const easy = ov === null ? auto : ov;
+      const pb = plan === "pb", letter = (pb ? pbN : j) % 2 === 0 ? "A" : "B";
+      const fortnight = pb ? (Math.floor(pbN / 2) % blocks) + 1 : null;
+      const atTest = pb && fortnight === blocks && letter === "B";
+      if (i === weekIndex){
+        out = {before: before, weekStart: before ? start : week, weekIndex: weekIndex, blockIndex: b, blockStart: addDays(start, 7 * at),
+          blockWeeks: len, plan: plan, blockWeek: j + 1, weekLetter: letter, pbWeek: pb ? pbN : null, fortnight: fortnight,
+          heavyWeek: pb && !easy && fortnight === blocks && letter === "A", testWeek: pb && !easy && atTest,
+          easy: easy, easyAuto: ov === null && auto, hardRun: hard};
+        break;
+      }
+      if (pb && !easy) pbN++;
+      prevTest = pb && !easy && atTest;
+      hard = i < from || easy ? 0 : hard + 1;
+    }
+    at += len;
   }
-  return info;
+  // Only reached when every block is 0 weeks long: treat the date as the first week of the first plan
+  return out || {before: before, weekStart: before ? start : week, weekIndex: weekIndex, blockIndex: 0, blockStart: start, blockWeeks: 1,
+    plan: cycle.first, blockWeek: 1, weekLetter: "A", pbWeek: null, fortnight: null, heavyWeek: false, testWeek: false,
+    easy: false, easyAuto: false, hardRun: 0};
 }
 
 // Takes the cycle and a date. Returns {date, plan}: the Monday the plan next changes, and the plan it changes to.
@@ -198,12 +226,26 @@ function blockLimits(cycle, b, today){
   return out;
 }
 
+// Takes the old cycle and a new one. Returns the new cycle carrying over the old one's hand-set easy weeks.
+function withEasyOf(old, next){
+  if (old.easy && typeof old.easy === "object" && Object.keys(old.easy).length) next.easy = Object.assign({}, old.easy);
+  return next;
+}
+// Takes the cycle, a week number from the start and true, false or null (back to the plan's own choice).
+// Returns a new cycle with that week set to easy or normal.
+function withEasyWeek(cycle, weekIndex, value){
+  const next = withEasyOf(cycle, {start: cycle.start, first: cycle.first, lengths: Array.isArray(cycle.lengths) ? cycle.lengths.slice() : []});
+  const e = Object.assign({}, next.easy || {});
+  if (value === null) delete e[weekIndex]; else e[weekIndex] = !!value;
+  if (Object.keys(e).length) next.easy = e; else delete next.easy;
+  return next;
+}
 // Takes the cycle, a block index and a length in weeks. Returns a new cycle with that block's length set.
 function withBlockLength(cycle, b, weeks){
   const L = Array.isArray(cycle.lengths) ? cycle.lengths.slice() : [];
   for (let i = 0; i <= b; i++) if (L[i] == null) L[i] = CONFIG.blockWeeks;
   L[b] = weeks;
-  return {start: cycle.start, first: cycle.first, lengths: L};
+  return withEasyOf(cycle, {start: cycle.start, first: cycle.first, lengths: L});
 }
 
 // Takes the cycle and today. Returns a new cycle where the other plan starts this week.
@@ -217,7 +259,7 @@ function switchCycleNow(cycle, today){
 // Takes the cycle and today. Returns a new cycle with every block after the current one back to the default length.
 function resetUpcomingBlocks(cycle, today){
   const now = weekInfo(cycle, today), L = Array.isArray(cycle.lengths) ? cycle.lengths.slice(0, now.blockIndex + 1) : [];
-  return {start: cycle.start, first: cycle.first, lengths: L};
+  return withEasyOf(cycle, {start: cycle.start, first: cycle.first, lengths: L});
 }
 // Takes the cycle and today. Returns true when a block after the current one has a non-default length.
 function hasUpcomingChanges(cycle, today){
@@ -321,10 +363,23 @@ function variantFor(planId, item, variantId){
 //   to two sets in fortnight 3, easy bike gains 5 minutes in fortnight 2, sprints stop in fortnight 3,
 //   and test week replaces Days 1 to 3 with test singles, Day 4 with stretching and bike, Day 5 with rest.
 function buildSession(planId, dayN, week, variantChoice){
-  return planId === "hd" ? buildHdSession(dayN, variantChoice) : buildPbSession(dayN, week, variantChoice);
+  return planId === "hd" ? buildHdSession(dayN, variantChoice, week) : buildPbSession(dayN, week, variantChoice);
 }
 
-function buildHdSession(dayN, variantChoice){
+// Heavy Duty easy week. Takes the built session's groups and the day number. Marks the exercises that are not in
+// CONFIG.easy.hd.keep as skipped and the rest as easy-week exercises. Changes the items in place.
+function applyHdEasy(groups, dayN){
+  const keep = CONFIG.easy.hd.keep[String(dayN)] || [];
+  groups.forEach(g => g.items.forEach(it => {
+    if (keep.indexOf(it.id) >= 0){
+      it.deload = true;
+      it.rows.forEach(r => { if (r.role === "work") r.label = CONFIG.easy.hd.left + " shy of failure"; });
+      it.notes = "Easy week: the weight you used last time, and every main set stops about " + CONFIG.easy.hd.left + " reps short of failure." + (it.notes ? " " + it.notes : "");
+    } else { it.skipped = true; it.counted = false; it.optional = true; it.notes = "Not this week."; }
+  }));
+}
+
+function buildHdSession(dayN, variantChoice, week){
   const plan = PROGRAMME.plans.hd, day = plan.days.filter(d => d.n === dayN)[0];
   const groups = day.groups.map(g => ({title: g.title, pair: null, items: g.items.map(item => {
     const v = variantFor("hd", item, variantChoice[item.id]);
@@ -339,7 +394,11 @@ function buildHdSession(dayN, variantChoice){
       repMin: null, repMax: null, reps: item.reps, sourceSets: item.sets
     };
   })}));
-  return {plan: "hd", n: dayN, title: day.title, time: hdSessionTime(groups), timeEstimated: true, intro: "", notes: [], rest: false, groups: groups};
+  const easy = !!(week && week.easy);
+  if (easy) applyHdEasy(groups, dayN);
+  return {plan: "hd", n: dayN, title: day.title, time: hdSessionTime(groups), timeEstimated: true, intro: "",
+    notes: easy ? ["Easy week. Same weights as last time, fewer exercises, and every main set stops about " + CONFIG.easy.hd.left + " reps short of failure. Nothing to beat this week."] : [],
+    rest: false, groups: groups, easy: easy};
 }
 
 // Takes a rest text like "90 s", "60–90 s" or "2–3 min". Returns the middle of it in seconds ("None" is 0).
@@ -371,15 +430,19 @@ function hdSessionTime(groups){
 
 function buildPbSession(dayN, week, variantChoice){
   const pb = PROGRAMME.plans.pb, day = pb.days.filter(d => d.n === dayN)[0];
-  const f = pb.fortnights[(week.fortnight || 1) - 1], letter = week.weekLetter || "A";
-  const session = {plan: "pb", n: dayN, title: day.title, time: day.time, intro: day.intro, notes: [], rest: false, groups: []};
-  if (f.changes) session.notes.push("This fortnight: " + f.changes + ".");
+  const easy = !!week.easy;
+  // An easy week uses the plain first-block settings, then lightens them (see easyPbItem)
+  const f = pb.fortnights[easy ? 0 : (week.fortnight || 1) - 1], letter = easy ? "A" : week.weekLetter || "A";
+  const session = {plan: "pb", n: dayN, title: day.title, time: easy ? CONFIG.easy.pb.time[String(dayN)] || day.time : day.time, intro: day.intro, notes: [], rest: false, groups: [], easy: easy};
+  if (easy) session.notes.push("Easy week. Same exercises, lighter: main lifts " + CONFIG.easy.pb.mainSets + " × " + CONFIG.easy.pb.mainReps + " with " + CONFIG.easy.pb.mainLeft + " left, other exercises about half the sets with " + CONFIG.easy.pb.accessoryLeft + " left, no carries, Nordics or sprints. Nothing to beat this week.");
+  else if (f.changes) session.notes.push("This fortnight: " + f.changes + ".");
   if (week.testWeek){
     if (dayN === pb.testWeek.restDay){ session.rest = true; session.notes = ["Test week: rest today."]; return session; }
     session.notes = ["Test week. " + pb.testWeek.steps.join(" ")];
     if (dayN === pb.testWeek.lightDay) session.notes = [pb.testWeek.lightDayNote];
   }
   const items = [pbItem(warmupItem(pb, day), dayN, week, f, letter, null)].concat(day.items.map(item => pbItem(item, dayN, week, f, letter, variantChoice[item.id])));
+  if (easy) items.forEach(easyPbItem);
   if (week.testWeek){
     items.forEach(it => {
       const isTestLift = pb.testWeek.days[String(dayN)] && it.lift === pb.testWeek.days[String(dayN)];
@@ -403,6 +466,33 @@ function buildPbSession(dayN, week, variantChoice){
     else { current = {title: null, pair: letterOf, items: [it]}; session.groups.push(current); }
   });
   return session;
+}
+
+// Powerbuilding easy week. Takes a session item built with the first block's settings. Changes it in place.
+// Rules (numbers in CONFIG.easy.pb): main lifts become mainSets × mainReps with mainLeft reps left; carries,
+// Nordics and sprints are skipped; bike, stretching and warm-ups stay; every other exercise keeps about
+// accessoryShare of its sets, at least one, with accessoryLeft reps left.
+function easyPbItem(it){
+  const E = CONFIG.easy.pb;
+  if (it.kind === "warmup" || it.kind === "stretch" || it.log === "time" || it.log === "check") return;
+  it.easy = true;
+  if (E.dropLogs.indexOf(it.log) >= 0 || E.dropRules.indexOf(it.rule) >= 0){
+    it.skipped = true; it.counted = false; it.optional = true; it.notes = "Not this week."; it.rows = []; return;
+  }
+  if (it.kind === "main"){
+    it.rows = [];
+    for (let i = 0; i < E.mainSets; i++) it.rows.push({label: "Set " + (i + 1), role: "set", reps: String(E.mainReps), left: E.mainLeft});
+    it.repMin = E.mainReps; it.repMax = E.mainReps; it.backoffPct = null;
+    it.setsText = E.mainSets + " × " + E.mainReps; it.leftText = E.mainLeft;
+    it.rest = it.rest.split(",").pop().replace(/ after back-offs/, "").trim();
+    it.notes = "Easy week: both sets feel smooth, with " + E.mainLeft + " reps left. Keep the pause and the usual technique.";
+    return;
+  }
+  const keep = Math.max(1, Math.round(it.rows.length * E.accessoryShare));
+  it.rows = it.rows.slice(0, keep).map(r => Object.assign({}, r, {left: E.accessoryLeft}));
+  it.setsText = String(it.setsText).replace(/^\d+/, String(keep));
+  it.leftText = E.accessoryLeft;
+  it.notes = "Easy week: the weight you used last time, " + E.accessoryLeft + " reps left.";
 }
 
 // Takes a powerbuilding item and the week. Returns the session item for this week.
@@ -1178,13 +1268,16 @@ function loadAsLastWeek(slot, planId, data){
 // Rule: the new week is the plan's next scheduled week, so weeks on the other plan are skipped.
 function startNewWeek(slot, planId, sessions, cycle, today, nowISO){
   const finished = buildExport(slot, planId, sessions, null, nowISO);
+  // An easy week is kept in the history archive but never replaces last week's numbers: the next hard week
+  // still builds on the last hard one.
+  const wasEasy = weekInfo(cycle, slot.weekStart).easy;
   slot.entries = {};
   slot.missedDays = {};
   slot.extras = {};
   slot.ui = slot.ui || {};
   slot.ui.dismissedMiss = {};
   slot.weekStart = nextWeekForPlan(cycle, planId, laterOf(addDays(slot.weekStart, 7), mondayOf(today)));
-  loadAsLastWeek(slot, planId, finished);
+  if (!wasEasy) loadAsLastWeek(slot, planId, finished);
   applyRegularSwaps(slot);
   return slot;
 }
@@ -1288,7 +1381,7 @@ function applyBackup(slot, p){
 function plannedTopLeft(cycle, iso){
   if (!iso || !parseISO(iso)) return "";
   const w = weekInfo(cycle, iso);
-  if (w.plan !== "pb") return "";
+  if (w.plan !== "pb" || w.easy) return "";
   const f = PROGRAMME.plans.pb.fortnights[w.fortnight - 1], top = f.top[w.weekLetter] === "test" ? f.top.A : f.top[w.weekLetter];
   return top.left;
 }
@@ -1299,12 +1392,40 @@ function firstWorkRow(item){
   return 0;
 }
 
+// Powerbuilding easy week. Takes an item, a row index, the args and last time's sets. Returns {text, kg}.
+// Rules: main lifts take the load that should give mainReps with mainLeft reps left from your best recent estimated
+// max; everything else repeats last time's weight. Nothing here asks you to beat last week.
+function easyPbTarget(item, i, a, lastSets){
+  const none = {text: "", kg: null}, row = item.rows[i] || {}, E = CONFIG.easy.pb;
+  if (row.role !== "set") return none;
+  if (item.kind === "main"){
+    const em = bestEstMax(lastSets);
+    if (!(em > 0)) return {text: "Pick a weight you could lift for about " + (E.mainReps + Number(E.mainLeft)) + " reps. Stop at " + E.mainReps + ".", kg: null};
+    const kg = loadForReps(em, E.mainReps, E.mainLeft, a.unit);
+    return {text: "About " + fmtLoad(kg, a.unit) + " for " + E.mainReps + " reps, " + E.mainLeft + " left. Easy week.", kg: kg, reps: E.mainReps};
+  }
+  const last = lastSets && lastSets[i] && isLogged(lastSets[i]) ? lastSets[i] : bestSet(lastSets || []);
+  const kg = last ? Number(last.kg) || 0 : 0;
+  return kg > 0 ? {text: "Easy week: same weight as last time, " + fmtLoad(kg, a.unit) + ".", kg: kg} : none;
+}
+// Heavy Duty easy week. Takes a row index, the args, last time's same set and all of last time's sets.
+// Returns {text, kg, reps}: last time's weight for about CONFIG.easy.hd.left fewer reps than last time's best.
+function hdDeloadTarget(i, a, lastSet, lastSets){
+  const left = Number(CONFIG.easy.hd.left);
+  const last = lastSet && isLogged(lastSet) && Number(lastSet.kg) > 0 ? lastSet : bestSet((lastSets || []).filter(x => x && isLogged(x)));
+  const kg = last ? Number(last.kg) || 0 : 0, reps = last ? Math.max(1, (Number(last.reps) || 0) - left) : 0;
+  if (!(kg > 0) || !(reps > 0)) return {text: "Easy week: use a weight you could lift for about " + left + " more reps than you do.", kg: null};
+  return {text: "Easy week: " + fmtLoad(kg, a.unit) + " for about " + reps + " reps, " + left + " short of failure.", kg: kg, reps: reps};
+}
+
 // Takes an item, a row index and {entry, last, unit, streak, cycle}. Returns {text, kg}: what to aim
 // for on that row today. Dispatches to the Heavy Duty, top-set, back-off or accessory rule.
 function rowTarget(item, i, a){
   const lastSets = a.last && a.last.sets ? a.last.sets.map(s => sameUnit(withUnit(s, a.last.unit), a.unit)) : null;
   const lastSet = lastSets ? lastSets[i] : null;
   const row = item.rows[i] || {};
+  if (item.easy) return easyPbTarget(item, i, a, lastSets);
+  if (item.plan === "hd" && item.deload && row.role === "work") return hdDeloadTarget(i, a, lastSet, lastSets);
   if (item.plan === "hd"){
     const own = nextTargetHd(item, i, lastSet, a.unit, a.streak || 0, a.last && a.last.fromHistory ? a.last.gapWeeks : null);
     const p = a.partner;
@@ -1734,6 +1855,12 @@ function normaliseState(raw, today){
   // Block lengths: whole weeks from 0 to the maximum; anything else falls back to the default length
   if (st.cycle) st.cycle.lengths = Array.isArray(st.cycle.lengths) ? st.cycle.lengths.slice(0, 2000).map(n => {
     const v = parseInt(n, 10); return v >= 0 && v <= CONFIG.maxBlockWeeks ? v : CONFIG.blockWeeks; }) : [];
+  // Hand-set easy weeks: {weekNumber: true | false}; anything else is dropped
+  if (st.cycle){
+    const e = objOr(st.cycle.easy, null), clean = {};
+    if (e) Object.keys(e).slice(0, 2000).forEach(k => { if (/^\d{1,4}$/.test(k) && typeof e[k] === "boolean") clean[k] = e[k]; });
+    if (Object.keys(clean).length) st.cycle.easy = clean; else delete st.cycle.easy;
+  }
   if (st.pb && typeof st.pb === "object"){
     st.pb = Object.assign(freshSlot(st.pb.weekStart || mondayOf(today)), st.pb);
     st.pb.ui = Object.assign({dismissedMiss: {}}, st.pb.ui || {});

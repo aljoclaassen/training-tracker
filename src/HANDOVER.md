@@ -6,7 +6,7 @@
 
 **One phone app runs both programmes, Heavy Duty (HD) and Powerbuilding (PB), in alternating blocks, works offline, and is shared with friends.** This chat took it from the first powerbuilding build to the current version: a redesigned look, supersets side by side, a calendar where either plan can run longer, strength charts in History, and Powerbuilding predictions. This is a personal project (gym), not BOA Foundation or Cango Wildlife work output.
 
-**Pick up here:** version **2026-10-26.2** is deployed (adds the Superset label, the extras picker and Heavy Duty session times). The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
+**Pick up here:** version **2026-10-28.1** is deployed (adds easy weeks, the Back button for open sheets and theme backgrounds). The owner's last instruction pattern is: list changes for review, commit only when he says "commit". Ask him to confirm, then deploy it (see "Pending").
 
 ### Where things live
 
@@ -122,3 +122,13 @@
 - **Superset label (26 October 2026):** paired groups start with a red "Superset" tag in both plans.
 - **Extras picker (26 October 2026):** "Add extra exercise" opens a picker. Suggestions come from `CONFIG.extraSuggestions` (per plan and day, 10 each, trimmed of anything already in the day or added). Swap options come from the plan's swap text (PB), saved swaps and other versions of an exercise (HD), each shown as "instead of X" and skipping holds. "Type my own" is the old blank form. Lunges are offered as Dumbbell Walking Lunges, Barbell Walking Lunges and Zercher Lunge. Code: `extraPickOptions`, `extraPickerHTML` in display.js. Test: `tests/p4/extras.py`. The suggestion lists were written by Claude and are for the owner to edit.
 - **HD session time (26 October 2026):** each HD day shows "Takes about 50–60 min, warm-up sets and rests included." It is an estimate from the plan's sets and rests (`hdSessionTime` in logic.js, numbers in `CONFIG.hdTime`), with no general warm-up counted. Owner to time real sessions and tune `hdTime`. Test: `tests/p4/hdtime.py`.
+
+## 28 October 2026 addition (version 2026-10-28.1)
+
+- **Easy weeks:** the week after every PB test week is an easy week (for either plan) from `CONFIG.easy.autoFrom` (2 November 2026) on; the owner can also make any current or future week easy, or turn an automatic one off, from the calendar ("Make easy" / "Make normal"). Stored as the optional `cycle.easy` map `{weekNumber: true|false}` (week numbers count from `cycle.start`), sanitised in `normaliseState`, kept by every cycle-changing function (`withEasyOf`, `withEasyWeek`). `weekInfo` is now a one-pass scan that adds `easy`, `easyAuto` and `hardRun`; a PB easy week does not use up a place in the PB block cycle. With 2-week blocks the week after a test week is usually the first HD week, so it shows as an HD easy week.
+- **PB easy week:** same exercises. Main lifts 2 x 5 with 4 left, from the best estimated max in last week's sets; other exercises about half the sets, 3 left, same weight as last time; carries, Nordics and sprints skipped; bike and stretching kept; shorter session times. Code: `easyPbItem`, `easyPbTarget`. Settings: `CONFIG.easy.pb`.
+- **HD easy week (deload):** only the exercises in `CONFIG.easy.hd.keep` per day (the owner can edit these); the rest show as skipped. Targets are last time's weight for last time's reps minus 3 (`hdDeloadTarget`). Easy weeks do not replace last week's numbers (`startNewWeek` skips `loadAsLastWeek`), so the next hard week builds on the last hard one. The design for the HD deload is Claude's own (no HD-specific research).
+- **Nudge:** after `CONFIG.easy.nudgeWeeks` (6) hard weeks in a row, Today and the calendar suggest an easy week (not shown if an easy week is already due within two weeks).
+- **Back button:** opening an exercise or superset sheet adds one history entry, and phone Back closes the sheet instead of leaving the app (`syncSheetHistory`, `popstate` handler in display.js).
+- **Theme backgrounds:** each theme has a CSS-gradient "canvas" behind the cards (`--canvas` in theme.css, made by `gen_theme.py`, drawn by `body::before`); Extra contrast turns it off. Worst-case text contrast over it was measured (muted text 4.9:1 or better).
+- **Tests added:** `tests/p4/easy.py`, `back.py`, `canvas.py` (contrast over the canvas), `easyshot.py`, `canvasshot.py`, `tests/p3/audit_easy.py`. `p4/cal.py` needs the clock fixed to 22 October 2026 (it fails on later dates; this is old).

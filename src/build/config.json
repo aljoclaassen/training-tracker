@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-10-26.2",
+  "appVersion": "2026-10-28.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -762,5 +762,65 @@
     "defaultRestSeconds": 90,
     "spreadMinutes": 5,
     "roundMinutes": 5
+  },
+  "easy": {
+    "autoFrom": "2026-11-02",
+    "nudgeWeeks": 6,
+    "pb": {
+      "mainSets": 2,
+      "mainReps": 5,
+      "mainLeft": "4",
+      "accessoryLeft": "3",
+      "accessoryShare": 0.5,
+      "dropRules": [
+        "nordic"
+      ],
+      "dropLogs": [
+        "carry",
+        "rounds"
+      ],
+      "time": {
+        "1": "35–45 min",
+        "2": "45–55 min",
+        "3": "35–45 min",
+        "4": "45–55 min",
+        "5": "35–45 min"
+      }
+    },
+    "hd": {
+      "left": "3",
+      "keep": {
+        "1": [
+          "d1-1",
+          "d1-3",
+          "d1-4",
+          "d1-6"
+        ],
+        "2": [
+          "d2-1",
+          "d2-2",
+          "d2-pec",
+          "d2-6"
+        ],
+        "3": [
+          "d3-0",
+          "d3-1",
+          "d3-3",
+          "d3-6"
+        ],
+        "4": [
+          "d4-0",
+          "d4-1",
+          "d4-3",
+          "d4-7"
+        ],
+        "5": [
+          "d5-1",
+          "d5-2",
+          "d5-4",
+          "d5-5"
+        ]
+      }
+    }
   }
 }

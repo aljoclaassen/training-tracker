@@ -25,6 +25,8 @@ body{
   -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent;
   padding-bottom: calc(var(--size-nav) + var(--space-6) + env(safe-area-inset-bottom, 0px));
 }
+/* The canvas under the cards: a fixed, theme-coloured picture behind everything */
+body::before{ content: ""; position: fixed; inset: 0; z-index: -1; background: var(--canvas, none); pointer-events: none; }
 body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--space-6) + var(--hazard-height, var(--size-hazard-default))); }
 h1, h2, h3, h4{ margin: 0; line-height: var(--line-height-tight); font-weight: var(--font-weight-bold); }
 h1, h2{ font-weight: var(--font-weight-heavy); letter-spacing: var(--letter-spacing-tight); }
@@ -559,6 +561,9 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .cal-tag{ display: inline-block; padding: 2px var(--space-1); border-radius: var(--radius-pill); background: var(--color-accent-soft); color: var(--color-accent-text); font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); }
 .cal-weeks{ list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
 .cal-week{ display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-1); align-items: center; min-height: 48px; padding: var(--space-0-5) var(--space-1-5); border-radius: var(--radius-sm); background: var(--color-surface-alt); font-size: var(--font-size-small); overflow-wrap: anywhere; }
+.cal-week--act .cal-week__state{ grid-row: 1; }
+.cal-week__act{ grid-column: 2; grid-row: 2; min-height: 44px; font-size: var(--font-size-xs); }
+.cal-week.is-easy .cal-week__label{ color: var(--color-text); font-weight: var(--font-weight-bold); }
 .cal-week__date{ grid-column: 1; grid-row: 1; font-weight: var(--font-weight-bold); }
 .cal-week__label{ grid-column: 1; grid-row: 2; color: var(--color-text-muted); }
 .cal-week__state{ grid-column: 2; grid-row: 1 / span 2; color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: right; }
