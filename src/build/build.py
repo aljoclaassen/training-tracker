@@ -4,14 +4,15 @@ pb = json.load(open('pb.json'))
 config = json.load(open('config.json'))
 hd = {
   "id": "hd", "name": "Heavy Duty", "fullName": "Strength and Hypertrophy Plan",
-  "summary": "Five training days, two rest days. Warm up, then one all-out working set per exercise.",
+  "summary": "Four training days (Monday, Tuesday, Thursday, Friday); Wednesday and the weekend are rest. Warm up, then one all-out working set per exercise. Optional exercises are marked. Incline fly into incline bench press is the one superset.",
   "legend": [
     "Percentages are of each exercise's working-set weight. The working set is 100%.",
     "Sets: \"2W + 1\" means two warm-up sets well short of failure, then one working set taken to failure. The working target comes after the arrow."
   ],
   "weekLabels": ["Week 1", "Week 2"],
   "variants": hd_src["variants"],
-  "days": hd_src["days"]
+  "days": hd_src["days"],
+  "retired": hd_src.get("retired", [])
 }
 programme = {"version": 2, "plans": {"hd": hd, "pb": pb}}
 

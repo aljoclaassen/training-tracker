@@ -242,6 +242,11 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
   2.16 Export and import
     cleanSets(sets) : Takes sets from a file. Returns clean sets with only known fields and safe values.
     migrateId(id)
+    rowsToSets(rows) : Variation rows back to a sets text when they follow the "2W + 1" pattern ("Warm-up 1", "Warm-up 2", "Working").
+    hdMove(id, variant) : Takes an id and a variation id (or undefined). Returns {id, variant} on the new plan, or null when that variation has no home any more. Rule: safe to run twice; an id with no move stays as it is.
+    hdMoveSlot(slot) : Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and best-set history from old ids onto the new plan. Changes slot in place. Rule: where the new id already has an entry, the moved one goes into variation history instead, so nothing logged is lost.
+    hdRemapDays(slot) : Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
+    hdArchiveExtras(extras, layout) : Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
     isCalf(name)
     mergedHistory(slot, sessions, unitFor) : Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}: the latest best set per exercise name, this week included.
     exportStreaks(slot, sessions) : Heavy Duty: weeks each exercise's main sets stayed below the rep range, counting this week.
@@ -2035,7 +2040,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-10-28.1",
+ "appVersion": "2026-11-09.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2347,7 +2352,7 @@ const CONFIG = {
   "makeup": "An exercise from a missed day, done on a later day.",
   "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
   "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
-  "weekbase": "Your result on the same exercise earlier this week. When the later session is Legs B, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
+  "weekbase": "Your result on the same exercise earlier this week. If the plan repeats an exercise later in the same week, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
   "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
   "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
   "hold": "Holds like a plank: log the seconds you held and any weight added. Carries: log the metres walked and the weight. Next time, aim 5 seconds longer, or the same distance."
@@ -2379,20 +2384,7 @@ const CONFIG = {
    "short": "Had to put it down before the end"
   }
  ],
- "hdWeekPairs": [
-  [
-   "d1-0",
-   "d5-0"
-  ],
-  [
-   "d1-6",
-   "d5-6"
-  ],
-  [
-   "d1-7",
-   "d5-7"
-  ]
- ],
+ "hdWeekPairs": [],
  "warmupShareRange": [
   0.3,
   0.95
@@ -2406,18 +2398,11 @@ const CONFIG = {
   "hd": {
    "1": [
     {
-     "name": "Leg Press",
+     "name": "Sumo Deadlift"
+    },
+    {
+     "name": "Single-Leg Leg Curl",
      "unit": "plates"
-    },
-    {
-     "name": "Pendulum Squat",
-     "unit": "plates"
-    },
-    {
-     "name": "Zercher Squat"
-    },
-    {
-     "name": "Stiff-Leg Deadlift"
     },
     {
      "name": "Dumbbell Walking Lunges"
@@ -2457,9 +2442,6 @@ const CONFIG = {
      "name": "Spider Curl"
     },
     {
-     "name": "Concentration Curl"
-    },
-    {
      "name": "Cable Curl",
      "unit": "plates"
     },
@@ -2472,9 +2454,51 @@ const CONFIG = {
     {
      "name": "Cable Crunch",
      "unit": "plates"
+    },
+    {
+     "name": "Bayesian Cable Curl",
+     "unit": "plates"
     }
    ],
-   "3": [
+   "3": [],
+   "4": [
+    {
+     "name": "Arnold Press"
+    },
+    {
+     "name": "Machine Shoulder Press",
+     "unit": "plates"
+    },
+    {
+     "name": "Cable Y-Raise",
+     "unit": "plates"
+    },
+    {
+     "name": "Close-Grip Bench Press"
+    },
+    {
+     "name": "Triceps Dips"
+    },
+    {
+     "name": "Diamond Push-up"
+    },
+    {
+     "name": "Hanging Leg Raise"
+    },
+    {
+     "name": "Cable Crunch",
+     "unit": "plates"
+    },
+    {
+     "name": "Overhead Cable Extension",
+     "unit": "plates"
+    },
+    {
+     "name": "Rear Delt Fly",
+     "unit": "plates"
+    }
+   ],
+   "5": [
     {
      "name": "Pull-up"
     },
@@ -2508,76 +2532,6 @@ const CONFIG = {
     {
      "name": "Cable Crunch",
      "unit": "plates"
-    }
-   ],
-   "4": [
-    {
-     "name": "Arnold Press"
-    },
-    {
-     "name": "Machine Shoulder Press",
-     "unit": "plates"
-    },
-    {
-     "name": "Cable Y-Raise",
-     "unit": "plates"
-    },
-    {
-     "name": "Face Pull",
-     "unit": "plates"
-    },
-    {
-     "name": "Skull Crusher"
-    },
-    {
-     "name": "Close-Grip Bench Press"
-    },
-    {
-     "name": "Triceps Dips"
-    },
-    {
-     "name": "Diamond Push-up"
-    },
-    {
-     "name": "Hanging Leg Raise"
-    },
-    {
-     "name": "Cable Crunch",
-     "unit": "plates"
-    }
-   ],
-   "5": [
-    {
-     "name": "Back Squat"
-    },
-    {
-     "name": "Hack Squat"
-    },
-    {
-     "name": "Leg Curl",
-     "unit": "plates"
-    },
-    {
-     "name": "Sumo Deadlift"
-    },
-    {
-     "name": "Dumbbell Walking Lunges"
-    },
-    {
-     "name": "Barbell Walking Lunges"
-    },
-    {
-     "name": "Zercher Lunge"
-    },
-    {
-     "name": "Hip Adductor Machine",
-     "unit": "plates"
-    },
-    {
-     "name": "Hip Thrust"
-    },
-    {
-     "name": "Hanging Leg Raise"
     }
    ]
   },
@@ -2828,35 +2782,116 @@ const CONFIG = {
     "1": [
      "d1-1",
      "d1-3",
-     "d1-4",
+     "d5-4",
      "d1-6"
     ],
     "2": [
-     "d2-1",
+     "d2-0",
      "d2-2",
-     "d2-pec",
+     "d2-1",
      "d2-6"
     ],
-    "3": [
-     "d3-0",
-     "d3-1",
-     "d3-3",
-     "d3-6"
-    ],
+    "3": [],
     "4": [
      "d4-0",
-     "d4-1",
      "d4-3",
-     "d4-7"
+     "d4-7",
+     "d4-9"
     ],
     "5": [
-     "d5-1",
-     "d5-2",
-     "d5-4",
-     "d5-5"
+     "d3-0",
+     "d3-1",
+     "d3-2",
+     "d3-facepull"
     ]
    }
   }
+ },
+ "hdLayout": 2,
+ "hdDayRemap": {
+  "3": 5,
+  "5": 1
+ },
+ "hdMoves": {
+  "d5-0": {
+   "to": "d1-0"
+  },
+  "d5-6": {
+   "to": "d1-6"
+  },
+  "d3-11": {
+   "to": "d1-6"
+  },
+  "d5-7": {
+   "to": "d1-7"
+  },
+  "d3-10": {
+   "to": "d1-7"
+  },
+  "d1-1": {
+   "to": "d1-1",
+   "variants": {
+    "-": "back"
+   }
+  },
+  "d5-2": {
+   "to": "d1-1",
+   "variants": {
+    "-": "zercher"
+   }
+  },
+  "d1-2": {
+   "to": "d1-2",
+   "variants": {
+    "-": "hack"
+   }
+  },
+  "d5-3": {
+   "to": "d1-2",
+   "variants": {
+    "-": "pendulum"
+   }
+  },
+  "d2-8": {
+   "to": "d2-8",
+   "variants": {
+    "-": "barbell"
+   }
+  },
+  "d2-10": {
+   "to": "d2-10",
+   "variants": {
+    "-": "hammer"
+   }
+  },
+  "d4-8": {
+   "to": "d4-9",
+   "variants": {
+    "-": "jm-barbell",
+    "barbell": "jm-barbell",
+    "ez": "jm-ez"
+   }
+  },
+  "d3-5": {
+   "to": "d3-5",
+   "variants": {
+    "db": "-",
+    "machine": "x",
+    "machine-both": "x"
+   }
+  }
+ },
+ "hdNameMoves": {
+  "db fly": "db incline fly",
+  "back squat": "back or zercher squat",
+  "hack squat": "hack or pendulum squat",
+  "standing barbell curl": "barbell curl or bicep-biased pulldown",
+  "preacher bench curl": "preacher or machine curl",
+  "db hammer curl": "hammer or concentration curl",
+  "behind-the-neck or military press": "smith or behind-the-neck press",
+  "upright row": "barbell upright row",
+  "tricep extension": "tricep extension or jm press",
+  "lat row": "db bent-over row"
  }
 };
 
@@ -2867,7 +2902,7 @@ const PROGRAMME = {
    "id": "hd",
    "name": "Heavy Duty",
    "fullName": "Strength and Hypertrophy Plan",
-   "summary": "Five training days, two rest days. Warm up, then one all-out working set per exercise.",
+   "summary": "Four training days (Monday, Tuesday, Thursday, Friday); Wednesday and the weekend are rest. Warm up, then one all-out working set per exercise. Optional exercises are marked. Incline fly into incline bench press is the one superset.",
    "legend": [
     "Percentages are of each exercise's working-set weight. The working set is 100%.",
     "Sets: \"2W + 1\" means two warm-up sets well short of failure, then one working set taken to failure. The working target comes after the arrow."
@@ -2910,6 +2945,14 @@ const PROGRAMME = {
        "Left arm",
        "Right arm"
       ]
+     },
+     {
+      "id": "reverse",
+      "label": "Cable, reverse grip",
+      "rows": [
+       "Left arm",
+       "Right arm"
+      ]
      }
     ],
     "OHP": [
@@ -2930,6 +2973,16 @@ const PROGRAMME = {
        "Warm-up 2",
        "Working"
       ]
+     },
+     {
+      "id": "smith",
+      "label": "Smith machine shoulder press",
+      "rows": [
+       "Warm-up 1",
+       "Warm-up 2",
+       "Working"
+      ],
+      "unit": "kg"
      }
     ],
     "LATMACH": [
@@ -3009,6 +3062,24 @@ const PROGRAMME = {
       "rows": [
        "Working"
       ]
+     },
+     {
+      "id": "jm-barbell",
+      "label": "JM press, straight bar",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "reps": "10 @ 60% → 6–8 @ 100%"
+     },
+     {
+      "id": "jm-ez",
+      "label": "JM press, EZ bar",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "reps": "10 @ 60% → 6–8 @ 100%"
      }
     ],
     "OHCABLE": [
@@ -3273,13 +3344,113 @@ const PROGRAMME = {
        "Left arm",
        "Right arm"
       ]
+     },
+     {
+      "id": "machine",
+      "label": "Machine curl",
+      "rows": [
+       "Working"
+      ],
+      "unit": "plates"
+     }
+    ],
+    "SQUAT": [
+     {
+      "id": "back",
+      "label": "Back squat",
+      "rows": [
+       "Warm-up 1",
+       "Warm-up 2",
+       "Working"
+      ],
+      "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%"
+     },
+     {
+      "id": "zercher",
+      "label": "Zercher squat",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "reps": "12 @ 60% → 8–10 @ 100%"
+     }
+    ],
+    "HACKPEND": [
+     {
+      "id": "hack",
+      "label": "Hack squat",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ]
+     },
+     {
+      "id": "pendulum",
+      "label": "Pendulum squat",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ]
+     }
+    ],
+    "CURLPD": [
+     {
+      "id": "barbell",
+      "label": "Barbell curl",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "unit": "kg"
+     },
+     {
+      "id": "pulldown",
+      "label": "Bicep-biased pulldown",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "unit": "plates"
+     }
+    ],
+    "HAMCON": [
+     {
+      "id": "hammer",
+      "label": "DB hammer curl",
+      "rows": [
+       "Working"
+      ]
+     },
+     {
+      "id": "concentration",
+      "label": "Concentration curl",
+      "rows": [
+       "Left arm",
+       "Right arm"
+      ]
+     }
+    ],
+    "DBEXT": [
+     {
+      "id": "skull",
+      "label": "DB skull crusher",
+      "rows": [
+       "Working"
+      ]
+     },
+     {
+      "id": "overhead",
+      "label": "DB overhead tricep extension",
+      "rows": [
+       "Working"
+      ]
      }
     ]
    },
    "days": [
     {
      "n": 1,
-     "title": "Legs A",
+     "title": "Legs",
      "groups": [
       {
        "title": null,
@@ -3296,22 +3467,44 @@ const PROGRAMME = {
         },
         {
          "id": "d1-1",
-         "name": "Back Squat",
+         "name": "Back or Zercher Squat",
          "equip": "Barbell",
          "sets": "2W + 1",
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "3 min",
-         "notes": "Failure means the last clean rep. Set safety pins."
+         "notes": "Failure means the last clean rep. Set safety pins. Pick back or Zercher in the Tracker.",
+         "variants": "SQUAT"
+        },
+        {
+         "id": "d5-1",
+         "name": "Leg Press",
+         "equip": "Machine",
+         "sets": "2W + 1",
+         "reps": "12 @ 50%, 12 @ 70% → 10–12 @ 100%",
+         "rest": "2 min",
+         "notes": "",
+         "tag": "R"
         },
         {
          "id": "d1-2",
-         "name": "Hack Squat",
+         "name": "Hack or Pendulum Squat",
          "equip": "Machine",
          "sets": "1W + 1",
          "reps": "12 @ 60% → 8–10 @ 100%",
          "rest": "2–3 min",
-         "notes": "",
-         "tag": "R"
+         "notes": "Optional. Pick hack or pendulum in the Tracker.",
+         "variants": "HACKPEND",
+         "optional": true
+        },
+        {
+         "id": "d5-4",
+         "name": "Stiff-Leg or Romanian Deadlift",
+         "equip": "Barbell, dumbbell or Smith machine",
+         "sets": "1",
+         "reps": "10 @ 100%",
+         "rest": "2 min",
+         "notes": "No warm-up in the original. Add 10 @ 60% if needed. Variations: barbell or dumbbell, or Smith machine.",
+         "variants": "SLDL"
         },
         {
          "id": "d1-3",
@@ -3322,25 +3515,6 @@ const PROGRAMME = {
          "rest": "90 s",
          "notes": "",
          "tag": "R"
-        },
-        {
-         "id": "d1-4",
-         "name": "Sumo Deadlift",
-         "equip": "Barbell, dumbbell or kettlebell",
-         "sets": "1W + 1",
-         "reps": "8 @ 60% → 6–8 @ 100%",
-         "rest": "3 min",
-         "notes": "Heaviest hinge of the week, placed after two rest days. With a dumbbell or kettlebell, log the weight you hold.",
-         "variants": "SUMO"
-        },
-        {
-         "id": "d1-5",
-         "name": "Single-Leg Leg Curl",
-         "equip": "Machine",
-         "sets": "1 per leg",
-         "reps": "8–10 @ 100%",
-         "rest": "60–90 s",
-         "notes": "One leg at a time."
         }
        ]
       },
@@ -3378,12 +3552,23 @@ const PROGRAMME = {
        "items": [
         {
          "id": "d2-0",
-         "name": "DB Fly",
+         "name": "DB Incline Fly",
          "equip": "Dumbbell",
          "sets": "1W + 1",
          "reps": "10 @ 60% → 8 @ 100%",
-         "rest": "90 s",
-         "notes": ""
+         "rest": "None",
+         "notes": "Superset: straight from the fly into the incline bench press. Do bench warm-ups 1 and 2 first, then the fly warm-up into bench warm-up 3, then the fly working set into the bench working set.",
+         "pair": "A1"
+        },
+        {
+         "id": "d2-2",
+         "name": "Barbell Incline Bench Press",
+         "equip": "Barbell",
+         "sets": "3W + 1",
+         "reps": "12 @ 50%, 10 @ 60%, 6–8 @ 70% → 6 @ 100%",
+         "rest": "2–3 min",
+         "notes": "Superset partner of the incline fly. Pre-exhausted, so expect less weight than a fresh set.",
+         "pair": "A2"
         },
         {
          "id": "d2-1",
@@ -3396,22 +3581,13 @@ const PROGRAMME = {
          "tag": "R"
         },
         {
-         "id": "d2-2",
-         "name": "Barbell Incline Bench Press",
-         "equip": "Barbell",
-         "sets": "3W + 1",
-         "reps": "12 @ 50%, 10 @ 60%, 6–8 @ 70% → 6 @ 100%",
-         "rest": "2–3 min",
-         "notes": "Three warm-ups kept from the original."
-        },
-        {
-         "id": "d2-pec",
-         "name": "Pec Deck",
-         "equip": "Machine",
+         "id": "d2-dbpress",
+         "name": "DB Chest Press",
+         "equip": "Dumbbell",
          "sets": "1",
-         "reps": "8–10 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Chest already warm from the presses, so no warm-up."
+         "reps": "6–8 @ 100%",
+         "rest": "2 min",
+         "notes": "Chest is warm from the presses, so no warm-up."
         },
         {
          "id": "d2-4",
@@ -3420,8 +3596,19 @@ const PROGRAMME = {
          "sets": "1",
          "reps": "8–10 @ 100%",
          "rest": "60–90 s",
-         "notes": "",
-         "tag": "R"
+         "notes": "Optional.",
+         "tag": "R",
+         "optional": true
+        },
+        {
+         "id": "d2-pec",
+         "name": "Pec Deck",
+         "equip": "Machine",
+         "sets": "1",
+         "reps": "8–10 @ 100%",
+         "rest": "60–90 s",
+         "notes": "Optional. Chest already warm from the presses, so no warm-up.",
+         "optional": true
         },
         {
          "id": "d2-5",
@@ -3430,7 +3617,8 @@ const PROGRAMME = {
          "sets": "1W + 1",
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "90 s",
-         "notes": "Warm-up protects the shoulder in the stretch."
+         "notes": "Optional. Warm-up protects the shoulder in the stretch.",
+         "optional": true
         }
        ]
       },
@@ -3447,8 +3635,18 @@ const PROGRAMME = {
          "notes": ""
         },
         {
+         "id": "d2-8",
+         "name": "Barbell Curl or Bicep-Biased Pulldown",
+         "equip": "Barbell or cable",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "90 s",
+         "notes": "Pick barbell curl or bicep-biased pulldown in the Tracker.",
+         "variants": "CURLPD"
+        },
+        {
          "id": "d2-7",
-         "name": "Preacher Bench Curl",
+         "name": "Preacher or Machine Curl",
          "equip": "Preacher bench with straight bar, EZ bar or dumbbell",
          "sets": "1",
          "reps": "6–8 @ 100%",
@@ -3458,32 +3656,15 @@ const PROGRAMME = {
          "variants": "PREACHER"
         },
         {
-         "id": "d2-8",
-         "name": "Standing Barbell Curl",
-         "equip": "Barbell or EZ bar",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "90 s",
-         "notes": "Straight bar."
-        },
-        {
-         "id": "d2-9",
-         "name": "Bayesian/Cable Curl",
-         "equip": "Cable",
-         "sets": "1 (1 per arm if one-arm)",
-         "reps": "6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Variations: Bayesian one arm or both arms, cable curl with a short straight bar, or seated cable curl.",
-         "variants": "BAYES"
-        },
-        {
          "id": "d2-10",
-         "name": "DB Hammer Curl",
+         "name": "Hammer or Concentration Curl",
          "equip": "Dumbbell",
          "sets": "1",
          "reps": "6–8 @ 100%",
          "rest": "60–90 s",
-         "notes": ""
+         "notes": "Optional. Pick hammer or concentration curl in the Tracker.",
+         "variants": "HAMCON",
+         "optional": true
         }
        ]
       }
@@ -3491,7 +3672,129 @@ const PROGRAMME = {
     },
     {
      "n": 3,
-     "title": "Back, Rear Delts, Calves",
+     "title": "Rest",
+     "rest": true,
+     "groups": []
+    },
+    {
+     "n": 4,
+     "title": "Shoulders, Triceps",
+     "groups": [
+      {
+       "title": "Shoulders",
+       "items": [
+        {
+         "id": "d4-0",
+         "name": "Smith or Behind-the-Neck Press",
+         "equip": "Smith machine or barbell",
+         "sets": "2W + 1",
+         "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
+         "rest": "2–3 min",
+         "notes": "Pick Smith machine, behind-the-neck or military press in the Tracker.",
+         "variants": "OHP"
+        },
+        {
+         "id": "d4-3",
+         "name": "Lateral Raise",
+         "equip": "Machine or dumbbell",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "60–90 s",
+         "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
+         "variants": "LATMACH"
+        },
+        {
+         "id": "d4-5",
+         "name": "Cable Lateral Raise",
+         "equip": "Cable",
+         "sets": "1W + 1 per arm",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "60–90 s",
+         "notes": "One arm or cross-body. Warm up once, then a working set for each arm.",
+         "tag": "R",
+         "variants": "CABLELAT"
+        },
+        {
+         "id": "d4-1",
+         "name": "DB Shoulder Press",
+         "equip": "Dumbbell",
+         "sets": "2W + 1",
+         "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
+         "rest": "2 min",
+         "notes": ""
+        },
+        {
+         "id": "d4-2",
+         "name": "Barbell Upright Row",
+         "equip": "Barbell",
+         "sets": "1W + 1",
+         "reps": "12 @ 60% → 8–10 @ 100%",
+         "rest": "90 s",
+         "notes": ""
+        },
+        {
+         "id": "d4-6",
+         "name": "Dumbbell Shrug",
+         "equip": "Dumbbell",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "90 s",
+         "notes": ""
+        }
+       ]
+      },
+      {
+       "title": "Triceps",
+       "items": [
+        {
+         "id": "d4-7",
+         "name": "Tricep Pushdown",
+         "equip": "Cable or machine",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "90 s",
+         "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
+         "tag": "R",
+         "variants": "PUSHDOWN"
+        },
+        {
+         "id": "d4-9",
+         "name": "Tricep Extension or JM Press",
+         "equip": "Barbell or EZ bar",
+         "sets": "1",
+         "reps": "6–8 @ 100%",
+         "rest": "90 s",
+         "notes": "Pick a tricep extension or a JM press in the Tracker. The JM press keeps its warm-up.",
+         "variants": "TRIEXT"
+        },
+        {
+         "id": "d4-dbext",
+         "name": "DB Skull Crusher or DB Tricep Extension",
+         "equip": "Dumbbell",
+         "sets": "1",
+         "reps": "6–8 @ 100%",
+         "rest": "90 s",
+         "variants": "DBEXT",
+         "notes": "Pick skull crusher or overhead extension in the Tracker."
+        },
+        {
+         "id": "d4-10",
+         "name": "One-Arm Pushdown",
+         "equip": "Cable or machine",
+         "sets": "1 per arm",
+         "reps": "6–8 @ 100%",
+         "rest": "60–90 s",
+         "notes": "Pick the reverse-grip cable option in the Tracker for the reverse pressdown.",
+         "tag": "R",
+         "variants": "ONEARMPD"
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "n": 5,
+     "title": "Back, Rear Delts",
      "groups": [
       {
        "title": "Back",
@@ -3530,6 +3833,15 @@ const PROGRAMME = {
          "notes": "Same pattern as the row before it, so no warm-up."
         },
         {
+         "id": "d3-5",
+         "name": "DB Bent-Over Row",
+         "equip": "Dumbbell",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "90 s",
+         "notes": ""
+        },
+        {
          "id": "d3-3",
          "name": "Cable Seated Row",
          "equip": "Cable",
@@ -3541,24 +3853,14 @@ const PROGRAMME = {
          "variants": "CABLEROW"
         },
         {
-         "id": "d3-4",
-         "name": "One-Arm Pulldown, superset with lat pulldown",
+         "id": "d3-hgpull",
+         "name": "Hammer Grip Pulldown",
          "equip": "Cable",
-         "sets": "1 per arm + 2 lat pulldown",
-         "reps": "6–8 @ 100% each",
+         "sets": "1",
+         "reps": "6–8 @ 100%",
          "rest": "90 s",
-         "notes": "Left arm one-arm pulldown, straight into a lat pulldown set. Then the right arm, straight into a second lat pulldown set. Lat pulldown grip: overhand or underhand, normal or wide.",
-         "variants": "PULLDOWN"
-        },
-        {
-         "id": "d3-5",
-         "name": "Lat Row",
-         "equip": "Dumbbell or machine",
-         "sets": "1W + 1 (working set per arm on the machine)",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "90 s",
-         "notes": "Variations: dumbbell lat row, or machine row with one arm or both arms.",
-         "variants": "LATROW"
+         "optional": true,
+         "notes": "Optional. Neutral grip."
         }
        ]
       },
@@ -3566,17 +3868,13 @@ const PROGRAMME = {
        "title": "Rear Delts",
        "items": [
         {
-         "id": "d3-6",
-         "name": "Dumbbell Rear Delt Hammer Fly, superset with barbell rear delt row",
-         "equip": "Dumbbell and barbell",
-         "sets": "1 each",
-         "reps": "6–8 @ 100% each",
+         "id": "d3-facepull",
+         "name": "Face Pulls",
+         "equip": "Cable",
+         "sets": "1",
+         "reps": "8–10 @ 100%",
          "rest": "60–90 s",
-         "notes": "Move straight from one to the other.",
-         "rows": [
-          "Hammer fly",
-          "Rear delt row"
-         ]
+         "notes": "Rope at face height. Pull to your forehead, elbows high."
         },
         {
          "id": "d3-7",
@@ -3587,15 +3885,6 @@ const PROGRAMME = {
          "rest": "60–90 s",
          "notes": "Both arms, or one arm at a time if the station is busy.",
          "variants": "RDFLY"
-        },
-        {
-         "id": "d3-facepull",
-         "name": "Face Pulls",
-         "equip": "Cable",
-         "sets": "1",
-         "reps": "8–10 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Rope at face height. Pull to your forehead, elbows high."
         }
        ]
       },
@@ -3612,248 +3901,200 @@ const PROGRAMME = {
          "notes": "Hold a plate."
         }
        ]
-      },
-      {
-       "title": "Calves",
-       "items": [
-        {
-         "id": "d3-10",
-         "name": "Seated Calf Raise",
-         "equip": "Machine",
-         "sets": "1W + 1",
-         "reps": "10–12 @ 60% → 10–12 @ 100%",
-         "rest": "60–90 s",
-         "notes": ""
-        },
-        {
-         "id": "d3-11",
-         "name": "Standing Calf Raise",
-         "equip": "Machine",
-         "sets": "1",
-         "reps": "10–12 @ 100%",
-         "rest": "60–90 s",
-         "notes": ""
-        }
-       ]
       }
      ]
+    }
+   ],
+   "retired": [
+    {
+     "day": 1,
+     "item": {
+      "id": "d1-4",
+      "name": "Sumo Deadlift",
+      "equip": "Barbell, dumbbell or kettlebell",
+      "sets": "1W + 1",
+      "reps": "8 @ 60% → 6–8 @ 100%",
+      "rest": "3 min",
+      "notes": "Heaviest hinge of the week, placed after two rest days. With a dumbbell or kettlebell, log the weight you hold.",
+      "variants": "SUMO"
+     }
     },
     {
-     "n": 4,
-     "title": "Shoulders, Triceps",
-     "groups": [
-      {
-       "title": "Shoulders",
-       "items": [
-        {
-         "id": "d4-0",
-         "name": "Behind-the-Neck or Military Press",
-         "equip": "Barbell",
-         "sets": "2W + 1",
-         "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
-         "rest": "2–3 min",
-         "notes": "Pick behind-the-neck or military press in the Tracker.",
-         "variants": "OHP"
-        },
-        {
-         "id": "d4-1",
-         "name": "DB Shoulder Press",
-         "equip": "Dumbbell",
-         "sets": "2W + 1",
-         "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
-         "rest": "2 min",
-         "notes": ""
-        },
-        {
-         "id": "d4-2",
-         "name": "Upright Row",
-         "equip": "Barbell",
-         "sets": "1W + 1",
-         "reps": "12 @ 60% → 8–10 @ 100%",
-         "rest": "90 s",
-         "notes": ""
-        },
-        {
-         "id": "d4-3",
-         "name": "Lateral Raise",
-         "equip": "Machine or dumbbell",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
-         "variants": "LATMACH"
-        },
-        {
-         "id": "d4-5",
-         "name": "Cable Lateral Raise",
-         "equip": "Cable",
-         "sets": "1W + 1 per arm",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "One arm or cross-body. Warm up once, then a working set for each arm.",
-         "tag": "R",
-         "variants": "CABLELAT"
-        },
-        {
-         "id": "d4-6",
-         "name": "Dumbbell Shrug",
-         "equip": "Dumbbell",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "90 s",
-         "notes": ""
-        }
-       ]
-      },
-      {
-       "title": "Triceps",
-       "items": [
-        {
-         "id": "d4-7",
-         "name": "Tricep Pushdown",
-         "equip": "Cable or machine",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "90 s",
-         "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
-         "tag": "R",
-         "variants": "PUSHDOWN"
-        },
-        {
-         "id": "d4-8",
-         "name": "JM Press",
-         "equip": "Straight bar or EZ bar",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "2 min",
-         "notes": "Pick straight bar or EZ bar in the Tracker.",
-         "variants": "JMPRESS"
-        },
-        {
-         "id": "d4-9",
-         "name": "Tricep Extension",
-         "equip": "EZ bar or straight bar",
-         "sets": "1",
-         "reps": "6–8 @ 100%",
-         "rest": "90 s",
-         "notes": "No warm-up: triceps are warm by now. Pick EZ bar or straight bar, seated or standing, in the Tracker.",
-         "variants": "TRIEXT"
-        },
-        {
-         "id": "d4-ohcable",
-         "name": "Overhead Cable Tricep Extension",
-         "equip": "Cable",
-         "sets": "1",
-         "reps": "6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
-         "variants": "OHCABLE"
-        },
-        {
-         "id": "d4-10",
-         "name": "One-Arm Pushdown",
-         "equip": "Cable or machine",
-         "sets": "1 per arm",
-         "reps": "6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "A working set for each arm. Pick cable or machine in the Tracker.",
-         "tag": "R",
-         "variants": "ONEARMPD"
-        }
-       ]
-      }
-     ]
+     "day": 1,
+     "item": {
+      "id": "d1-5",
+      "name": "Single-Leg Leg Curl",
+      "equip": "Machine",
+      "sets": "1 per leg",
+      "reps": "8–10 @ 100%",
+      "rest": "60–90 s",
+      "notes": "One leg at a time."
+     }
     },
     {
-     "n": 5,
-     "title": "Legs B",
-     "groups": [
-      {
-       "title": null,
-       "items": [
-        {
-         "id": "d5-0",
-         "name": "Leg Extension",
-         "equip": "Machine",
-         "sets": "2W + 1",
-         "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
-         "rest": "90 s",
-         "notes": ""
-        },
-        {
-         "id": "d5-1",
-         "name": "Leg Press",
-         "equip": "Machine",
-         "sets": "2W + 1",
-         "reps": "12 @ 50%, 12 @ 70% → 10–12 @ 100%",
-         "rest": "2 min",
-         "notes": "",
-         "tag": "R"
-        },
-        {
-         "id": "d5-2",
-         "name": "Zercher Squat",
-         "equip": "Barbell",
-         "sets": "1W + 1",
-         "reps": "12 @ 60% → 8–10 @ 100%",
-         "rest": "3 min",
-         "notes": "Failure means the last clean rep. Set safety pins."
-        },
-        {
-         "id": "d5-3",
-         "name": "Pendulum Squat",
-         "equip": "Machine",
-         "sets": "1W + 1",
-         "reps": "12 @ 60% → 8–10 @ 100%",
-         "rest": "2–3 min",
-         "notes": "One warm-up to find the groove.",
-         "tag": "New"
-        },
-        {
-         "id": "d5-4",
-         "name": "Stiff-Leg or Romanian Deadlift",
-         "equip": "Barbell, dumbbell or Smith machine",
-         "sets": "1",
-         "reps": "10 @ 100%",
-         "rest": "2 min",
-         "notes": "No warm-up in the original. Add 10 @ 60% if needed. Variations: barbell or dumbbell, or Smith machine.",
-         "variants": "SLDL"
-        },
-        {
-         "id": "d5-5",
-         "name": "Single-Leg Curl",
-         "equip": "Machine",
-         "sets": "1 per leg",
-         "reps": "8–10 @ 100%",
-         "rest": "60–90 s",
-         "notes": "One leg at a time."
-        }
-       ]
-      },
-      {
-       "title": "Calves",
-       "items": [
-        {
-         "id": "d5-6",
-         "name": "Standing Calf Raise",
-         "equip": "Machine",
-         "sets": "1W + 1",
-         "reps": "10–12 @ 60% → 10–12 @ 100%",
-         "rest": "60–90 s",
-         "notes": ""
-        },
-        {
-         "id": "d5-7",
-         "name": "Seated Calf Raise",
-         "equip": "Machine",
-         "sets": "1",
-         "reps": "10–12 @ 100%",
-         "rest": "60–90 s",
-         "notes": ""
-        }
-       ]
-      }
-     ]
+     "day": 2,
+     "item": {
+      "id": "d2-9",
+      "name": "Bayesian/Cable Curl",
+      "equip": "Cable",
+      "sets": "1 (1 per arm if one-arm)",
+      "reps": "6–8 @ 100%",
+      "rest": "60–90 s",
+      "notes": "Variations: Bayesian one arm or both arms, cable curl with a short straight bar, or seated cable curl.",
+      "variants": "BAYES"
+     }
+    },
+    {
+     "day": 5,
+     "item": {
+      "id": "d3-4",
+      "name": "One-Arm Pulldown, superset with lat pulldown",
+      "equip": "Cable",
+      "sets": "1 per arm + 2 lat pulldown",
+      "reps": "6–8 @ 100% each",
+      "rest": "90 s",
+      "notes": "Left arm one-arm pulldown, straight into a lat pulldown set. Then the right arm, straight into a second lat pulldown set. Lat pulldown grip: overhand or underhand, normal or wide.",
+      "variants": "PULLDOWN"
+     }
+    },
+    {
+     "day": 5,
+     "item": {
+      "id": "d3-6",
+      "name": "Dumbbell Rear Delt Hammer Fly, superset with barbell rear delt row",
+      "equip": "Dumbbell and barbell",
+      "sets": "1 each",
+      "reps": "6–8 @ 100% each",
+      "rest": "60–90 s",
+      "notes": "Move straight from one to the other.",
+      "rows": [
+       "Hammer fly",
+       "Rear delt row"
+      ]
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d3-10",
+      "name": "Seated Calf Raise",
+      "equip": "Machine",
+      "sets": "1W + 1",
+      "reps": "10–12 @ 60% → 10–12 @ 100%",
+      "rest": "60–90 s",
+      "notes": ""
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d3-11",
+      "name": "Standing Calf Raise",
+      "equip": "Machine",
+      "sets": "1",
+      "reps": "10–12 @ 100%",
+      "rest": "60–90 s",
+      "notes": ""
+     }
+    },
+    {
+     "day": 4,
+     "item": {
+      "id": "d4-8",
+      "name": "JM Press",
+      "equip": "Straight bar or EZ bar",
+      "sets": "1W + 1",
+      "reps": "10 @ 60% → 6–8 @ 100%",
+      "rest": "2 min",
+      "notes": "Pick straight bar or EZ bar in the Tracker.",
+      "variants": "JMPRESS"
+     }
+    },
+    {
+     "day": 4,
+     "item": {
+      "id": "d4-ohcable",
+      "name": "Overhead Cable Tricep Extension",
+      "equip": "Cable",
+      "sets": "1",
+      "reps": "6–8 @ 100%",
+      "rest": "60–90 s",
+      "notes": "Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
+      "variants": "OHCABLE"
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-0",
+      "name": "Leg Extension",
+      "equip": "Machine",
+      "sets": "2W + 1",
+      "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
+      "rest": "90 s",
+      "notes": ""
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-2",
+      "name": "Zercher Squat",
+      "equip": "Barbell",
+      "sets": "1W + 1",
+      "reps": "12 @ 60% → 8–10 @ 100%",
+      "rest": "3 min",
+      "notes": "Failure means the last clean rep. Set safety pins."
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-3",
+      "name": "Pendulum Squat",
+      "equip": "Machine",
+      "sets": "1W + 1",
+      "reps": "12 @ 60% → 8–10 @ 100%",
+      "rest": "2–3 min",
+      "notes": "One warm-up to find the groove.",
+      "tag": "New"
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-5",
+      "name": "Single-Leg Curl",
+      "equip": "Machine",
+      "sets": "1 per leg",
+      "reps": "8–10 @ 100%",
+      "rest": "60–90 s",
+      "notes": "One leg at a time."
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-6",
+      "name": "Standing Calf Raise",
+      "equip": "Machine",
+      "sets": "1W + 1",
+      "reps": "10–12 @ 60% → 10–12 @ 100%",
+      "rest": "60–90 s",
+      "notes": ""
+     }
+    },
+    {
+     "day": 1,
+     "item": {
+      "id": "d5-7",
+      "name": "Seated Calf Raise",
+      "equip": "Machine",
+      "sets": "1",
+      "reps": "10–12 @ 100%",
+      "rest": "60–90 s",
+      "notes": ""
+     }
     }
    ]
   },
@@ -4831,6 +5072,8 @@ function buildExerciseIndex(programme){
   programme.plans.hd.days.forEach(d => d.groups.forEach(g => g.items.forEach(item => {
     out[item.id] = {plan: "hd", day: d.n, item: item};
   })));
+  // Exercises taken out of the plan: kept so past weeks still show them, never put in a session
+  (programme.plans.hd.retired || []).forEach(r => { if (!out[r.item.id]) out[r.item.id] = {plan: "hd", day: r.day, item: r.item, retired: true}; });
   programme.plans.pb.days.forEach(d => {
     out[warmupId(d.n)] = {plan: "pb", day: d.n, item: warmupItem(programme.plans.pb, d)};
     d.items.forEach(item => { out[item.id] = {plan: "pb", day: d.n, item: item}; });
@@ -5197,20 +5440,30 @@ function applyHdEasy(groups, dayN){
 
 function buildHdSession(dayN, variantChoice, week){
   const plan = PROGRAMME.plans.hd, day = plan.days.filter(d => d.n === dayN)[0];
-  const groups = day.groups.map(g => ({title: g.title, pair: null, items: g.items.map(item => {
-    const v = variantFor("hd", item, variantChoice[item.id]);
-    const labels = (v && v.rows) || item.rows || parseRows(item.sets);
-    const pcts = planPercents(item);
-    return {
-      id: item.id, plan: "hd", day: dayN, name: item.name, pair: null, kind: "hd", log: "hd", equip: item.equip,
-      setsText: plainSets(item.sets), repsText: item.reps, leftText: "", rest: item.rest, notes: item.notes, swap: "",
-      tag: item.tag || "", optional: !!item.optional, counted: !item.optional, skipped: false,
-      variants: item.variants ? plan.variants[item.variants] : null, variant: v ? v.id : null, unitHint: v && v.unit ? v.unit : null,
-      rows: labels.map((label, i) => ({label: label, role: /^Warm-up/.test(label) ? "warm" : "work", pct: pcts[i] != null ? pcts[i] : null})),
-      repMin: null, repMax: null, reps: item.reps, sourceSets: item.sets
-    };
-  })}));
   const easy = !!(week && week.easy);
+  if (day.rest) return {plan: "hd", n: dayN, title: day.title, time: "", timeEstimated: false, intro: "", notes: [], rest: true, groups: [], easy: easy};
+  const groups = [];
+  day.groups.forEach(g => {
+    let current = null, titled = false;
+    g.items.forEach(item => {
+      const v = variantFor("hd", item, variantChoice[item.id]);
+      const labels = (v && v.rows) || item.rows || parseRows(item.sets);
+      const reps = (v && v.reps) || item.reps, pcts = planPercents({reps: reps});
+      const built = {
+        id: item.id, plan: "hd", day: dayN, name: item.name, pair: item.pair || null, kind: "hd", log: "hd", equip: item.equip,
+        setsText: v && v.rows ? plainSets(rowsToSets(v.rows) || item.sets) : plainSets(item.sets), repsText: reps, leftText: "", rest: item.rest, notes: item.notes, swap: "",
+        tag: item.tag || "", optional: !!item.optional, counted: !item.optional, skipped: false,
+        variants: item.variants ? plan.variants[item.variants] : null, variant: v ? v.id : null, unitHint: v && v.unit ? v.unit : null,
+        rows: labels.map((label, i) => ({label: label, role: /^Warm-up/.test(label) ? "warm" : "work", pct: pcts[i] != null ? pcts[i] : null})),
+        repMin: null, repMax: null, reps: reps, sourceSets: item.sets
+      };
+      // Consecutive items with the same pair letter (A1 + A2) form one superset block; the block carries the group's title once
+      const letter = item.pair ? item.pair.charAt(0) : null;
+      if (letter && current && current.pair === letter) current.items.push(built);
+      else if (!letter && current && !current.pair) current.items.push(built);
+      else { current = {title: titled ? null : g.title, pair: letter, items: [built]}; titled = true; groups.push(current); }
+    });
+  });
   if (easy) applyHdEasy(groups, dayN);
   return {plan: "hd", n: dayN, title: day.title, time: hdSessionTime(groups), timeEstimated: true, intro: "",
     notes: easy ? ["Easy week. Same weights as last time, fewer exercises, and every main set stops about " + CONFIG.easy.hd.left + " reps short of failure. Nothing to beat this week."] : [],
@@ -5909,7 +6162,98 @@ function cleanSets(sets){
     return out;
   }) : [];
 }
-function migrateId(id){ return CONFIG.movedIds[id] || id; }
+function migrateId(id){
+  let out = id;
+  for (let i = 0; i < 4 && CONFIG.movedIds[out]; i++) out = CONFIG.movedIds[out];
+  return out;
+}
+// Variation rows back to a sets text when they follow the "2W + 1" pattern ("Warm-up 1", "Warm-up 2", "Working").
+function rowsToSets(rows){
+  const w = rows.filter(r => /^Warm-up/.test(r)).length, k = rows.length - w;
+  return k === 1 && rows.every(r => /^(Warm-up|Working)/.test(r)) ? (w ? w + "W + 1" : "1") : null;
+}
+
+/* ---------- Heavy Duty layout 2 (November 2026): moves old exercise ids onto the new plan ---------- */
+// Takes an id and a variation id (or undefined). Returns {id, variant} on the new plan, or null when that
+// variation has no home any more. Rule: safe to run twice; an id with no move stays as it is.
+function hdMove(id, variant){
+  const m = CONFIG.hdMoves[id];
+  if (!m) return {id: id, variant: variant};
+  const key = variant || "-", map = m.variants || {};
+  const target = EXERCISES[m.to] && EXERCISES[m.to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
+  let nv = map[key] !== undefined ? map[key] : key;
+  if (nv === "-") return {id: m.to, variant: undefined};
+  if (!list) return null;
+  return list.some(v => v.id === nv) ? {id: m.to, variant: nv} : null;
+}
+// Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and
+// best-set history from old ids onto the new plan. Changes slot in place.
+// Rule: where the new id already has an entry, the moved one goes into variation history instead, so nothing logged is lost.
+function hdMoveSlot(slot){
+  const lw = slot.lastWeek, vh = slot.varHistory = objOr(slot.varHistory, {});
+  const keepNewer = (k, rec) => { if (rec && (!vh[k] || (vh[k].date || "") < (rec.date || ""))) vh[k] = rec; };
+  if (lw && lw.entries){
+    Object.keys(lw.entries).forEach(id => {
+      const e = lw.entries[id], to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
+      delete lw.entries[id];
+      if (!to) return;
+      const moved = Object.assign({}, e); if (to.variant) moved.variant = to.variant; else delete moved.variant;
+      if (!lw.entries[to.id]) lw.entries[to.id] = moved;
+      else if ((moved.sets || []).some(isLogged)) keepNewer(to.id + "|" + (to.variant || "-"), {name: (EXERCISES[to.id] || {item: {}}).item.name, variant: to.variant || null, date: moved.doneAt || lw.weekStart || "", unit: moved.unit || "kg", sets: moved.sets});
+    });
+  }
+  Object.keys(vh).forEach(k => {
+    const parts = k.split("|"), to = hdMove(parts[0], parts[1] === "-" ? undefined : parts[1]);
+    const nk = to ? to.id + "|" + (to.variant || "-") : null;
+    if (nk === k) return;
+    const rec = vh[k]; delete vh[k];
+    if (nk) keepNewer(nk, Object.assign({}, rec, {variant: to.variant || null}));
+  });
+  const units = slot.units = objOr(slot.units, {});
+  Object.keys(units).forEach(k => {
+    const parts = k.split(":"), to = hdMove(parts[0], parts[1]);
+    const nk = to ? (to.variant ? to.id + ":" + to.variant : to.id) : null;
+    if (nk === k) return;
+    const u = units[k]; delete units[k];
+    if (nk && !units[nk]) units[nk] = u;
+  });
+  const streaks = slot.loadedStreaks = objOr(slot.loadedStreaks, {});
+  Object.keys(streaks).forEach(id => { const to = CONFIG.hdMoves[id]; if (!to || to.to === id) return; streaks[to.to] = Math.max(streaks[to.to] || 0, streaks[id]); delete streaks[id]; });
+  const swaps = slot.savedSwaps = objOr(slot.savedSwaps, {});
+  Object.keys(swaps).forEach(id => { const to = CONFIG.hdMoves[id]; if (!to || to.to === id) return; swaps[to.to] = (swaps[to.to] || []).concat(swaps[id]).slice(0, CONFIG.maxSaved); delete swaps[id]; });
+  const hist = slot.history = objOr(slot.history, {});
+  Object.keys(CONFIG.hdNameMoves).forEach(oldName => {
+    const nn = CONFIG.hdNameMoves[oldName], h = hist[oldName]; if (!h) return;
+    delete hist[oldName];
+    if (!hist[nn] || (hist[nn].date || "") < (h.date || "")) hist[nn] = h;
+  });
+  return slot;
+}
+// Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now
+// Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
+function hdRemapDays(slot){
+  const map = CONFIG.hdDayRemap, nd = n => map[n] ? Number(map[n]) : Number(n);
+  const remapKeys = (o, merge) => {
+    if (!o || typeof o !== "object") return o;
+    const out = {};
+    Object.keys(o).forEach(k => { const n = nd(k); out[n] = merge && out[n] ? merge(out[n], o[k]) : (out[n] || o[k]); });
+    return out;
+  };
+  const cat = (a, b) => (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []);
+  slot.missedDays = remapKeys(slot.missedDays);
+  slot.extras = remapKeys(slot.extras, cat);
+  slot.savedExtras = remapKeys(slot.savedExtras, (a, b) => cat(a, b).slice(0, CONFIG.maxSaved));
+  if (slot.lastWeek){ slot.lastWeek.missedDays = remapKeys(slot.lastWeek.missedDays); slot.lastWeek.extras = remapKeys(slot.lastWeek.extras, cat); }
+  (slot.pastVariations || []).forEach(v => { v.day = nd(v.day); if (v.madeDay) v.madeDay = nd(v.madeDay); });
+  return slot;
+}
+// Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
+function hdArchiveExtras(extras, layout){
+  if (layout >= CONFIG.hdLayout || !extras) return extras;
+  const out = {};
+  Object.keys(extras).forEach(k => { const n = CONFIG.hdDayRemap[k] ? Number(CONFIG.hdDayRemap[k]) : Number(k); out[n] = (out[n] || []).concat(extras[k]); });
+  return out;
+}
 function isCalf(name){ return /calf raise/i.test(name || ""); }
 
 // Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}:
@@ -5964,13 +6308,23 @@ function buildExport(slot, planId, sessions, otherSlotData, nowISO){
       missed: e.missed && e.missed.on ? {on: true, reason: e.missed.reason, date: e.missed.date, madeUp: e.missed.madeUp || null, viaDay: !!e.missed.viaDay} : null
     };
   }));
+  // A week logged on the old plan can hold exercises that are no longer in it: export them as they were
+  Object.keys(slot.entries || {}).forEach(id => {
+    const meta = EXERCISES[id], e = slot.entries[id];
+    if (entries[id] || !meta || !meta.retired || meta.plan !== planId || !e) return;
+    const labels = meta.item.rows || parseRows(meta.item.sets);
+    entries[id] = {plan: planId, day: meta.day, exercise: meta.item.name, rows: (e.sets || []).map((x, i) => labels[i] || "Set " + (i + 1)),
+      sets: e.sets || [], unit: (slot.units || {})[id] || "kg", variant: e.variant, doneAt: e.doneAt, replaced: !!e.replaced,
+      replacement: e.replaced && e.repl ? {name: e.repl.name, reason: e.repl.reason, date: e.repl.date, unit: e.repl.unit || "kg", measure: cleanMeasure(e.repl.measure), sets: e.repl.sets} : null,
+      missed: e.missed && e.missed.on ? {on: true, reason: e.missed.reason, date: e.missed.date, madeUp: e.missed.madeUp || null, viaDay: !!e.missed.viaDay} : null};
+  });
   const current = [].concat.apply([], sessions.map(s => currentVariations(slot, s, slot.weekStart))).map(v => { const c = Object.assign({}, v); delete c.current; return c; });
   const missedDays = Object.keys(slot.missedDays || {}).map(Number).sort().map(n => {
     const md = slot.missedDays[n], s = sessions.filter(x => x.n === n)[0], st = dayMakeupStatus(slot, n, s);
     return {day: n, title: s ? s.title : "", date: md.date, reason: md.reason, total: st.total, madeUp: st.made.map(x => ({name: x.item.name, date: x.date})), note: dayNote(slot, n, s)};
   });
   return {
-    app: CONFIG.appId, version: CONFIG.dataVersion, plan: planId, exportedAt: nowISO,
+    app: CONFIG.appId, version: CONFIG.dataVersion, plan: planId, layout: planId === "hd" ? CONFIG.hdLayout : undefined, exportedAt: nowISO,
     weekStart: slot.weekStart, weekEnd: addDays(slot.weekStart, 6), entries: entries,
     streaks: exportStreaks(slot, sessions), history: mergedHistory(slot, sessions, unitFor), varHistory: mergedVarHistory(slot, sessions, unitFor),
     backup: {lastWeek: slot.lastWeek, history: slot.history || {}, varHistory: slot.varHistory || {}, loadedStreaks: slot.loadedStreaks || {},
@@ -6036,6 +6390,11 @@ function loadAsLastWeek(slot, planId, data){
     if (n >= 1 && n <= CONFIG.trainingDays && m.note) lwMissedDays[n] = {note: str(m.note).slice(0, 160), reason: CONFIG.dayMissReasons[m.reason] ? m.reason : "", date: str(m.date)};
   });
   slot.lastWeek = {weekStart: parseISO(str(data.weekStart)) ? mondayOf(str(data.weekStart)) : null, exportedAt: str(data.exportedAt), entries: entries, missedDays: lwMissedDays, extras: cleanExtras(data.extras)};
+  if (planId === "hd" && !(data.layout >= CONFIG.hdLayout)){
+    const old = {missedDays: slot.lastWeek.missedDays, extras: slot.lastWeek.extras};
+    slot.lastWeek.missedDays = hdRemapDays({missedDays: old.missedDays}).missedDays;
+    slot.lastWeek.extras = hdArchiveExtras(old.extras, 0);
+  }
   harvestSaved(slot, entries, slot.lastWeek.extras, slot.lastWeek.weekStart || "");
   slot.loadedStreaks = {};
   if (data.streaks && typeof data.streaks === "object") Object.keys(data.streaks).forEach(rawId => {
@@ -6065,7 +6424,10 @@ function loadAsLastWeek(slot, planId, data){
   if (data.varHistory && typeof data.varHistory === "object"){
     slot.varHistory = slot.varHistory || {};
     Object.keys(data.varHistory).slice(0, 400).forEach(rawKey => {
-      const parts = String(rawKey).split("|"), id = migrateId(parts[0]), variant = parts[1], meta = EXERCISES[id];
+      const parts = String(rawKey).split("|");
+      let id = migrateId(parts[0]), variant = parts[1];
+      if (planId === "hd"){ const to = hdMove(id, variant === "-" ? undefined : variant); if (!to) return; id = to.id; variant = to.variant || "-"; }
+      const meta = EXERCISES[id];
       if (!meta || meta.plan !== planId) return;
       const variants = meta.item.variants ? PROGRAMME.plans[planId].variants[meta.item.variants] : null;
       if (variants ? !variants.some(v => v.id === variant) : variant !== "-") return;
@@ -6076,6 +6438,7 @@ function loadAsLastWeek(slot, planId, data){
       if (!slot.varHistory[k] || (slot.varHistory[k].date || "") < c.date) slot.varHistory[k] = c;
     });
   }
+  if (planId === "hd") hdMoveSlot(slot);
   return slot;
 }
 
@@ -6187,6 +6550,11 @@ function applyBackup(slot, p){
       exIds.forEach(id => { p.entries[id].missed.viaDay = true; });
       slot.missedDays[n] = {date: str(m.date), reason: CONFIG.dayMissReasons[m.reason] ? m.reason : "other", exIds: exIds};
     });
+  }
+  // A Heavy Duty backup from before layout 2: renumber its days, then move its ids
+  if (p.plan === "hd"){
+    if (!(p.data.layout >= CONFIG.hdLayout)) hdRemapDays(slot);
+    hdMoveSlot(slot);
   }
   return slot;
 }
@@ -6591,7 +6959,7 @@ function historyWeeks(slot, planId, sessions, archive, nowISO){
   const push = (ws, source, view) => { if (!ws || seen[ws] || !view.length) return; seen[ws] = true; out.push({weekStart: ws, source: source, view: view}); };
   const cur = buildExport(slot, planId, sessions, null, nowISO);
   push(cur.weekStart, "this", weekView(cur.entries, cur.extras, planId));
-  ((archive && archive[planId]) || []).forEach(w => push(w.weekStart, "archive", weekView(w.entries, cleanExtras(w.extras), planId)));
+  ((archive && archive[planId]) || []).forEach(w => push(w.weekStart, "archive", weekView(w.entries, planId === "hd" ? hdArchiveExtras(cleanExtras(w.extras), w.layout || 0) : cleanExtras(w.extras), planId)));
   if (slot.lastWeek && slot.lastWeek.weekStart) push(slot.lastWeek.weekStart, "last", weekView(slot.lastWeek.entries, slot.lastWeek.extras, planId));
   return out.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
 }
@@ -6664,6 +7032,11 @@ function normaliseState(raw, today){
     }
   });
   (st.pastVariations || []).forEach(v => { if (v.day === 2 && isCalf(v.original)) v.day = 3; });
+  // Heavy Duty layout 2: the five-day split became four days with Wednesday rest. Data saved on the old layout
+  // is renumbered once; id moves are safe to repeat.
+  if (raw && typeof raw === "object" && raw.entries && !(st.hdLayout >= CONFIG.hdLayout)) hdRemapDays(st);
+  st.hdLayout = CONFIG.hdLayout;
+  hdMoveSlot(st);
   st.weekStart = mondayOf(parseISO(st.weekStart) ? st.weekStart : today);
   ["units", "history", "varHistory", "loadedStreaks", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
   if (!Array.isArray(st.pastVariations)) st.pastVariations = [];
@@ -7015,7 +7388,7 @@ function sessionListHTML(c, day){
   return day.groups.map(g => {
     const inner = g.items.map(it => exerciseHTML(c, it)).join("");
     const pairOpen = g.pair && g.items.length > 1 && g.items.some(it => it.id === state.ui.openEx);
-    if (g.pair && g.items.length > 1) return '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Superset, Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label"><span class="exercise__tag pair-group__tag">Superset</span> ' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
+    if (g.pair && g.items.length > 1) return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Superset, Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label"><span class="exercise__tag pair-group__tag">Superset</span> ' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
     return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + inner;
   }).join("");
 }
@@ -7582,7 +7955,7 @@ function calBlockNotes(block){
     const out0 = [];
     calEasyNotes(block, out0);
     const drop = Math.round((1 - CONFIG.dropPercent) * 1000) / 10;
-    const out = ["Same five sessions every week: one all-out set per exercise.",
+    const out = ["Same four sessions every week (Monday, Tuesday, Thursday, Friday): one all-out set per exercise, optional exercises marked.",
       "Reach the top of the rep range and your next target adds weight. Below the range " + weekWord(CONFIG.belowStreakToDrop) + " running, it drops about " + drop + "%."];
     if (block.weeks >= CONFIG.longRunWeeks) out.push("Long run: if a lift stalls for two weeks, add a rest day before you cut the weight.");
     return out.concat(out0);
@@ -7789,10 +8162,11 @@ function pbGuideHTML(){
       "<ul>" + p.badDay.extra.map(x => "<li>" + esc(x) + "</li>").join("") + "</ul>");
 }
 function hdDayTableHTML(d, current){
+  if (d.rest) return '<section class="plan-day" id="plan-hd-day-' + d.n + '" aria-labelledby="plan-hd-day-' + d.n + '-title"><div class="plan-day__head"><h2 id="plan-hd-day-' + d.n + '-title">Day ' + d.n + ": Rest</h2></div><p class=\"small\">Rest day. Nothing to log.</p></section>";
   return '<section class="plan-day" id="plan-hd-day-' + d.n + '" aria-labelledby="plan-hd-day-' + d.n + '-title"><div class="plan-day__head"><h2 id="plan-hd-day-' + d.n + '-title">Day ' + d.n + ": " + esc(d.title) + "</h2>" +
     (current ? '<button type="button" class="button button--primary" data-open-day="' + d.n + '">Open in Train</button>' : "") + "</div>" +
     d.groups.map(g => (g.title ? "<h3>" + esc(g.title) + "</h3>" : "") + '<div class="table-scroll" tabindex="0" role="region" aria-label="Day ' + d.n + " " + esc(g.title || d.title) + '"><table class="plan-table"><thead><tr><th scope="col">Exercise</th><th scope="col">Equipment</th><th scope="col">Sets</th><th scope="col">Reps @ % of main-set weight</th><th scope="col">Rest</th><th scope="col">Notes</th></tr></thead><tbody>' +
-      g.items.map(it => "<tr><td><strong>" + esc(it.name) + "</strong>" + (it.optional ? ' <span class="exercise__tag">Optional</span>' : "") + "</td><td>" + esc(it.equip) + "</td><td>" + esc(plainSets(it.sets)) + "</td><td>" + esc(it.reps) + "</td><td>" + esc(it.rest) + "</td><td>" + esc(it.notes) + "</td></tr>").join("") +
+      g.items.map(it => "<tr><td><strong>" + esc(it.name) + "</strong>" + (it.pair ? ' <span class="exercise__tag">Superset ' + esc(it.pair) + "</span>" : "") + (it.optional ? ' <span class="exercise__tag">Optional</span>' : "") + "</td><td>" + esc(it.equip) + "</td><td>" + esc(plainSets(it.sets)) + "</td><td>" + esc(it.reps) + "</td><td>" + esc(it.rest) + "</td><td>" + esc(it.notes) + "</td></tr>").join("") +
       "</tbody></table></div>").join("") + "</section>";
 }
 function pbDayTableHTML(d, current){
@@ -8563,9 +8937,11 @@ function logSet(c, item, e, exEl, i, kind){
   if (partner && $("#ex-" + partner.id + " .exercise__panel:not([hidden])")){
     const pe = c.slot.entries[partner.id], pk = pe && pe.replaced ? "repl" : "main", psets = pe ? setsFor(pe, pk) : partner.rows.map(emptySet);
     const pname = pe && pe.replaced && pe.repl.name.trim() ? pe.repl.name.trim() : partner.name;
-    if (item.pair < partner.pair && i < psets.length && !isLogged(psets[i])){
-      activeRows[partner.id] = i;
-      rerenderExercise(partner.id, '[data-kind="' + pk + '"][data-i="' + i + '"] [data-act="log-set"]');
+    // Rounds line up from the working set back, so a partner with more warm-ups does its extra ones first
+    const j = i + partner.rows.length - item.rows.length;
+    if (item.pair < partner.pair && j >= 0 && j < psets.length && !isLogged(psets[j])){
+      activeRows[partner.id] = j;
+      rerenderExercise(partner.id, '[data-kind="' + pk + '"][data-i="' + j + '"] [data-act="log-set"]');
       toast(plainRowLabel(row.label || "Set") + " logged. Now " + pname + ".");
       return;
     }

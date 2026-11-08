@@ -324,7 +324,7 @@ function sessionListHTML(c, day){
   return day.groups.map(g => {
     const inner = g.items.map(it => exerciseHTML(c, it)).join("");
     const pairOpen = g.pair && g.items.length > 1 && g.items.some(it => it.id === state.ui.openEx);
-    if (g.pair && g.items.length > 1) return '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Superset, Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label"><span class="exercise__tag pair-group__tag">Superset</span> ' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
+    if (g.pair && g.items.length > 1) return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + '<div class="pair-group' + (pairOpen ? " is-open" : "") + '"' + (pairOpen ? ' role="group" aria-label="Superset, Pair ' + esc(g.pair) + ": " + esc(g.items.map(i => i.name).join(" and ")) + '"' : "") + '><p class="pair-group__label"><span class="exercise__tag pair-group__tag">Superset</span> ' + term("pair", "Pair " + g.pair) + ": do " + esc(g.items.map(i => i.pair).join(" then ")) + ", then rest." + (pairOpen ? " Log each set side by side." : "") + "</p>" + (pairOpen ? '<div class="pair-group__cols">' + inner + "</div>" : inner) + "</div>";
     return (g.title ? '<h3 class="group-title">' + esc(g.title) + "</h3>" : "") + inner;
   }).join("");
 }
@@ -891,7 +891,7 @@ function calBlockNotes(block){
     const out0 = [];
     calEasyNotes(block, out0);
     const drop = Math.round((1 - CONFIG.dropPercent) * 1000) / 10;
-    const out = ["Same five sessions every week: one all-out set per exercise.",
+    const out = ["Same four sessions every week (Monday, Tuesday, Thursday, Friday): one all-out set per exercise, optional exercises marked.",
       "Reach the top of the rep range and your next target adds weight. Below the range " + weekWord(CONFIG.belowStreakToDrop) + " running, it drops about " + drop + "%."];
     if (block.weeks >= CONFIG.longRunWeeks) out.push("Long run: if a lift stalls for two weeks, add a rest day before you cut the weight.");
     return out.concat(out0);
@@ -1098,10 +1098,11 @@ function pbGuideHTML(){
       "<ul>" + p.badDay.extra.map(x => "<li>" + esc(x) + "</li>").join("") + "</ul>");
 }
 function hdDayTableHTML(d, current){
+  if (d.rest) return '<section class="plan-day" id="plan-hd-day-' + d.n + '" aria-labelledby="plan-hd-day-' + d.n + '-title"><div class="plan-day__head"><h2 id="plan-hd-day-' + d.n + '-title">Day ' + d.n + ": Rest</h2></div><p class=\"small\">Rest day. Nothing to log.</p></section>";
   return '<section class="plan-day" id="plan-hd-day-' + d.n + '" aria-labelledby="plan-hd-day-' + d.n + '-title"><div class="plan-day__head"><h2 id="plan-hd-day-' + d.n + '-title">Day ' + d.n + ": " + esc(d.title) + "</h2>" +
     (current ? '<button type="button" class="button button--primary" data-open-day="' + d.n + '">Open in Train</button>' : "") + "</div>" +
     d.groups.map(g => (g.title ? "<h3>" + esc(g.title) + "</h3>" : "") + '<div class="table-scroll" tabindex="0" role="region" aria-label="Day ' + d.n + " " + esc(g.title || d.title) + '"><table class="plan-table"><thead><tr><th scope="col">Exercise</th><th scope="col">Equipment</th><th scope="col">Sets</th><th scope="col">Reps @ % of main-set weight</th><th scope="col">Rest</th><th scope="col">Notes</th></tr></thead><tbody>' +
-      g.items.map(it => "<tr><td><strong>" + esc(it.name) + "</strong>" + (it.optional ? ' <span class="exercise__tag">Optional</span>' : "") + "</td><td>" + esc(it.equip) + "</td><td>" + esc(plainSets(it.sets)) + "</td><td>" + esc(it.reps) + "</td><td>" + esc(it.rest) + "</td><td>" + esc(it.notes) + "</td></tr>").join("") +
+      g.items.map(it => "<tr><td><strong>" + esc(it.name) + "</strong>" + (it.pair ? ' <span class="exercise__tag">Superset ' + esc(it.pair) + "</span>" : "") + (it.optional ? ' <span class="exercise__tag">Optional</span>' : "") + "</td><td>" + esc(it.equip) + "</td><td>" + esc(plainSets(it.sets)) + "</td><td>" + esc(it.reps) + "</td><td>" + esc(it.rest) + "</td><td>" + esc(it.notes) + "</td></tr>").join("") +
       "</tbody></table></div>").join("") + "</section>";
 }
 function pbDayTableHTML(d, current){
@@ -1872,9 +1873,11 @@ function logSet(c, item, e, exEl, i, kind){
   if (partner && $("#ex-" + partner.id + " .exercise__panel:not([hidden])")){
     const pe = c.slot.entries[partner.id], pk = pe && pe.replaced ? "repl" : "main", psets = pe ? setsFor(pe, pk) : partner.rows.map(emptySet);
     const pname = pe && pe.replaced && pe.repl.name.trim() ? pe.repl.name.trim() : partner.name;
-    if (item.pair < partner.pair && i < psets.length && !isLogged(psets[i])){
-      activeRows[partner.id] = i;
-      rerenderExercise(partner.id, '[data-kind="' + pk + '"][data-i="' + i + '"] [data-act="log-set"]');
+    // Rounds line up from the working set back, so a partner with more warm-ups does its extra ones first
+    const j = i + partner.rows.length - item.rows.length;
+    if (item.pair < partner.pair && j >= 0 && j < psets.length && !isLogged(psets[j])){
+      activeRows[partner.id] = j;
+      rerenderExercise(partner.id, '[data-kind="' + pk + '"][data-i="' + j + '"] [data-act="log-set"]');
       toast(plainRowLabel(row.label || "Set") + " logged. Now " + pname + ".");
       return;
     }

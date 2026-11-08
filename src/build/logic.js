@@ -15,6 +15,8 @@ function buildExerciseIndex(programme){
   programme.plans.hd.days.forEach(d => d.groups.forEach(g => g.items.forEach(item => {
     out[item.id] = {plan: "hd", day: d.n, item: item};
   })));
+  // Exercises taken out of the plan: kept so past weeks still show them, never put in a session
+  (programme.plans.hd.retired || []).forEach(r => { if (!out[r.item.id]) out[r.item.id] = {plan: "hd", day: r.day, item: r.item, retired: true}; });
   programme.plans.pb.days.forEach(d => {
     out[warmupId(d.n)] = {plan: "pb", day: d.n, item: warmupItem(programme.plans.pb, d)};
     d.items.forEach(item => { out[item.id] = {plan: "pb", day: d.n, item: item}; });
@@ -381,20 +383,30 @@ function applyHdEasy(groups, dayN){
 
 function buildHdSession(dayN, variantChoice, week){
   const plan = PROGRAMME.plans.hd, day = plan.days.filter(d => d.n === dayN)[0];
-  const groups = day.groups.map(g => ({title: g.title, pair: null, items: g.items.map(item => {
-    const v = variantFor("hd", item, variantChoice[item.id]);
-    const labels = (v && v.rows) || item.rows || parseRows(item.sets);
-    const pcts = planPercents(item);
-    return {
-      id: item.id, plan: "hd", day: dayN, name: item.name, pair: null, kind: "hd", log: "hd", equip: item.equip,
-      setsText: plainSets(item.sets), repsText: item.reps, leftText: "", rest: item.rest, notes: item.notes, swap: "",
-      tag: item.tag || "", optional: !!item.optional, counted: !item.optional, skipped: false,
-      variants: item.variants ? plan.variants[item.variants] : null, variant: v ? v.id : null, unitHint: v && v.unit ? v.unit : null,
-      rows: labels.map((label, i) => ({label: label, role: /^Warm-up/.test(label) ? "warm" : "work", pct: pcts[i] != null ? pcts[i] : null})),
-      repMin: null, repMax: null, reps: item.reps, sourceSets: item.sets
-    };
-  })}));
   const easy = !!(week && week.easy);
+  if (day.rest) return {plan: "hd", n: dayN, title: day.title, time: "", timeEstimated: false, intro: "", notes: [], rest: true, groups: [], easy: easy};
+  const groups = [];
+  day.groups.forEach(g => {
+    let current = null, titled = false;
+    g.items.forEach(item => {
+      const v = variantFor("hd", item, variantChoice[item.id]);
+      const labels = (v && v.rows) || item.rows || parseRows(item.sets);
+      const reps = (v && v.reps) || item.reps, pcts = planPercents({reps: reps});
+      const built = {
+        id: item.id, plan: "hd", day: dayN, name: item.name, pair: item.pair || null, kind: "hd", log: "hd", equip: item.equip,
+        setsText: v && v.rows ? plainSets(rowsToSets(v.rows) || item.sets) : plainSets(item.sets), repsText: reps, leftText: "", rest: item.rest, notes: item.notes, swap: "",
+        tag: item.tag || "", optional: !!item.optional, counted: !item.optional, skipped: false,
+        variants: item.variants ? plan.variants[item.variants] : null, variant: v ? v.id : null, unitHint: v && v.unit ? v.unit : null,
+        rows: labels.map((label, i) => ({label: label, role: /^Warm-up/.test(label) ? "warm" : "work", pct: pcts[i] != null ? pcts[i] : null})),
+        repMin: null, repMax: null, reps: reps, sourceSets: item.sets
+      };
+      // Consecutive items with the same pair letter (A1 + A2) form one superset block; the block carries the group's title once
+      const letter = item.pair ? item.pair.charAt(0) : null;
+      if (letter && current && current.pair === letter) current.items.push(built);
+      else if (!letter && current && !current.pair) current.items.push(built);
+      else { current = {title: titled ? null : g.title, pair: letter, items: [built]}; titled = true; groups.push(current); }
+    });
+  });
   if (easy) applyHdEasy(groups, dayN);
   return {plan: "hd", n: dayN, title: day.title, time: hdSessionTime(groups), timeEstimated: true, intro: "",
     notes: easy ? ["Easy week. Same weights as last time, fewer exercises, and every main set stops about " + CONFIG.easy.hd.left + " reps short of failure. Nothing to beat this week."] : [],
@@ -1093,7 +1105,98 @@ function cleanSets(sets){
     return out;
   }) : [];
 }
-function migrateId(id){ return CONFIG.movedIds[id] || id; }
+function migrateId(id){
+  let out = id;
+  for (let i = 0; i < 4 && CONFIG.movedIds[out]; i++) out = CONFIG.movedIds[out];
+  return out;
+}
+// Variation rows back to a sets text when they follow the "2W + 1" pattern ("Warm-up 1", "Warm-up 2", "Working").
+function rowsToSets(rows){
+  const w = rows.filter(r => /^Warm-up/.test(r)).length, k = rows.length - w;
+  return k === 1 && rows.every(r => /^(Warm-up|Working)/.test(r)) ? (w ? w + "W + 1" : "1") : null;
+}
+
+/* ---------- Heavy Duty layout 2 (November 2026): moves old exercise ids onto the new plan ---------- */
+// Takes an id and a variation id (or undefined). Returns {id, variant} on the new plan, or null when that
+// variation has no home any more. Rule: safe to run twice; an id with no move stays as it is.
+function hdMove(id, variant){
+  const m = CONFIG.hdMoves[id];
+  if (!m) return {id: id, variant: variant};
+  const key = variant || "-", map = m.variants || {};
+  const target = EXERCISES[m.to] && EXERCISES[m.to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
+  let nv = map[key] !== undefined ? map[key] : key;
+  if (nv === "-") return {id: m.to, variant: undefined};
+  if (!list) return null;
+  return list.some(v => v.id === nv) ? {id: m.to, variant: nv} : null;
+}
+// Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and
+// best-set history from old ids onto the new plan. Changes slot in place.
+// Rule: where the new id already has an entry, the moved one goes into variation history instead, so nothing logged is lost.
+function hdMoveSlot(slot){
+  const lw = slot.lastWeek, vh = slot.varHistory = objOr(slot.varHistory, {});
+  const keepNewer = (k, rec) => { if (rec && (!vh[k] || (vh[k].date || "") < (rec.date || ""))) vh[k] = rec; };
+  if (lw && lw.entries){
+    Object.keys(lw.entries).forEach(id => {
+      const e = lw.entries[id], to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
+      delete lw.entries[id];
+      if (!to) return;
+      const moved = Object.assign({}, e); if (to.variant) moved.variant = to.variant; else delete moved.variant;
+      if (!lw.entries[to.id]) lw.entries[to.id] = moved;
+      else if ((moved.sets || []).some(isLogged)) keepNewer(to.id + "|" + (to.variant || "-"), {name: (EXERCISES[to.id] || {item: {}}).item.name, variant: to.variant || null, date: moved.doneAt || lw.weekStart || "", unit: moved.unit || "kg", sets: moved.sets});
+    });
+  }
+  Object.keys(vh).forEach(k => {
+    const parts = k.split("|"), to = hdMove(parts[0], parts[1] === "-" ? undefined : parts[1]);
+    const nk = to ? to.id + "|" + (to.variant || "-") : null;
+    if (nk === k) return;
+    const rec = vh[k]; delete vh[k];
+    if (nk) keepNewer(nk, Object.assign({}, rec, {variant: to.variant || null}));
+  });
+  const units = slot.units = objOr(slot.units, {});
+  Object.keys(units).forEach(k => {
+    const parts = k.split(":"), to = hdMove(parts[0], parts[1]);
+    const nk = to ? (to.variant ? to.id + ":" + to.variant : to.id) : null;
+    if (nk === k) return;
+    const u = units[k]; delete units[k];
+    if (nk && !units[nk]) units[nk] = u;
+  });
+  const streaks = slot.loadedStreaks = objOr(slot.loadedStreaks, {});
+  Object.keys(streaks).forEach(id => { const to = CONFIG.hdMoves[id]; if (!to || to.to === id) return; streaks[to.to] = Math.max(streaks[to.to] || 0, streaks[id]); delete streaks[id]; });
+  const swaps = slot.savedSwaps = objOr(slot.savedSwaps, {});
+  Object.keys(swaps).forEach(id => { const to = CONFIG.hdMoves[id]; if (!to || to.to === id) return; swaps[to.to] = (swaps[to.to] || []).concat(swaps[id]).slice(0, CONFIG.maxSaved); delete swaps[id]; });
+  const hist = slot.history = objOr(slot.history, {});
+  Object.keys(CONFIG.hdNameMoves).forEach(oldName => {
+    const nn = CONFIG.hdNameMoves[oldName], h = hist[oldName]; if (!h) return;
+    delete hist[oldName];
+    if (!hist[nn] || (hist[nn].date || "") < (h.date || "")) hist[nn] = h;
+  });
+  return slot;
+}
+// Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now
+// Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
+function hdRemapDays(slot){
+  const map = CONFIG.hdDayRemap, nd = n => map[n] ? Number(map[n]) : Number(n);
+  const remapKeys = (o, merge) => {
+    if (!o || typeof o !== "object") return o;
+    const out = {};
+    Object.keys(o).forEach(k => { const n = nd(k); out[n] = merge && out[n] ? merge(out[n], o[k]) : (out[n] || o[k]); });
+    return out;
+  };
+  const cat = (a, b) => (Array.isArray(a) ? a : []).concat(Array.isArray(b) ? b : []);
+  slot.missedDays = remapKeys(slot.missedDays);
+  slot.extras = remapKeys(slot.extras, cat);
+  slot.savedExtras = remapKeys(slot.savedExtras, (a, b) => cat(a, b).slice(0, CONFIG.maxSaved));
+  if (slot.lastWeek){ slot.lastWeek.missedDays = remapKeys(slot.lastWeek.missedDays); slot.lastWeek.extras = remapKeys(slot.lastWeek.extras, cat); }
+  (slot.pastVariations || []).forEach(v => { v.day = nd(v.day); if (v.madeDay) v.madeDay = nd(v.madeDay); });
+  return slot;
+}
+// Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
+function hdArchiveExtras(extras, layout){
+  if (layout >= CONFIG.hdLayout || !extras) return extras;
+  const out = {};
+  Object.keys(extras).forEach(k => { const n = CONFIG.hdDayRemap[k] ? Number(CONFIG.hdDayRemap[k]) : Number(k); out[n] = (out[n] || []).concat(extras[k]); });
+  return out;
+}
 function isCalf(name){ return /calf raise/i.test(name || ""); }
 
 // Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}:
@@ -1148,13 +1251,23 @@ function buildExport(slot, planId, sessions, otherSlotData, nowISO){
       missed: e.missed && e.missed.on ? {on: true, reason: e.missed.reason, date: e.missed.date, madeUp: e.missed.madeUp || null, viaDay: !!e.missed.viaDay} : null
     };
   }));
+  // A week logged on the old plan can hold exercises that are no longer in it: export them as they were
+  Object.keys(slot.entries || {}).forEach(id => {
+    const meta = EXERCISES[id], e = slot.entries[id];
+    if (entries[id] || !meta || !meta.retired || meta.plan !== planId || !e) return;
+    const labels = meta.item.rows || parseRows(meta.item.sets);
+    entries[id] = {plan: planId, day: meta.day, exercise: meta.item.name, rows: (e.sets || []).map((x, i) => labels[i] || "Set " + (i + 1)),
+      sets: e.sets || [], unit: (slot.units || {})[id] || "kg", variant: e.variant, doneAt: e.doneAt, replaced: !!e.replaced,
+      replacement: e.replaced && e.repl ? {name: e.repl.name, reason: e.repl.reason, date: e.repl.date, unit: e.repl.unit || "kg", measure: cleanMeasure(e.repl.measure), sets: e.repl.sets} : null,
+      missed: e.missed && e.missed.on ? {on: true, reason: e.missed.reason, date: e.missed.date, madeUp: e.missed.madeUp || null, viaDay: !!e.missed.viaDay} : null};
+  });
   const current = [].concat.apply([], sessions.map(s => currentVariations(slot, s, slot.weekStart))).map(v => { const c = Object.assign({}, v); delete c.current; return c; });
   const missedDays = Object.keys(slot.missedDays || {}).map(Number).sort().map(n => {
     const md = slot.missedDays[n], s = sessions.filter(x => x.n === n)[0], st = dayMakeupStatus(slot, n, s);
     return {day: n, title: s ? s.title : "", date: md.date, reason: md.reason, total: st.total, madeUp: st.made.map(x => ({name: x.item.name, date: x.date})), note: dayNote(slot, n, s)};
   });
   return {
-    app: CONFIG.appId, version: CONFIG.dataVersion, plan: planId, exportedAt: nowISO,
+    app: CONFIG.appId, version: CONFIG.dataVersion, plan: planId, layout: planId === "hd" ? CONFIG.hdLayout : undefined, exportedAt: nowISO,
     weekStart: slot.weekStart, weekEnd: addDays(slot.weekStart, 6), entries: entries,
     streaks: exportStreaks(slot, sessions), history: mergedHistory(slot, sessions, unitFor), varHistory: mergedVarHistory(slot, sessions, unitFor),
     backup: {lastWeek: slot.lastWeek, history: slot.history || {}, varHistory: slot.varHistory || {}, loadedStreaks: slot.loadedStreaks || {},
@@ -1220,6 +1333,11 @@ function loadAsLastWeek(slot, planId, data){
     if (n >= 1 && n <= CONFIG.trainingDays && m.note) lwMissedDays[n] = {note: str(m.note).slice(0, 160), reason: CONFIG.dayMissReasons[m.reason] ? m.reason : "", date: str(m.date)};
   });
   slot.lastWeek = {weekStart: parseISO(str(data.weekStart)) ? mondayOf(str(data.weekStart)) : null, exportedAt: str(data.exportedAt), entries: entries, missedDays: lwMissedDays, extras: cleanExtras(data.extras)};
+  if (planId === "hd" && !(data.layout >= CONFIG.hdLayout)){
+    const old = {missedDays: slot.lastWeek.missedDays, extras: slot.lastWeek.extras};
+    slot.lastWeek.missedDays = hdRemapDays({missedDays: old.missedDays}).missedDays;
+    slot.lastWeek.extras = hdArchiveExtras(old.extras, 0);
+  }
   harvestSaved(slot, entries, slot.lastWeek.extras, slot.lastWeek.weekStart || "");
   slot.loadedStreaks = {};
   if (data.streaks && typeof data.streaks === "object") Object.keys(data.streaks).forEach(rawId => {
@@ -1249,7 +1367,10 @@ function loadAsLastWeek(slot, planId, data){
   if (data.varHistory && typeof data.varHistory === "object"){
     slot.varHistory = slot.varHistory || {};
     Object.keys(data.varHistory).slice(0, 400).forEach(rawKey => {
-      const parts = String(rawKey).split("|"), id = migrateId(parts[0]), variant = parts[1], meta = EXERCISES[id];
+      const parts = String(rawKey).split("|");
+      let id = migrateId(parts[0]), variant = parts[1];
+      if (planId === "hd"){ const to = hdMove(id, variant === "-" ? undefined : variant); if (!to) return; id = to.id; variant = to.variant || "-"; }
+      const meta = EXERCISES[id];
       if (!meta || meta.plan !== planId) return;
       const variants = meta.item.variants ? PROGRAMME.plans[planId].variants[meta.item.variants] : null;
       if (variants ? !variants.some(v => v.id === variant) : variant !== "-") return;
@@ -1260,6 +1381,7 @@ function loadAsLastWeek(slot, planId, data){
       if (!slot.varHistory[k] || (slot.varHistory[k].date || "") < c.date) slot.varHistory[k] = c;
     });
   }
+  if (planId === "hd") hdMoveSlot(slot);
   return slot;
 }
 
@@ -1371,6 +1493,11 @@ function applyBackup(slot, p){
       exIds.forEach(id => { p.entries[id].missed.viaDay = true; });
       slot.missedDays[n] = {date: str(m.date), reason: CONFIG.dayMissReasons[m.reason] ? m.reason : "other", exIds: exIds};
     });
+  }
+  // A Heavy Duty backup from before layout 2: renumber its days, then move its ids
+  if (p.plan === "hd"){
+    if (!(p.data.layout >= CONFIG.hdLayout)) hdRemapDays(slot);
+    hdMoveSlot(slot);
   }
   return slot;
 }
@@ -1775,7 +1902,7 @@ function historyWeeks(slot, planId, sessions, archive, nowISO){
   const push = (ws, source, view) => { if (!ws || seen[ws] || !view.length) return; seen[ws] = true; out.push({weekStart: ws, source: source, view: view}); };
   const cur = buildExport(slot, planId, sessions, null, nowISO);
   push(cur.weekStart, "this", weekView(cur.entries, cur.extras, planId));
-  ((archive && archive[planId]) || []).forEach(w => push(w.weekStart, "archive", weekView(w.entries, cleanExtras(w.extras), planId)));
+  ((archive && archive[planId]) || []).forEach(w => push(w.weekStart, "archive", weekView(w.entries, planId === "hd" ? hdArchiveExtras(cleanExtras(w.extras), w.layout || 0) : cleanExtras(w.extras), planId)));
   if (slot.lastWeek && slot.lastWeek.weekStart) push(slot.lastWeek.weekStart, "last", weekView(slot.lastWeek.entries, slot.lastWeek.extras, planId));
   return out.sort((a, b) => b.weekStart.localeCompare(a.weekStart));
 }
@@ -1848,6 +1975,11 @@ function normaliseState(raw, today){
     }
   });
   (st.pastVariations || []).forEach(v => { if (v.day === 2 && isCalf(v.original)) v.day = 3; });
+  // Heavy Duty layout 2: the five-day split became four days with Wednesday rest. Data saved on the old layout
+  // is renumbered once; id moves are safe to repeat.
+  if (raw && typeof raw === "object" && raw.entries && !(st.hdLayout >= CONFIG.hdLayout)) hdRemapDays(st);
+  st.hdLayout = CONFIG.hdLayout;
+  hdMoveSlot(st);
   st.weekStart = mondayOf(parseISO(st.weekStart) ? st.weekStart : today);
   ["units", "history", "varHistory", "loadedStreaks", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
   if (!Array.isArray(st.pastVariations)) st.pastVariations = [];

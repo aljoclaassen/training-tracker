@@ -15,7 +15,7 @@ with sync_playwright() as p:
     b = p.chromium.launch()
     # ---- Heavy Duty
     pg, errs = boot(b, datetime.datetime(2026, 11, 3, 9, 0, 0))
-    for n in range(1, 6):
+    for n in (1, 2, 4, 5):   # Day 3 is the Wednesday rest day
         o = pg.evaluate(OPTS, n)
         names = pg.evaluate("(n) => sessionItems(sessionOf(ctx(), n)).map(i => i.name.toLowerCase())", n)
         check("HD day %d: 5 to 10 suggestions" % n, o["plan"] == "hd" and 5 <= len(o["s"]) <= 10, o)
@@ -23,19 +23,19 @@ with sync_playwright() as p:
     o = pg.evaluate(OPTS, 1); print("HD d1 swaps:", o["w"])
     check("HD offers other versions as swap options", any("<-" in x for x in o["w"]) or True)
     pg.evaluate("() => { const c = ctx(); c.slot.savedSwaps = {'d1-1': [{name: 'Smith machine squat', unit: 'kg', sets: [], regular: false}]}; save(); state.ui.day = 1; state.ui.tab = 'train'; renderAll(); }")
-    o = pg.evaluate(OPTS, 1); check("saved swap listed with its source", "Smith machine squat <- Back Squat" in o["w"], o["w"])
+    o = pg.evaluate(OPTS, 1); check("saved swap listed with its source", "Smith machine squat <- Back or Zercher Squat" in o["w"], o["w"])
     pg.click('#extras [data-act="extra-add"]')
     check("picker opens", pg.locator(".extra-picker").count() == 1)
     nchips = pg.locator('.extra-picker [data-act="extra-pick"]').count(); check("chips shown", nchips >= 6, nchips)
     hts = pg.eval_on_selector_all('.extra-picker .chip', "els => els.map(e => e.getBoundingClientRect().height)"); check("chips are 44px tall or more", min(hts) >= 44, min(hts))
     check("page does not scroll sideways", pg.evaluate("document.documentElement.scrollWidth <= innerWidth"))
     pg.screenshot(path=SH + "extras-picker-hd.png")
-    pg.locator('.extra-picker .chip', has_text="Leg Press").click()
+    pg.locator('.extra-picker .chip', has_text="Hip Adductor Machine").click()
     x = pg.evaluate("() => { const l = (ctx().slot.extras || {})[1] || []; return l.map(x => ({name: x.name, unit: x.unit, sets: x.sets.length})); }")
-    check("picked suggestion becomes an extra with its unit and 2 sets", x == [{"name": "Leg Press", "unit": "plates", "sets": 2}], x)
+    check("picked suggestion becomes an extra with its unit and 2 sets", x == [{"name": "Hip Adductor Machine", "unit": "plates", "sets": 2}], x)
     check("picker closed after pick", pg.locator(".extra-picker").count() == 0)
     check("extra is open on reps", pg.evaluate("document.activeElement && document.activeElement.id.indexOf('-0-reps') > 0"))
-    o = pg.evaluate(OPTS, 1); check("added name no longer offered", "Leg Press" not in o["s"], o["s"])
+    o = pg.evaluate(OPTS, 1); check("added name no longer offered", "Hip Adductor Machine" not in o["s"], o["s"])
     # cancel and blank
     pg.evaluate("() => { state.ui.openExtra = null; renderAll(); }")
     pg.click('#extras [data-act="extra-add"]'); pg.click('#extras [data-act="extra-pick-cancel"]'); check("cancel closes the picker", pg.locator(".extra-picker").count() == 0 and pg.locator('[data-act="extra-add"]').count() == 1)

@@ -12,7 +12,7 @@ with sync_playwright() as p:
         pg.on("pageerror", lambda e: errs.append(str(e))); pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
         pg.clock.install(time=datetime.datetime(2026, 11, 3, 9, 0, 0)); pg.goto(URL); pg.evaluate("localStorage.clear()"); pg.reload(); pg.click("#button-setup-save"); pg.click("#button-help-close")
         pg.evaluate("(f) => { state.ui.helpSeen = true; state.cycle = Object.assign({}, cycleOf(), {first: f}); realignSlots(todayISO()); state.ui.tab = 'train'; renderAll(); save(); }", first)
-        for n in range(1, 6):
+        for n in ((1, 2, 4, 5) if label == "HD" else range(1, 6)):
             pg.evaluate("(n) => { state.ui.day = n; state.ui.openEx = null; renderAll(); }", n); pg.wait_for_timeout(80)
             head = pg.inner_text("#session-head"); m = re.search(r"Takes (about )?(\d+)–(\d+) min, (.*?)\.", head)
             check("%s day %d shows a time line" % (label, n), bool(m), head)

@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-10-28.1",
+  "appVersion": "2026-11-09.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -312,7 +312,7 @@
     "makeup": "An exercise from a missed day, done on a later day.",
     "topsetfinder": "Work up in small jumps to find today's heaviest set of 5.",
     "carryeffort": "For carries, the same 0 to 4 numbers judge grip and posture, not bar speed. 4 is easy, 0 means you had to put it down.",
-    "weekbase": "Your result on the same exercise earlier this week. When the later session is Legs B, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
+    "weekbase": "Your result on the same exercise earlier this week. If the plan repeats an exercise later in the same week, its target starts from this result, so you hold the same weight and reps on a less-rested day.",
     "extra": "An exercise you add yourself, like a burnout set at the end. It doesn't change the plan.",
     "regularswap": "Do the swap every week on this day until you turn it off. It gets its own targets.",
     "hold": "Holds like a plank: log the seconds you held and any weight added. Carries: log the metres walked and the weight. Next time, aim 5 seconds longer, or the same distance."
@@ -344,20 +344,7 @@
       "short": "Had to put it down before the end"
     }
   ],
-  "hdWeekPairs": [
-    [
-      "d1-0",
-      "d5-0"
-    ],
-    [
-      "d1-6",
-      "d5-6"
-    ],
-    [
-      "d1-7",
-      "d5-7"
-    ]
-  ],
+  "hdWeekPairs": [],
   "warmupShareRange": [
     0.3,
     0.95
@@ -371,18 +358,11 @@
     "hd": {
       "1": [
         {
-          "name": "Leg Press",
+          "name": "Sumo Deadlift"
+        },
+        {
+          "name": "Single-Leg Leg Curl",
           "unit": "plates"
-        },
-        {
-          "name": "Pendulum Squat",
-          "unit": "plates"
-        },
-        {
-          "name": "Zercher Squat"
-        },
-        {
-          "name": "Stiff-Leg Deadlift"
         },
         {
           "name": "Dumbbell Walking Lunges"
@@ -422,9 +402,6 @@
           "name": "Spider Curl"
         },
         {
-          "name": "Concentration Curl"
-        },
-        {
           "name": "Cable Curl",
           "unit": "plates"
         },
@@ -437,9 +414,51 @@
         {
           "name": "Cable Crunch",
           "unit": "plates"
+        },
+        {
+          "name": "Bayesian Cable Curl",
+          "unit": "plates"
         }
       ],
-      "3": [
+      "3": [],
+      "4": [
+        {
+          "name": "Arnold Press"
+        },
+        {
+          "name": "Machine Shoulder Press",
+          "unit": "plates"
+        },
+        {
+          "name": "Cable Y-Raise",
+          "unit": "plates"
+        },
+        {
+          "name": "Close-Grip Bench Press"
+        },
+        {
+          "name": "Triceps Dips"
+        },
+        {
+          "name": "Diamond Push-up"
+        },
+        {
+          "name": "Hanging Leg Raise"
+        },
+        {
+          "name": "Cable Crunch",
+          "unit": "plates"
+        },
+        {
+          "name": "Overhead Cable Extension",
+          "unit": "plates"
+        },
+        {
+          "name": "Rear Delt Fly",
+          "unit": "plates"
+        }
+      ],
+      "5": [
         {
           "name": "Pull-up"
         },
@@ -473,76 +492,6 @@
         {
           "name": "Cable Crunch",
           "unit": "plates"
-        }
-      ],
-      "4": [
-        {
-          "name": "Arnold Press"
-        },
-        {
-          "name": "Machine Shoulder Press",
-          "unit": "plates"
-        },
-        {
-          "name": "Cable Y-Raise",
-          "unit": "plates"
-        },
-        {
-          "name": "Face Pull",
-          "unit": "plates"
-        },
-        {
-          "name": "Skull Crusher"
-        },
-        {
-          "name": "Close-Grip Bench Press"
-        },
-        {
-          "name": "Triceps Dips"
-        },
-        {
-          "name": "Diamond Push-up"
-        },
-        {
-          "name": "Hanging Leg Raise"
-        },
-        {
-          "name": "Cable Crunch",
-          "unit": "plates"
-        }
-      ],
-      "5": [
-        {
-          "name": "Back Squat"
-        },
-        {
-          "name": "Hack Squat"
-        },
-        {
-          "name": "Leg Curl",
-          "unit": "plates"
-        },
-        {
-          "name": "Sumo Deadlift"
-        },
-        {
-          "name": "Dumbbell Walking Lunges"
-        },
-        {
-          "name": "Barbell Walking Lunges"
-        },
-        {
-          "name": "Zercher Lunge"
-        },
-        {
-          "name": "Hip Adductor Machine",
-          "unit": "plates"
-        },
-        {
-          "name": "Hip Thrust"
-        },
-        {
-          "name": "Hanging Leg Raise"
         }
       ]
     },
@@ -793,34 +742,115 @@
         "1": [
           "d1-1",
           "d1-3",
-          "d1-4",
+          "d5-4",
           "d1-6"
         ],
         "2": [
-          "d2-1",
+          "d2-0",
           "d2-2",
-          "d2-pec",
+          "d2-1",
           "d2-6"
         ],
-        "3": [
-          "d3-0",
-          "d3-1",
-          "d3-3",
-          "d3-6"
-        ],
+        "3": [],
         "4": [
           "d4-0",
-          "d4-1",
           "d4-3",
-          "d4-7"
+          "d4-7",
+          "d4-9"
         ],
         "5": [
-          "d5-1",
-          "d5-2",
-          "d5-4",
-          "d5-5"
+          "d3-0",
+          "d3-1",
+          "d3-2",
+          "d3-facepull"
         ]
       }
     }
+  },
+  "hdLayout": 2,
+  "hdDayRemap": {
+    "3": 5,
+    "5": 1
+  },
+  "hdMoves": {
+    "d5-0": {
+      "to": "d1-0"
+    },
+    "d5-6": {
+      "to": "d1-6"
+    },
+    "d3-11": {
+      "to": "d1-6"
+    },
+    "d5-7": {
+      "to": "d1-7"
+    },
+    "d3-10": {
+      "to": "d1-7"
+    },
+    "d1-1": {
+      "to": "d1-1",
+      "variants": {
+        "-": "back"
+      }
+    },
+    "d5-2": {
+      "to": "d1-1",
+      "variants": {
+        "-": "zercher"
+      }
+    },
+    "d1-2": {
+      "to": "d1-2",
+      "variants": {
+        "-": "hack"
+      }
+    },
+    "d5-3": {
+      "to": "d1-2",
+      "variants": {
+        "-": "pendulum"
+      }
+    },
+    "d2-8": {
+      "to": "d2-8",
+      "variants": {
+        "-": "barbell"
+      }
+    },
+    "d2-10": {
+      "to": "d2-10",
+      "variants": {
+        "-": "hammer"
+      }
+    },
+    "d4-8": {
+      "to": "d4-9",
+      "variants": {
+        "-": "jm-barbell",
+        "barbell": "jm-barbell",
+        "ez": "jm-ez"
+      }
+    },
+    "d3-5": {
+      "to": "d3-5",
+      "variants": {
+        "db": "-",
+        "machine": "x",
+        "machine-both": "x"
+      }
+    }
+  },
+  "hdNameMoves": {
+    "db fly": "db incline fly",
+    "back squat": "back or zercher squat",
+    "hack squat": "hack or pendulum squat",
+    "standing barbell curl": "barbell curl or bicep-biased pulldown",
+    "preacher bench curl": "preacher or machine curl",
+    "db hammer curl": "hammer or concentration curl",
+    "behind-the-neck or military press": "smith or behind-the-neck press",
+    "upright row": "barbell upright row",
+    "tricep extension": "tricep extension or jm press",
+    "lat row": "db bent-over row"
   }
 }
