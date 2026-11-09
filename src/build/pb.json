@@ -43,6 +43,7 @@
     "bench": {
       "name": "Bench",
       "hdSource": "d2-2",
+      "hdSourceVariants": ["barbell", "smith"],
       "hdFactor": 1.0,
       "hdNote": "Incline bench working weight (Day 2, 6 reps)",
       "guessNote": "The same weight. Flat bench is usually stronger, so this starts on the safe side",

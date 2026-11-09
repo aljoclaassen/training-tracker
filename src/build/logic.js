@@ -895,15 +895,19 @@ function warmupLoad(pct, workingKg, unit){ return roundTo(workingKg * pct / 100,
 function hdWorkingKg(hdSlot, exId, variantId){
   const meta = EXERCISES[exId]; if (!meta) return null;
   const item = meta.item;
-  const rows = item.rows || parseRows(item.sets);
+  // An exercise with variations: no variation asked for means its first one (old logs without one were that)
+  const list = item.variants ? PROGRAMME.plans.hd.variants[item.variants] || [] : null, first = list && list[0] ? list[0].id : "barbell";
+  if (list && !variantId) variantId = first;
+  const v = list ? list.filter(x => x.id === variantId)[0] : null;
+  const rows = (v && v.rows) || item.rows || parseRows(item.sets);
   const workIdx = rows.map((r, i) => /^Warm-up/.test(r) ? -1 : i).filter(i => i >= 0);
   const fromSets = sets => { const b = bestSet((sets || []).filter((s, i) => workIdx.indexOf(i) >= 0)); return b && b.kg > 0 ? b.kg : null; };
-  const okVariant = e => !item.variants || !variantId || (e && (e.variant || "barbell") === variantId);
+  const okVariant = e => !item.variants || (e && (e.variant || first) === variantId);
   const cur = hdSlot.entries && hdSlot.entries[exId];
   if (cur && okVariant(cur) && fromSets(cur.sets)) return fromSets(cur.sets);
   const lw = hdSlot.lastWeek && hdSlot.lastWeek.entries ? hdSlot.lastWeek.entries[exId] : null;
   if (lw && okVariant(lw) && fromSets(lw.sets)) return fromSets(lw.sets);
-  const vh = (hdSlot.varHistory || {})[exId + "|" + (item.variants ? (variantId || "barbell") : "-")];
+  const vh = (hdSlot.varHistory || {})[exId + "|" + (item.variants ? variantId : "-")];
   if (vh && fromSets(vh.sets)) return fromSets(vh.sets);
   const h = (hdSlot.history || {})[keyOf(item.name)];
   return h && h.kg > 0 ? h.kg : null;
@@ -916,7 +920,9 @@ function hdWorkingKg(hdSlot, exId, variantId){
 function topSetGuess(lift, variantId, hdSlot){
   const m = PROGRAMME.plans.pb.mainLifts[lift];
   if (m.noGuessVariants && m.noGuessVariants.indexOf(variantId) >= 0) return {kg: null, source: "", note: "No guess for this stance. Start from " + m.conventionalStartKg + " kg and work up."};
-  const base = hdWorkingKg(hdSlot, m.hdSource, m.hdSourceVariant || null);
+  // Tries each listed Heavy Duty variation in order (incline bench: barbell first, then Smith)
+  let base = null;
+  (m.hdSourceVariants || [m.hdSourceVariant || null]).some(v => (base = hdWorkingKg(hdSlot, m.hdSource, v)) > 0);
   if (!base) return {kg: null, source: "", note: "No Heavy Duty numbers yet. Start from the empty bar and work up."};
   return {kg: Math.round(base * m.hdFactor / CONFIG.kgStep) * CONFIG.kgStep, source: m.hdNote + ": " + fmtLoad(base, "kg") + ".", note: m.guessNote + "."};
 }
@@ -1123,11 +1129,13 @@ function hdMove(id, variant){
   const m = CONFIG.hdMoves[id];
   if (!m) return {id: id, variant: variant};
   const key = variant || "-", map = m.variants || {};
-  const target = EXERCISES[m.to] && EXERCISES[m.to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
-  let nv = map[key] !== undefined ? map[key] : key;
-  if (nv === "-") return {id: m.to, variant: undefined};
+  let nv = map[key] !== undefined ? map[key] : key, to = m.to;
+  // A variation can move to another exercise: "d3-onearm|machine"
+  if (nv.indexOf("|") > 0){ const parts = nv.split("|"); to = parts[0]; nv = parts[1]; }
+  const target = EXERCISES[to] && EXERCISES[to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
+  if (nv === "-") return {id: to, variant: undefined};
   if (!list) return null;
-  return list.some(v => v.id === nv) ? {id: m.to, variant: nv} : null;
+  return list.some(v => v.id === nv) ? {id: to, variant: nv} : null;
 }
 // Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and
 // best-set history from old ids onto the new plan. Changes slot in place.
@@ -1190,6 +1198,53 @@ function hdRemapDays(slot){
   (slot.pastVariations || []).forEach(v => { v.day = nd(v.day); if (v.madeDay) v.madeDay = nd(v.madeDay); });
   return slot;
 }
+// Takes a Heavy Duty slot and the history archive. Gives an exercise's variation history its last logged
+// numbers from archived weeks when the slot has none: the one-arm machine row, which 2026-11-09.1 did not carry over.
+// Changes slot in place. Rule: runs once per device (slot.hdSeeded); takes the newest archived week that logged it.
+function hdSeedFromArchive(slot, archive){
+  if (slot.hdSeeded >= 1) return slot;
+  const vh = slot.varHistory = objOr(slot.varHistory, {});
+  const weeks = ((archive && archive.hd) || []).slice().sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
+  CONFIG.hdArchiveSeeds.forEach(seed => {
+    const key = seed.to + "|" + seed.toVariant;
+    if (vh[key]) return;
+    for (const w of weeks){
+      const e = (w.entries || {})[seed.from];
+      if (e && (e.variant || "") === seed.fromVariant && (e.sets || []).some(isLogged)){
+        vh[key] = {name: EXERCISES[seed.to] ? EXERCISES[seed.to].item.name : "", variant: seed.toVariant, date: e.doneAt || w.weekStart || "", unit: e.unit || "plates", sets: e.sets};
+        break;
+      }
+    }
+  });
+  slot.hdSeeded = 1;
+  return slot;
+}
+
+// Takes a Heavy Duty session item, the Powerbuilding slot and the unit the item is logged in.
+// Returns an information-only hint {kg, reps, from, date, after} from Powerbuilding, or null.
+// Rule: the best estimated max in the newest Powerbuilding week that logged the matching exercise
+// (load × (1 + (reps + reps left) ÷ 30)), times the lift factor, turned back into a load for the bottom
+// of the Heavy Duty rep range taken to failure, rounded down. Same unit only. Never changes the target.
+function pbHint(item, pbSlot, unit){
+  if (!pbSlot || item.plan !== "hd") return null;
+  const h = CONFIG.pbHints.filter(x => x.hd === item.id && (!x.variants || x.variants.indexOf(item.variant) >= 0))[0];
+  const range = h && repRange(item);
+  if (!h || !range) return null;
+  const weeks = [];
+  if (pbSlot.entries) weeks.push({entries: pbSlot.entries, date: pbSlot.weekStart, units: pbSlot.units || {}});
+  if (pbSlot.lastWeek && pbSlot.lastWeek.entries) weeks.push({entries: pbSlot.lastWeek.entries, date: pbSlot.lastWeek.weekStart, units: pbSlot.units || {}});
+  for (const w of weeks){
+    let best = 0;
+    h.pb.forEach(id => {
+      const e = w.entries[id];
+      if (!e || e.replaced || (e.unit || w.units[id] || "kg") !== unit) return;
+      best = Math.max(best, bestEstMax(e.sets));
+    });
+    if (best > 0) return {kg: loadForReps(best * h.factor, range.min, 0, unit), reps: range.min, from: h.from, date: w.date || "", after: h.after || ""};
+  }
+  return null;
+}
+
 // Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
 function hdArchiveExtras(extras, layout){
   if (layout >= CONFIG.hdLayout || !extras) return extras;

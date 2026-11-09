@@ -91,7 +91,7 @@ with sync_playwright() as p:
     r = pg.evaluate("""() => { const c = JSON.parse(JSON.stringify(withEasyWeek({start: '2026-10-05', first: 'hd', lengths: [3]}, 8, true))); return [withBlockLength(c, 0, 4).easy, resetUpcomingBlocks(c, '2026-11-03').easy, switchCycleNow(c, '2026-11-03').easy]; }""")
     check("block changes keep hand-set easy weeks", r[0] == {"8": True} and r[1] == {"8": True} and r[2] == {"8": True}, r)
     # 8. Calendar UI
-    pg.evaluate("() => { state.cycle = {start: '2026-10-05', first: 'hd', lengths: []}; ensurePbSlot(state, todayISO()); realignSlots(todayISO()); state.ui.tab = 'plan'; renderAll(); }")
+    pg.evaluate("() => { state.cycle = {start: '2026-10-05', first: 'hd', lengths: []}; ensurePbSlot(state, todayISO()); realignSlots(todayISO()); state.ui.tab = 'plan'; state.ui.planSection = 'blocks'; state.ui.calOpen = [0, 1, 2, 3, 4, 5]; renderAll(); }")
     pg.click('.bottom-nav [data-tab="plan"]'); pg.wait_for_timeout(100)
     n0 = pg.locator("[data-cal-easy]").count()
     check("calendar offers a toggle on this and later weeks only", n0 > 0 and pg.locator(".cal-week.is-past [data-cal-easy]").count() == 0, n0)

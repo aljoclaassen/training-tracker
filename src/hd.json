@@ -46,7 +46,7 @@
   "OHP": [
    {
     "id": "btn",
-    "label": "Behind-the-neck press",
+    "label": "Behind-the-neck, barbell",
     "rows": [
      "Warm-up 1",
      "Warm-up 2",
@@ -55,7 +55,7 @@
    },
    {
     "id": "military",
-    "label": "Military press",
+    "label": "Military, barbell",
     "rows": [
      "Warm-up 1",
      "Warm-up 2",
@@ -64,7 +64,17 @@
    },
    {
     "id": "smith",
-    "label": "Smith machine shoulder press",
+    "label": "Military, Smith machine",
+    "rows": [
+     "Warm-up 1",
+     "Warm-up 2",
+     "Working"
+    ],
+    "unit": "kg"
+   },
+   {
+    "id": "btn-smith",
+    "label": "Behind-the-neck, Smith machine",
     "rows": [
      "Warm-up 1",
      "Warm-up 2",
@@ -533,6 +543,74 @@
      "Working"
     ]
    }
+  ],
+  "CABLEFLY": [
+   {
+    "id": "high",
+    "label": "High to low",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "low",
+    "label": "Low to high",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "both",
+    "label": "Both: high to low, then low to high",
+    "rows": [
+     "High to low",
+     "Low to high"
+    ]
+   }
+  ],
+  "ONEROW": [
+   {
+    "id": "cable-hl",
+    "label": "High-to-low one-arm cable row",
+    "rows": [
+     "Warm-up",
+     "Left arm",
+     "Right arm"
+    ],
+    "unit": "plates"
+   },
+   {
+    "id": "machine",
+    "label": "Machine one-arm row",
+    "rows": [
+     "Warm-up",
+     "Left arm",
+     "Right arm"
+    ],
+    "unit": "plates"
+   }
+  ],
+  "INCBENCH": [
+   {
+    "id": "barbell",
+    "label": "Barbell, fixed incline bench",
+    "rows": [
+     "Warm-up 1",
+     "Warm-up 2",
+     "Warm-up 3",
+     "Working"
+    ]
+   },
+   {
+    "id": "smith",
+    "label": "Smith machine, adjustable bench",
+    "rows": [
+     "Warm-up 1",
+     "Warm-up 2",
+     "Warm-up 3",
+     "Working"
+    ]
+   }
   ]
  },
  "days": [
@@ -650,13 +728,14 @@
       },
       {
        "id": "d2-2",
-       "name": "Barbell Incline Bench Press",
-       "equip": "Barbell",
+       "name": "Incline Bench Press: Barbell or Smith",
+       "equip": "Barbell or Smith machine",
        "sets": "3W + 1",
        "reps": "12 @ 50%, 10 @ 60%, 6–8 @ 70% → 6 @ 100%",
        "rest": "2–3 min",
-       "notes": "Superset partner of the incline fly. Pre-exhausted, so expect less weight than a fresh set.",
-       "pair": "A2"
+       "notes": "Superset partner of the incline fly. Pick the barbell on the fixed incline bench, or the Smith machine with an adjustable bench, in the Tracker. Pre-exhausted, so expect less weight than a fresh set.",
+       "pair": "A2",
+       "variants": "INCBENCH"
       },
       {
        "id": "d2-1",
@@ -679,14 +758,14 @@
       },
       {
        "id": "d2-4",
-       "name": "Cable Crossover",
+       "name": "Cable Fly: High to Low or Low to High",
        "equip": "Cable",
        "sets": "1",
        "reps": "8–10 @ 100%",
        "rest": "60–90 s",
-       "notes": "Optional.",
-       "tag": "R",
-       "optional": true
+       "notes": "Optional. Pick high to low, low to high, or both (one set each) in the Tracker.",
+       "optional": true,
+       "variants": "CABLEFLY"
       },
       {
        "id": "d2-pec",
@@ -773,12 +852,12 @@
      "items": [
       {
        "id": "d4-0",
-       "name": "Smith or Behind-the-Neck Press",
-       "equip": "Smith machine or barbell",
+       "name": "Shoulder Press: Behind-the-Neck or Military",
+       "equip": "Barbell or Smith machine",
        "sets": "2W + 1",
        "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
        "rest": "2–3 min",
-       "notes": "Pick Smith machine, behind-the-neck or military press in the Tracker.",
+       "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
        "variants": "OHP"
       },
       {
@@ -939,6 +1018,17 @@
        "notes": "Variations: both arms or one arm.",
        "tag": "R",
        "variants": "CABLEROW"
+      },
+      {
+       "id": "d3-onearm",
+       "name": "One-Arm Row: High-to-Low Cable or Machine",
+       "equip": "Cable or machine",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 8–10 @ 100% each arm",
+       "rest": "90 s",
+       "optional": true,
+       "variants": "ONEROW",
+       "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm."
       },
       {
        "id": "d3-hgpull",

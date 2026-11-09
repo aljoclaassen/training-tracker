@@ -83,6 +83,7 @@ const PLAN_NAMES = {hd: PROGRAMME.plans.hd.name, pb: PROGRAMME.plans.pb.name};
 /* ---------- 3.2 State, saving and context ---------- */
 let storageOK = storageAvailable();
 let state = normaliseState(storageLoad(), todayISO());
+hdSeedFromArchive(state, archiveLoad());
 if (state.ui.tab !== "plan") state.ui.tab = "train";
 ensurePbSlot(state, todayISO());
 
@@ -394,6 +395,9 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
+    const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
+    if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
+      (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
     if (item.log !== "check" && item.log !== "time" && item.log !== "rounds") html += setActionsHTML("main", e.sets.length, item.name);
   }
@@ -947,14 +951,43 @@ function easyNudgeText(c){
   for (let k = 1; k <= 2; k++) if (weekInfo(c.cycle, addDays(c.now.weekStart, 7 * k)).easy) return "";
   return "You have trained hard for " + weekWord(c.now.hardRun) + " in a row. An easy week now helps your next hard weeks go better.";
 }
+// Takes the index of the block to open when nothing is stored. Returns the set of block indexes shown open.
+// Rule: the current block starts open; after that the owner's own opening and closing is remembered.
+// Takes an ISO date. Returns "2 Nov" for the block strip.
+function fmtChipDate(iso){
+  const d = new Date(iso + "T00:00:00");
+  return d.getDate() + " " + MONTHS[d.getMonth()].slice(0, 3);
+}
+function calOpenSet(fallback){
+  const list = Array.isArray(state.ui.calOpen) ? state.ui.calOpen : [fallback];
+  return new Set(list.filter(n => Number.isInteger(n)));
+}
 function renderCalendar(c){
   const box = $("#calendar");
   if (!box) return;
   const show = Math.min(24, state.ui.calShow || CONFIG.calendarBlocks);
   const blocks = calendarBlocks(c.cycle, c.now.before ? 0 : c.now.blockIndex, show), nowWeek = c.now.before ? "" : c.now.weekStart;
-  let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Calendar</h2>' +
-    '<p class="small muted">Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules. The week after a Powerbuilding test week is an easy week. You can make any other week easy too, and turn an easy week back to normal.</p>' +
-    (easyNudgeText(c) ? '<p class="notice notice--warn small">' + esc(easyNudgeText(c)) + "</p>" : "") + '</div><ol class="cal-blocks">';
+  const curBlock = blocks.filter(bl => bl.list.some(w => w.weekStart === nowWeek))[0] || null;
+  const nextBlock = blocks.filter(bl => bl.start > (nowWeek || "")).sort((a, b) => a.start < b.start ? -1 : 1)[0] || null;
+  const open = calOpenSet(curBlock ? curBlock.index : (blocks[0] ? blocks[0].index : -1));
+  let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Blocks</h2>' +
+    '<p class="small muted">Heavy Duty and Powerbuilding take turns, a block at a time. Tap a block to see its weeks, make a week easy, or make it longer or shorter.</p>' +
+    (easyNudgeText(c) ? '<p class="notice notice--warn small">' + esc(easyNudgeText(c)) + "</p>" : "") + "</div>";
+  // Now and next, in one glance
+  if (curBlock || nextBlock){
+    const nw = curBlock ? curBlock.list.filter(w => w.weekStart === nowWeek)[0] : null;
+    html += '<div class="cal-now">' +
+      (curBlock ? '<p><span class="cal-now__label">Now</span> ' + planBadge(curBlock.plan) + "<strong>" + esc(PLAN_NAMES[curBlock.plan]) + ",</strong> " + esc(calWeekLabel(nw).toLowerCase()) + (nw && nw.easy ? " (easy week)" : "") + '<span class="small muted"> · until ' + esc(fmtDate(addDays(curBlock.start, 7 * curBlock.weeks - 1))) + "</span></p>" : "") +
+      (nextBlock ? '<p><span class="cal-now__label">Next</span> ' + planBadge(nextBlock.plan) + "<strong>" + esc(PLAN_NAMES[nextBlock.plan]) + "</strong> from " + esc(fmtDayDate(nextBlock.start)) + '<span class="small muted"> · ' + esc(weekWord(nextBlock.weeks)) + "</span></p>" : "") +
+      "</div>";
+  }
+  // Strip of blocks: tap to jump to one and open it
+  html += '<nav class="cal-strip" aria-label="Jump to a block"><ol>' + blocks.map(bl =>
+    '<li><a class="cal-chip cal-chip--' + bl.plan + (curBlock && bl.index === curBlock.index ? " is-current" : "") + '" href="#cal-blk-' + bl.index + '" data-cal-jump="' + bl.index + '"' + (curBlock && bl.index === curBlock.index ? ' aria-current="true"' : "") + ">" +
+    '<span class="cal-chip__plan">' + esc(bl.plan.toUpperCase()) + "</span><span>" + esc(fmtChipDate(bl.start)) + '</span><span class="muted">' + esc(weekWord(bl.weeks)) + "</span></a></li>").join("") + "</ol></nav>";
+  html += guide("How blocks work", "<p>Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules.</p>" +
+    "<p>The week after a Powerbuilding test week is an easy week. You can make any other week easy too, and turn an easy week back to normal.</p>" +
+    "<p>Past weeks and a week you have already started cannot be changed.</p>") + '<ol class="cal-blocks">';
   blocks.forEach(bl => {
     const lim = blockLimits(c.cycle, bl.index, c.today), isNow = bl.list.some(w => w.weekStart === nowWeek);
     const end = addDays(bl.start, 7 * bl.weeks - 1), step = lim.step, unitWord = step === 1 ? "a week" : step + " weeks";
@@ -963,10 +996,13 @@ function renderCalendar(c){
     let why = "";
     if (!canRemove && !lim.locked) why = lim.why || "The shortest " + PLAN_NAMES[bl.plan] + " block is " + weekWord(lim.min) + ".";
     if (!canAdd && !lim.locked) why = (why ? why + " " : "") + "The longest block is " + weekWord(lim.max) + ".";
-    html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + '" aria-labelledby="' + headId + '">' +
-      '<div class="cal-block__head"><span class="cal-block__bar" aria-hidden="true"></span><div>' +
-      '<h3 class="cal-block__title" id="' + headId + '" tabindex="-1">' + planBadge(bl.plan) + esc(PLAN_NAMES[bl.plan]) + '<span class="cal-block__run">run ' + planRun(c.cycle, bl.index) + "</span>" + (isNow ? ' <span class="cal-tag">Now</span>' : "") + "</h3>" +
-      '<p class="small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks)) + "</p></div></div>" +
+    const past = nowWeek && end < nowWeek, easyN = bl.list.filter(w => w.easy).length;
+    html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + (past ? " is-past" : "") + '" id="cal-blk-' + bl.index + '">' +
+      '<span class="cal-block__bar" aria-hidden="true"></span>' +
+      '<details class="cal-block__details" data-cal-block="' + bl.index + '"' + (open.has(bl.index) ? " open" : "") + '><summary class="cal-block__summary"><span class="cal-block__head"><span>' +
+      '<span class="cal-block__title" id="' + headId + '" tabindex="-1">' + planBadge(bl.plan) + esc(PLAN_NAMES[bl.plan]) + '<span class="cal-block__run">run ' + planRun(c.cycle, bl.index) + "</span>" + (isNow ? ' <span class="cal-tag">Now</span>' : past ? ' <span class="cal-tag cal-tag--quiet">Done</span>' : "") + "</span>" +
+      '<span class="cal-block__dates small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks) + (easyN ? " · " + easyN + " easy" : "")) + "</span></span>" +
+      '<svg class="cal-block__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="cal-block__body">' +
       '<ol class="cal-weeks">' + bl.list.map(w => {
         const past = nowWeek && w.weekStart < nowWeek, cur = w.weekStart === nowWeek;
         const canEasy = !!state.cycle && !past && !(cur && planLogStarted(c, w.plan));
@@ -982,7 +1018,7 @@ function renderCalendar(c){
         '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="-1"' + (canRemove ? "" : " disabled") + ' aria-label="Remove ' + unitWord + " from " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Remove ' + unitWord + "</button>" +
         '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="1"' + (canAdd ? "" : " disabled") + ' aria-label="Add ' + unitWord + " to " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Add ' + unitWord + "</button></div>" +
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
-      "</li>";
+      "</div></details></li>";
   });
   html += "</ol><div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
@@ -1042,20 +1078,24 @@ $("#view-plan").addEventListener("click", ev => {
 });
 $("#view-train").addEventListener("click", ev => {
   if (!ev.target.closest("[data-go-calendar]")) return;
+  state.ui.planSection = "blocks"; save();
   showTab("plan");
   const t = $("#calendar-title"); if (t){ t.scrollIntoView({block: "start"}); t.focus({preventScroll: true}); }
 });
 
 /* ---------- 3.6 Plan view ---------- */
 function renderPlanView(c){
-  const view = state.ui.planView || c.plan;
+  const view = state.ui.planView || c.plan, section = state.ui.planSection === "blocks" ? "blocks" : "plan";
+  $("#plan-sections").innerHTML = [["plan", "Plan"], ["blocks", "Blocks"]].map(x => '<button type="button" class="button" data-plan-section="' + x[0] + '" aria-pressed="' + (x[0] === section) + '" aria-controls="plan-section-' + x[0] + '">' + x[1] + "</button>").join("");
+  $("#plan-section-plan").hidden = section !== "plan";
+  $("#plan-section-blocks").hidden = section !== "blocks";
   $("#plan-switch").innerHTML = PLAN_IDS.map(p => '<button type="button" class="button" data-plan-view="' + p + '" aria-pressed="' + (p === view) + '">' + esc(PLAN_NAMES[p]) + "</button>").join("");
   $("#plan-switch-note").textContent = view === c.plan ? "This is your plan right now. Log sets on the Today page." : "Viewing only. You start this plan again on " + fmtDayDate(nextWeekForPlan(c.cycle, view, c.today)) + ".";
   renderCalendar(c);
   renderTodayCard(c, view);
   const plan = PROGRAMME.plans[view];
   const t = view === c.plan ? todaysDay(c) : 0;
-  $("#week-tiles").innerHTML = plan.days.map(d => '<a class="week-tile' + (d.n === t ? " is-today" : "") + '" href="#plan-' + view + "-day-" + d.n + '"' + (d.n === t ? ' aria-current="date"' : "") + '><span class="week-tile__n">' + d.n + "</span><span>" + esc(d.title) + (d.n === t ? "<br>Today" : "") + "</span></a>").join("") +
+  $("#week-tiles").innerHTML = plan.days.map(d => '<a class="week-tile' + (d.rest ? " week-tile--rest" : "") + (d.n === t ? " is-today" : "") + '" href="#plan-' + view + "-day-" + d.n + '"' + (d.n === t ? ' aria-current="date"' : "") + '><span class="week-tile__n">' + d.n + "</span><span>" + esc(d.title) + (d.n === t ? "<br>Today" : "") + "</span></a>").join("") +
     '<span class="week-tile week-tile--rest"><span class="week-tile__n">6</span><span>Rest</span></span><span class="week-tile week-tile--rest"><span class="week-tile__n">7</span><span>Rest</span></span>';
   $("#plan-guide").innerHTML = view === "hd" ? hdGuideHTML() : pbGuideHTML();
   $("#plan-days").innerHTML = plan.days.map(d => view === "hd" ? hdDayTableHTML(d, view === c.plan) : pbDayTableHTML(d, view === c.plan)).join("");
@@ -1594,8 +1634,24 @@ $("#day-tabs").addEventListener("keydown", ev => {
   const next = keys[ev.key] === "first" ? 0 : keys[ev.key] === "last" ? n - 1 : (i + keys[ev.key] + n) % n;
   selectDay(next + 1, true);
 });
+// Remembers which blocks are open (toggle does not bubble, so listen in the capture phase)
+$("#calendar").addEventListener("toggle", ev => {
+  const d = ev.target; if (!d.matches || !d.matches("[data-cal-block]")) return;
+  const c = ctx(), cur = c.now.before ? -1 : c.now.blockIndex, set = calOpenSet(cur), n = Number(d.dataset.calBlock);
+  if (d.open) set.add(n); else set.delete(n);
+  state.ui.calOpen = Array.from(set); save();
+}, true);
 $("#view-plan").addEventListener("click", ev => {
   const p = ev.target.closest("[data-plan-view]"); if (p){ state.ui.planView = p.dataset.planView; save(); renderAll(); return; }
+  const ps = ev.target.closest("[data-plan-section]"); if (ps){ state.ui.planSection = ps.dataset.planSection; save(); renderAll(); const b = $('[data-plan-section="' + ps.dataset.planSection + '"]'); if (b) b.focus({preventScroll: true}); return; }
+  const jump = ev.target.closest("[data-cal-jump]");
+  if (jump){
+    ev.preventDefault();
+    const n = Number(jump.dataset.calJump), set = calOpenSet(n); set.add(n);
+    state.ui.calOpen = Array.from(set); save(); renderAll();
+    const t = $("#cal-b-" + n); if (t){ $("#cal-blk-" + n).scrollIntoView({block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); t.focus({preventScroll: true}); }
+    return;
+  }
   const o = ev.target.closest("[data-open-day]"); if (o){ selectDay(+o.dataset.openDay, false); showTab("train"); }
 });
 const TO_TOP_AFTER_PX = 400;

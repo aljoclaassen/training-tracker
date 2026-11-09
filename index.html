@@ -246,6 +246,8 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     hdMove(id, variant) : Takes an id and a variation id (or undefined). Returns {id, variant} on the new plan, or null when that variation has no home any more. Rule: safe to run twice; an id with no move stays as it is.
     hdMoveSlot(slot) : Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and best-set history from old ids onto the new plan. Changes slot in place. Rule: where the new id already has an entry, the moved one goes into variation history instead, so nothing logged is lost.
     hdRemapDays(slot) : Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
+    hdSeedFromArchive(slot, archive) : Takes a Heavy Duty slot and the history archive. Gives an exercise's variation history its last logged numbers from archived weeks when the slot has none: the one-arm machine row, which 2026-11-09.1 did not carry over. Changes slot in place. Rule: runs once per device (slot.hdSeeded); takes the newest archived week that logged it.
+    pbHint(item, pbSlot, unit) : Takes a Heavy Duty session item, the Powerbuilding slot and the unit the item is logged in. Returns an information-only hint {kg, reps, from, date, after} from Powerbuilding, or null. Rule: the best estimated max in the newest Powerbuilding week that logged the matching exercise (load × (1 + (reps + reps left) ÷ 30)), times the lift factor, turned back into a load for the bottom of the Heavy Duty rep range taken to failure, rounded down. Same unit only. Never changes the target.
     hdArchiveExtras(extras, layout) : Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
     isCalf(name)
     mergedHistory(slot, sessions, unitFor) : Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}: the latest best set per exercise name, this week included.
@@ -1629,6 +1631,29 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .cal-block__actions .button{ flex: 1 1 140px; }
 .cal-block p.small.muted{ margin: 0; }
 .plan-switch__title{ margin: var(--space-2) 0 0; }
+.plan-sections{ display: flex; width: 100%; margin-top: var(--space-1); }
+.plan-sections .button{ flex: 1 1 0; }
+.cal-now{ display: grid; gap: var(--space-0-5); padding: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.cal-now p{ margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-0-5); }
+.cal-now__label{ display: inline-block; min-width: 3.2em; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); }
+.calendar > *{ min-width: 0; }
+.cal-strip{ min-width: 0; max-width: 100%; }
+.cal-strip ol{ list-style: none; margin: 0; padding: 2px; display: flex; gap: var(--space-0-5); overflow-x: auto; scrollbar-width: thin; }
+.cal-chip{ display: grid; justify-items: center; min-width: 64px; min-height: 48px; padding: var(--space-0-5) var(--space-1); border-radius: var(--radius-md); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-top: 4px solid var(--cal-colour); color: var(--color-text); text-decoration: none; font-size: var(--font-size-xs); white-space: nowrap; }
+.cal-chip--hd{ --cal-colour: var(--color-metric-1); }
+.cal-chip--pb{ --cal-colour: var(--color-metric-3); }
+.cal-chip.is-current{ border-color: var(--color-accent); background: var(--color-accent-soft); }
+.cal-chip__plan{ font-weight: var(--font-weight-bold); }
+.cal-block__details > summary{ list-style: none; cursor: pointer; border-radius: var(--radius-md); min-height: var(--size-tap); }
+.cal-block__details > summary::-webkit-details-marker{ display: none; }
+.cal-block__summary .cal-block__head{ justify-content: space-between; align-items: center; }
+.cal-block__summary .cal-block__head > span{ display: grid; gap: 2px; }
+.cal-block__chev{ flex: none; width: 24px; height: 24px; color: var(--color-text-muted); transition: transform var(--duration-fast) var(--ease); }
+.cal-block__details[open] .cal-block__chev{ transform: rotate(180deg); }
+.cal-block__body{ display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+.cal-block.is-past{ opacity: .85; }
+.cal-tag--quiet{ background: var(--color-surface-alt); color: var(--color-text-muted); }
+@media (prefers-reduced-motion: reduce){ .cal-block__chev{ transition: none; } }
 
 /* Done and upcoming sets: badge on the left, set name above its numbers, so nothing collides in a narrow column */
 .pair-group.is-open .set-row__compact{ display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "badge name" "badge value"; column-gap: var(--space-1); row-gap: 0; align-items: center; padding: var(--space-0-5) var(--space-1); min-height: var(--size-input-height); }
@@ -1776,17 +1801,23 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
     <!-- PLAN VIEW: read-only plan for either programme -->
     <section id="view-plan" aria-labelledby="plan-title" hidden>
       <h1 class="page-title" id="plan-title" tabindex="-1">Plans</h1>
-      <!-- CALENDAR: blocks of each plan; add or remove weeks to stay on a plan longer -->
-      <section class="calendar" id="calendar" aria-labelledby="calendar-title"></section>
-      <div class="plan-switch">
-        <h2 class="plan-switch__title">Plan details</h2>
-        <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
-        <p class="small muted" id="plan-switch-note"></p>
+      <div class="segmented plan-sections" role="group" aria-label="Plans page section" id="plan-sections"></div>
+      <!-- PLAN: what each day holds -->
+      <div id="plan-section-plan">
+        <div class="plan-switch">
+          <h2 class="plan-switch__title">Plan details</h2>
+          <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
+          <p class="small muted" id="plan-switch-note"></p>
+        </div>
+        <div id="today-card"></div>
+        <nav class="week-tiles" aria-label="Week overview" id="week-tiles"></nav>
+        <div id="plan-guide"></div>
+        <div id="plan-days"></div>
       </div>
-      <div id="today-card"></div>
-      <nav class="week-tiles" aria-label="Week overview" id="week-tiles"></nav>
-      <div id="plan-guide"></div>
-      <div id="plan-days"></div>
+      <!-- BLOCKS: the calendar; add or remove weeks to stay on a plan longer -->
+      <div id="plan-section-blocks" hidden>
+        <section class="calendar" id="calendar" aria-labelledby="calendar-title"></section>
+      </div>
     </section>
   </div>
 </main>
@@ -2040,7 +2071,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-11-09.1",
+ "appVersion": "2026-11-09.2",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2876,8 +2907,20 @@ const CONFIG = {
    "to": "d3-5",
    "variants": {
     "db": "-",
-    "machine": "x",
+    "machine": "d3-onearm|machine",
     "machine-both": "x"
+   }
+  },
+  "d2-4": {
+   "to": "d2-4",
+   "variants": {
+    "-": "high"
+   }
+  },
+  "d2-2": {
+   "to": "d2-2",
+   "variants": {
+    "-": "barbell"
    }
   }
  },
@@ -2888,11 +2931,84 @@ const CONFIG = {
   "standing barbell curl": "barbell curl or bicep-biased pulldown",
   "preacher bench curl": "preacher or machine curl",
   "db hammer curl": "hammer or concentration curl",
-  "behind-the-neck or military press": "smith or behind-the-neck press",
   "upright row": "barbell upright row",
   "tricep extension": "tricep extension or jm press",
-  "lat row": "db bent-over row"
- }
+  "lat row": "db bent-over row",
+  "cable crossover": "cable fly: high to low or low to high",
+  "behind-the-neck or military press": "shoulder press: behind-the-neck or military",
+  "smith or behind-the-neck press": "shoulder press: behind-the-neck or military",
+  "barbell incline bench press": "incline bench press: barbell or smith"
+ },
+ "hdArchiveSeeds": [
+  {
+   "from": "d3-5",
+   "fromVariant": "machine",
+   "to": "d3-onearm",
+   "toVariant": "machine"
+  }
+ ],
+ "pbHints": [
+  {
+   "hd": "d1-1",
+   "variants": [
+    "back"
+   ],
+   "pb": [
+    "pb-d1-squat"
+   ],
+   "factor": 1,
+   "from": "back squat",
+   "after": "the leg extension"
+  },
+  {
+   "hd": "d2-2",
+   "pb": [
+    "pb-d2-bench"
+   ],
+   "factor": 0.95,
+   "from": "bench press (incline taken as 95% of flat)",
+   "after": "the incline fly superset",
+   "variants": [
+    "barbell"
+   ]
+  },
+  {
+   "hd": "d4-0",
+   "variants": [
+    "military"
+   ],
+   "pb": [
+    "pb-d2-ohp"
+   ],
+   "factor": 1,
+   "from": "standing overhead press"
+  },
+  {
+   "hd": "d5-4",
+   "pb": [
+    "pb-d3-rdl"
+   ],
+   "factor": 1,
+   "from": "Romanian deadlift"
+  },
+  {
+   "hd": "d5-1",
+   "pb": [
+    "pb-d1-legpress"
+   ],
+   "factor": 1,
+   "from": "leg press",
+   "after": "the squat"
+  },
+  {
+   "hd": "d1-3",
+   "pb": [
+    "pb-d3-legcurl"
+   ],
+   "factor": 1,
+   "from": "lying leg curl"
+  }
+ ]
 };
 
 const PROGRAMME = {
@@ -2958,7 +3074,7 @@ const PROGRAMME = {
     "OHP": [
      {
       "id": "btn",
-      "label": "Behind-the-neck press",
+      "label": "Behind-the-neck, barbell",
       "rows": [
        "Warm-up 1",
        "Warm-up 2",
@@ -2967,7 +3083,7 @@ const PROGRAMME = {
      },
      {
       "id": "military",
-      "label": "Military press",
+      "label": "Military, barbell",
       "rows": [
        "Warm-up 1",
        "Warm-up 2",
@@ -2976,7 +3092,17 @@ const PROGRAMME = {
      },
      {
       "id": "smith",
-      "label": "Smith machine shoulder press",
+      "label": "Military, Smith machine",
+      "rows": [
+       "Warm-up 1",
+       "Warm-up 2",
+       "Working"
+      ],
+      "unit": "kg"
+     },
+     {
+      "id": "btn-smith",
+      "label": "Behind-the-neck, Smith machine",
       "rows": [
        "Warm-up 1",
        "Warm-up 2",
@@ -3445,6 +3571,74 @@ const PROGRAMME = {
        "Working"
       ]
      }
+    ],
+    "CABLEFLY": [
+     {
+      "id": "high",
+      "label": "High to low",
+      "rows": [
+       "Working"
+      ]
+     },
+     {
+      "id": "low",
+      "label": "Low to high",
+      "rows": [
+       "Working"
+      ]
+     },
+     {
+      "id": "both",
+      "label": "Both: high to low, then low to high",
+      "rows": [
+       "High to low",
+       "Low to high"
+      ]
+     }
+    ],
+    "ONEROW": [
+     {
+      "id": "cable-hl",
+      "label": "High-to-low one-arm cable row",
+      "rows": [
+       "Warm-up",
+       "Left arm",
+       "Right arm"
+      ],
+      "unit": "plates"
+     },
+     {
+      "id": "machine",
+      "label": "Machine one-arm row",
+      "rows": [
+       "Warm-up",
+       "Left arm",
+       "Right arm"
+      ],
+      "unit": "plates"
+     }
+    ],
+    "INCBENCH": [
+     {
+      "id": "barbell",
+      "label": "Barbell, fixed incline bench",
+      "rows": [
+       "Warm-up 1",
+       "Warm-up 2",
+       "Warm-up 3",
+       "Working"
+      ]
+     },
+     {
+      "id": "smith",
+      "label": "Smith machine, adjustable bench",
+      "rows": [
+       "Warm-up 1",
+       "Warm-up 2",
+       "Warm-up 3",
+       "Working"
+      ]
+     }
     ]
    },
    "days": [
@@ -3562,13 +3756,14 @@ const PROGRAMME = {
         },
         {
          "id": "d2-2",
-         "name": "Barbell Incline Bench Press",
-         "equip": "Barbell",
+         "name": "Incline Bench Press: Barbell or Smith",
+         "equip": "Barbell or Smith machine",
          "sets": "3W + 1",
          "reps": "12 @ 50%, 10 @ 60%, 6–8 @ 70% → 6 @ 100%",
          "rest": "2–3 min",
-         "notes": "Superset partner of the incline fly. Pre-exhausted, so expect less weight than a fresh set.",
-         "pair": "A2"
+         "notes": "Superset partner of the incline fly. Pick the barbell on the fixed incline bench, or the Smith machine with an adjustable bench, in the Tracker. Pre-exhausted, so expect less weight than a fresh set.",
+         "pair": "A2",
+         "variants": "INCBENCH"
         },
         {
          "id": "d2-1",
@@ -3591,14 +3786,14 @@ const PROGRAMME = {
         },
         {
          "id": "d2-4",
-         "name": "Cable Crossover",
+         "name": "Cable Fly: High to Low or Low to High",
          "equip": "Cable",
          "sets": "1",
          "reps": "8–10 @ 100%",
          "rest": "60–90 s",
-         "notes": "Optional.",
-         "tag": "R",
-         "optional": true
+         "notes": "Optional. Pick high to low, low to high, or both (one set each) in the Tracker.",
+         "optional": true,
+         "variants": "CABLEFLY"
         },
         {
          "id": "d2-pec",
@@ -3685,12 +3880,12 @@ const PROGRAMME = {
        "items": [
         {
          "id": "d4-0",
-         "name": "Smith or Behind-the-Neck Press",
-         "equip": "Smith machine or barbell",
+         "name": "Shoulder Press: Behind-the-Neck or Military",
+         "equip": "Barbell or Smith machine",
          "sets": "2W + 1",
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "2–3 min",
-         "notes": "Pick Smith machine, behind-the-neck or military press in the Tracker.",
+         "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
          "variants": "OHP"
         },
         {
@@ -3851,6 +4046,17 @@ const PROGRAMME = {
          "notes": "Variations: both arms or one arm.",
          "tag": "R",
          "variants": "CABLEROW"
+        },
+        {
+         "id": "d3-onearm",
+         "name": "One-Arm Row: High-to-Low Cable or Machine",
+         "equip": "Cable or machine",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 8–10 @ 100% each arm",
+         "rest": "90 s",
+         "optional": true,
+         "variants": "ONEROW",
+         "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm."
         },
         {
          "id": "d3-hgpull",
@@ -4143,6 +4349,10 @@ const PROGRAMME = {
     "bench": {
      "name": "Bench",
      "hdSource": "d2-2",
+     "hdSourceVariants": [
+      "barbell",
+      "smith"
+     ],
      "hdFactor": 1.0,
      "hdNote": "Incline bench working weight (Day 2, 6 reps)",
      "guessNote": "The same weight. Flat bench is usually stronger, so this starts on the safe side",
@@ -5952,15 +6162,19 @@ function warmupLoad(pct, workingKg, unit){ return roundTo(workingKg * pct / 100,
 function hdWorkingKg(hdSlot, exId, variantId){
   const meta = EXERCISES[exId]; if (!meta) return null;
   const item = meta.item;
-  const rows = item.rows || parseRows(item.sets);
+  // An exercise with variations: no variation asked for means its first one (old logs without one were that)
+  const list = item.variants ? PROGRAMME.plans.hd.variants[item.variants] || [] : null, first = list && list[0] ? list[0].id : "barbell";
+  if (list && !variantId) variantId = first;
+  const v = list ? list.filter(x => x.id === variantId)[0] : null;
+  const rows = (v && v.rows) || item.rows || parseRows(item.sets);
   const workIdx = rows.map((r, i) => /^Warm-up/.test(r) ? -1 : i).filter(i => i >= 0);
   const fromSets = sets => { const b = bestSet((sets || []).filter((s, i) => workIdx.indexOf(i) >= 0)); return b && b.kg > 0 ? b.kg : null; };
-  const okVariant = e => !item.variants || !variantId || (e && (e.variant || "barbell") === variantId);
+  const okVariant = e => !item.variants || (e && (e.variant || first) === variantId);
   const cur = hdSlot.entries && hdSlot.entries[exId];
   if (cur && okVariant(cur) && fromSets(cur.sets)) return fromSets(cur.sets);
   const lw = hdSlot.lastWeek && hdSlot.lastWeek.entries ? hdSlot.lastWeek.entries[exId] : null;
   if (lw && okVariant(lw) && fromSets(lw.sets)) return fromSets(lw.sets);
-  const vh = (hdSlot.varHistory || {})[exId + "|" + (item.variants ? (variantId || "barbell") : "-")];
+  const vh = (hdSlot.varHistory || {})[exId + "|" + (item.variants ? variantId : "-")];
   if (vh && fromSets(vh.sets)) return fromSets(vh.sets);
   const h = (hdSlot.history || {})[keyOf(item.name)];
   return h && h.kg > 0 ? h.kg : null;
@@ -5973,7 +6187,9 @@ function hdWorkingKg(hdSlot, exId, variantId){
 function topSetGuess(lift, variantId, hdSlot){
   const m = PROGRAMME.plans.pb.mainLifts[lift];
   if (m.noGuessVariants && m.noGuessVariants.indexOf(variantId) >= 0) return {kg: null, source: "", note: "No guess for this stance. Start from " + m.conventionalStartKg + " kg and work up."};
-  const base = hdWorkingKg(hdSlot, m.hdSource, m.hdSourceVariant || null);
+  // Tries each listed Heavy Duty variation in order (incline bench: barbell first, then Smith)
+  let base = null;
+  (m.hdSourceVariants || [m.hdSourceVariant || null]).some(v => (base = hdWorkingKg(hdSlot, m.hdSource, v)) > 0);
   if (!base) return {kg: null, source: "", note: "No Heavy Duty numbers yet. Start from the empty bar and work up."};
   return {kg: Math.round(base * m.hdFactor / CONFIG.kgStep) * CONFIG.kgStep, source: m.hdNote + ": " + fmtLoad(base, "kg") + ".", note: m.guessNote + "."};
 }
@@ -6180,11 +6396,13 @@ function hdMove(id, variant){
   const m = CONFIG.hdMoves[id];
   if (!m) return {id: id, variant: variant};
   const key = variant || "-", map = m.variants || {};
-  const target = EXERCISES[m.to] && EXERCISES[m.to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
-  let nv = map[key] !== undefined ? map[key] : key;
-  if (nv === "-") return {id: m.to, variant: undefined};
+  let nv = map[key] !== undefined ? map[key] : key, to = m.to;
+  // A variation can move to another exercise: "d3-onearm|machine"
+  if (nv.indexOf("|") > 0){ const parts = nv.split("|"); to = parts[0]; nv = parts[1]; }
+  const target = EXERCISES[to] && EXERCISES[to].item, list = target && target.variants ? PROGRAMME.plans.hd.variants[target.variants] : null;
+  if (nv === "-") return {id: to, variant: undefined};
   if (!list) return null;
-  return list.some(v => v.id === nv) ? {id: m.to, variant: nv} : null;
+  return list.some(v => v.id === nv) ? {id: to, variant: nv} : null;
 }
 // Takes a Heavy Duty slot. Moves last week's numbers, variation history, units, streaks, saved swaps and
 // best-set history from old ids onto the new plan. Changes slot in place.
@@ -6247,6 +6465,53 @@ function hdRemapDays(slot){
   (slot.pastVariations || []).forEach(v => { v.day = nd(v.day); if (v.madeDay) v.madeDay = nd(v.madeDay); });
   return slot;
 }
+// Takes a Heavy Duty slot and the history archive. Gives an exercise's variation history its last logged
+// numbers from archived weeks when the slot has none: the one-arm machine row, which 2026-11-09.1 did not carry over.
+// Changes slot in place. Rule: runs once per device (slot.hdSeeded); takes the newest archived week that logged it.
+function hdSeedFromArchive(slot, archive){
+  if (slot.hdSeeded >= 1) return slot;
+  const vh = slot.varHistory = objOr(slot.varHistory, {});
+  const weeks = ((archive && archive.hd) || []).slice().sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
+  CONFIG.hdArchiveSeeds.forEach(seed => {
+    const key = seed.to + "|" + seed.toVariant;
+    if (vh[key]) return;
+    for (const w of weeks){
+      const e = (w.entries || {})[seed.from];
+      if (e && (e.variant || "") === seed.fromVariant && (e.sets || []).some(isLogged)){
+        vh[key] = {name: EXERCISES[seed.to] ? EXERCISES[seed.to].item.name : "", variant: seed.toVariant, date: e.doneAt || w.weekStart || "", unit: e.unit || "plates", sets: e.sets};
+        break;
+      }
+    }
+  });
+  slot.hdSeeded = 1;
+  return slot;
+}
+
+// Takes a Heavy Duty session item, the Powerbuilding slot and the unit the item is logged in.
+// Returns an information-only hint {kg, reps, from, date, after} from Powerbuilding, or null.
+// Rule: the best estimated max in the newest Powerbuilding week that logged the matching exercise
+// (load × (1 + (reps + reps left) ÷ 30)), times the lift factor, turned back into a load for the bottom
+// of the Heavy Duty rep range taken to failure, rounded down. Same unit only. Never changes the target.
+function pbHint(item, pbSlot, unit){
+  if (!pbSlot || item.plan !== "hd") return null;
+  const h = CONFIG.pbHints.filter(x => x.hd === item.id && (!x.variants || x.variants.indexOf(item.variant) >= 0))[0];
+  const range = h && repRange(item);
+  if (!h || !range) return null;
+  const weeks = [];
+  if (pbSlot.entries) weeks.push({entries: pbSlot.entries, date: pbSlot.weekStart, units: pbSlot.units || {}});
+  if (pbSlot.lastWeek && pbSlot.lastWeek.entries) weeks.push({entries: pbSlot.lastWeek.entries, date: pbSlot.lastWeek.weekStart, units: pbSlot.units || {}});
+  for (const w of weeks){
+    let best = 0;
+    h.pb.forEach(id => {
+      const e = w.entries[id];
+      if (!e || e.replaced || (e.unit || w.units[id] || "kg") !== unit) return;
+      best = Math.max(best, bestEstMax(e.sets));
+    });
+    if (best > 0) return {kg: loadForReps(best * h.factor, range.min, 0, unit), reps: range.min, from: h.from, date: w.date || "", after: h.after || ""};
+  }
+  return null;
+}
+
 // Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
 function hdArchiveExtras(extras, layout){
   if (layout >= CONFIG.hdLayout || !extras) return extras;
@@ -7147,6 +7412,7 @@ const PLAN_NAMES = {hd: PROGRAMME.plans.hd.name, pb: PROGRAMME.plans.pb.name};
 /* ---------- 3.2 State, saving and context ---------- */
 let storageOK = storageAvailable();
 let state = normaliseState(storageLoad(), todayISO());
+hdSeedFromArchive(state, archiveLoad());
 if (state.ui.tab !== "plan") state.ui.tab = "train";
 ensurePbSlot(state, todayISO());
 
@@ -7458,6 +7724,9 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
+    const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
+    if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
+      (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
     if (item.log !== "check" && item.log !== "time" && item.log !== "rounds") html += setActionsHTML("main", e.sets.length, item.name);
   }
@@ -8011,14 +8280,43 @@ function easyNudgeText(c){
   for (let k = 1; k <= 2; k++) if (weekInfo(c.cycle, addDays(c.now.weekStart, 7 * k)).easy) return "";
   return "You have trained hard for " + weekWord(c.now.hardRun) + " in a row. An easy week now helps your next hard weeks go better.";
 }
+// Takes the index of the block to open when nothing is stored. Returns the set of block indexes shown open.
+// Rule: the current block starts open; after that the owner's own opening and closing is remembered.
+// Takes an ISO date. Returns "2 Nov" for the block strip.
+function fmtChipDate(iso){
+  const d = new Date(iso + "T00:00:00");
+  return d.getDate() + " " + MONTHS[d.getMonth()].slice(0, 3);
+}
+function calOpenSet(fallback){
+  const list = Array.isArray(state.ui.calOpen) ? state.ui.calOpen : [fallback];
+  return new Set(list.filter(n => Number.isInteger(n)));
+}
 function renderCalendar(c){
   const box = $("#calendar");
   if (!box) return;
   const show = Math.min(24, state.ui.calShow || CONFIG.calendarBlocks);
   const blocks = calendarBlocks(c.cycle, c.now.before ? 0 : c.now.blockIndex, show), nowWeek = c.now.before ? "" : c.now.weekStart;
-  let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Calendar</h2>' +
-    '<p class="small muted">Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules. The week after a Powerbuilding test week is an easy week. You can make any other week easy too, and turn an easy week back to normal.</p>' +
-    (easyNudgeText(c) ? '<p class="notice notice--warn small">' + esc(easyNudgeText(c)) + "</p>" : "") + '</div><ol class="cal-blocks">';
+  const curBlock = blocks.filter(bl => bl.list.some(w => w.weekStart === nowWeek))[0] || null;
+  const nextBlock = blocks.filter(bl => bl.start > (nowWeek || "")).sort((a, b) => a.start < b.start ? -1 : 1)[0] || null;
+  const open = calOpenSet(curBlock ? curBlock.index : (blocks[0] ? blocks[0].index : -1));
+  let html = '<div class="calendar__head"><h2 id="calendar-title" tabindex="-1">Blocks</h2>' +
+    '<p class="small muted">Heavy Duty and Powerbuilding take turns, a block at a time. Tap a block to see its weeks, make a week easy, or make it longer or shorter.</p>' +
+    (easyNudgeText(c) ? '<p class="notice notice--warn small">' + esc(easyNudgeText(c)) + "</p>" : "") + "</div>";
+  // Now and next, in one glance
+  if (curBlock || nextBlock){
+    const nw = curBlock ? curBlock.list.filter(w => w.weekStart === nowWeek)[0] : null;
+    html += '<div class="cal-now">' +
+      (curBlock ? '<p><span class="cal-now__label">Now</span> ' + planBadge(curBlock.plan) + "<strong>" + esc(PLAN_NAMES[curBlock.plan]) + ",</strong> " + esc(calWeekLabel(nw).toLowerCase()) + (nw && nw.easy ? " (easy week)" : "") + '<span class="small muted"> · until ' + esc(fmtDate(addDays(curBlock.start, 7 * curBlock.weeks - 1))) + "</span></p>" : "") +
+      (nextBlock ? '<p><span class="cal-now__label">Next</span> ' + planBadge(nextBlock.plan) + "<strong>" + esc(PLAN_NAMES[nextBlock.plan]) + "</strong> from " + esc(fmtDayDate(nextBlock.start)) + '<span class="small muted"> · ' + esc(weekWord(nextBlock.weeks)) + "</span></p>" : "") +
+      "</div>";
+  }
+  // Strip of blocks: tap to jump to one and open it
+  html += '<nav class="cal-strip" aria-label="Jump to a block"><ol>' + blocks.map(bl =>
+    '<li><a class="cal-chip cal-chip--' + bl.plan + (curBlock && bl.index === curBlock.index ? " is-current" : "") + '" href="#cal-blk-' + bl.index + '" data-cal-jump="' + bl.index + '"' + (curBlock && bl.index === curBlock.index ? ' aria-current="true"' : "") + ">" +
+    '<span class="cal-chip__plan">' + esc(bl.plan.toUpperCase()) + "</span><span>" + esc(fmtChipDate(bl.start)) + '</span><span class="muted">' + esc(weekWord(bl.weeks)) + "</span></a></li>").join("") + "</ol></nav>";
+  html += guide("How blocks work", "<p>Your plans take turns in blocks. Add weeks to stay on a plan longer. Your logs and targets carry on, and each plan keeps its own rules.</p>" +
+    "<p>The week after a Powerbuilding test week is an easy week. You can make any other week easy too, and turn an easy week back to normal.</p>" +
+    "<p>Past weeks and a week you have already started cannot be changed.</p>") + '<ol class="cal-blocks">';
   blocks.forEach(bl => {
     const lim = blockLimits(c.cycle, bl.index, c.today), isNow = bl.list.some(w => w.weekStart === nowWeek);
     const end = addDays(bl.start, 7 * bl.weeks - 1), step = lim.step, unitWord = step === 1 ? "a week" : step + " weeks";
@@ -8027,10 +8325,13 @@ function renderCalendar(c){
     let why = "";
     if (!canRemove && !lim.locked) why = lim.why || "The shortest " + PLAN_NAMES[bl.plan] + " block is " + weekWord(lim.min) + ".";
     if (!canAdd && !lim.locked) why = (why ? why + " " : "") + "The longest block is " + weekWord(lim.max) + ".";
-    html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + '" aria-labelledby="' + headId + '">' +
-      '<div class="cal-block__head"><span class="cal-block__bar" aria-hidden="true"></span><div>' +
-      '<h3 class="cal-block__title" id="' + headId + '" tabindex="-1">' + planBadge(bl.plan) + esc(PLAN_NAMES[bl.plan]) + '<span class="cal-block__run">run ' + planRun(c.cycle, bl.index) + "</span>" + (isNow ? ' <span class="cal-tag">Now</span>' : "") + "</h3>" +
-      '<p class="small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks)) + "</p></div></div>" +
+    const past = nowWeek && end < nowWeek, easyN = bl.list.filter(w => w.easy).length;
+    html += '<li class="cal-block cal-block--' + bl.plan + (isNow ? " is-current" : "") + (past ? " is-past" : "") + '" id="cal-blk-' + bl.index + '">' +
+      '<span class="cal-block__bar" aria-hidden="true"></span>' +
+      '<details class="cal-block__details" data-cal-block="' + bl.index + '"' + (open.has(bl.index) ? " open" : "") + '><summary class="cal-block__summary"><span class="cal-block__head"><span>' +
+      '<span class="cal-block__title" id="' + headId + '" tabindex="-1">' + planBadge(bl.plan) + esc(PLAN_NAMES[bl.plan]) + '<span class="cal-block__run">run ' + planRun(c.cycle, bl.index) + "</span>" + (isNow ? ' <span class="cal-tag">Now</span>' : past ? ' <span class="cal-tag cal-tag--quiet">Done</span>' : "") + "</span>" +
+      '<span class="cal-block__dates small muted">' + esc(fmtSpan(bl.start, end) + " · " + weekWord(bl.weeks) + (easyN ? " · " + easyN + " easy" : "")) + "</span></span>" +
+      '<svg class="cal-block__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></summary><div class="cal-block__body">' +
       '<ol class="cal-weeks">' + bl.list.map(w => {
         const past = nowWeek && w.weekStart < nowWeek, cur = w.weekStart === nowWeek;
         const canEasy = !!state.cycle && !past && !(cur && planLogStarted(c, w.plan));
@@ -8046,7 +8347,7 @@ function renderCalendar(c){
         '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="-1"' + (canRemove ? "" : " disabled") + ' aria-label="Remove ' + unitWord + " from " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Remove ' + unitWord + "</button>" +
         '<button type="button" class="button" data-cal-b="' + bl.index + '" data-cal-d="1"' + (canAdd ? "" : " disabled") + ' aria-label="Add ' + unitWord + " to " + esc(PLAN_NAMES[bl.plan]) + ", " + esc(fmtDate(bl.start)) + '">Add ' + unitWord + "</button></div>" +
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
-      "</li>";
+      "</div></details></li>";
   });
   html += "</ol><div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
@@ -8106,20 +8407,24 @@ $("#view-plan").addEventListener("click", ev => {
 });
 $("#view-train").addEventListener("click", ev => {
   if (!ev.target.closest("[data-go-calendar]")) return;
+  state.ui.planSection = "blocks"; save();
   showTab("plan");
   const t = $("#calendar-title"); if (t){ t.scrollIntoView({block: "start"}); t.focus({preventScroll: true}); }
 });
 
 /* ---------- 3.6 Plan view ---------- */
 function renderPlanView(c){
-  const view = state.ui.planView || c.plan;
+  const view = state.ui.planView || c.plan, section = state.ui.planSection === "blocks" ? "blocks" : "plan";
+  $("#plan-sections").innerHTML = [["plan", "Plan"], ["blocks", "Blocks"]].map(x => '<button type="button" class="button" data-plan-section="' + x[0] + '" aria-pressed="' + (x[0] === section) + '" aria-controls="plan-section-' + x[0] + '">' + x[1] + "</button>").join("");
+  $("#plan-section-plan").hidden = section !== "plan";
+  $("#plan-section-blocks").hidden = section !== "blocks";
   $("#plan-switch").innerHTML = PLAN_IDS.map(p => '<button type="button" class="button" data-plan-view="' + p + '" aria-pressed="' + (p === view) + '">' + esc(PLAN_NAMES[p]) + "</button>").join("");
   $("#plan-switch-note").textContent = view === c.plan ? "This is your plan right now. Log sets on the Today page." : "Viewing only. You start this plan again on " + fmtDayDate(nextWeekForPlan(c.cycle, view, c.today)) + ".";
   renderCalendar(c);
   renderTodayCard(c, view);
   const plan = PROGRAMME.plans[view];
   const t = view === c.plan ? todaysDay(c) : 0;
-  $("#week-tiles").innerHTML = plan.days.map(d => '<a class="week-tile' + (d.n === t ? " is-today" : "") + '" href="#plan-' + view + "-day-" + d.n + '"' + (d.n === t ? ' aria-current="date"' : "") + '><span class="week-tile__n">' + d.n + "</span><span>" + esc(d.title) + (d.n === t ? "<br>Today" : "") + "</span></a>").join("") +
+  $("#week-tiles").innerHTML = plan.days.map(d => '<a class="week-tile' + (d.rest ? " week-tile--rest" : "") + (d.n === t ? " is-today" : "") + '" href="#plan-' + view + "-day-" + d.n + '"' + (d.n === t ? ' aria-current="date"' : "") + '><span class="week-tile__n">' + d.n + "</span><span>" + esc(d.title) + (d.n === t ? "<br>Today" : "") + "</span></a>").join("") +
     '<span class="week-tile week-tile--rest"><span class="week-tile__n">6</span><span>Rest</span></span><span class="week-tile week-tile--rest"><span class="week-tile__n">7</span><span>Rest</span></span>';
   $("#plan-guide").innerHTML = view === "hd" ? hdGuideHTML() : pbGuideHTML();
   $("#plan-days").innerHTML = plan.days.map(d => view === "hd" ? hdDayTableHTML(d, view === c.plan) : pbDayTableHTML(d, view === c.plan)).join("");
@@ -8658,8 +8963,24 @@ $("#day-tabs").addEventListener("keydown", ev => {
   const next = keys[ev.key] === "first" ? 0 : keys[ev.key] === "last" ? n - 1 : (i + keys[ev.key] + n) % n;
   selectDay(next + 1, true);
 });
+// Remembers which blocks are open (toggle does not bubble, so listen in the capture phase)
+$("#calendar").addEventListener("toggle", ev => {
+  const d = ev.target; if (!d.matches || !d.matches("[data-cal-block]")) return;
+  const c = ctx(), cur = c.now.before ? -1 : c.now.blockIndex, set = calOpenSet(cur), n = Number(d.dataset.calBlock);
+  if (d.open) set.add(n); else set.delete(n);
+  state.ui.calOpen = Array.from(set); save();
+}, true);
 $("#view-plan").addEventListener("click", ev => {
   const p = ev.target.closest("[data-plan-view]"); if (p){ state.ui.planView = p.dataset.planView; save(); renderAll(); return; }
+  const ps = ev.target.closest("[data-plan-section]"); if (ps){ state.ui.planSection = ps.dataset.planSection; save(); renderAll(); const b = $('[data-plan-section="' + ps.dataset.planSection + '"]'); if (b) b.focus({preventScroll: true}); return; }
+  const jump = ev.target.closest("[data-cal-jump]");
+  if (jump){
+    ev.preventDefault();
+    const n = Number(jump.dataset.calJump), set = calOpenSet(n); set.add(n);
+    state.ui.calOpen = Array.from(set); save(); renderAll();
+    const t = $("#cal-b-" + n); if (t){ $("#cal-blk-" + n).scrollIntoView({block: "start", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"}); t.focus({preventScroll: true}); }
+    return;
+  }
   const o = ev.target.closest("[data-open-day]"); if (o){ selectDay(+o.dataset.openDay, false); showTab("train"); }
 });
 const TO_TOP_AFTER_PX = 400;

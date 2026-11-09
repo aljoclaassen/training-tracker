@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-11-09.1",
+  "appVersion": "2026-11-09.2",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -836,8 +836,20 @@
       "to": "d3-5",
       "variants": {
         "db": "-",
-        "machine": "x",
+        "machine": "d3-onearm|machine",
         "machine-both": "x"
+      }
+    },
+    "d2-4": {
+      "to": "d2-4",
+      "variants": {
+        "-": "high"
+      }
+    },
+    "d2-2": {
+      "to": "d2-2",
+      "variants": {
+        "-": "barbell"
       }
     }
   },
@@ -848,9 +860,82 @@
     "standing barbell curl": "barbell curl or bicep-biased pulldown",
     "preacher bench curl": "preacher or machine curl",
     "db hammer curl": "hammer or concentration curl",
-    "behind-the-neck or military press": "smith or behind-the-neck press",
     "upright row": "barbell upright row",
     "tricep extension": "tricep extension or jm press",
-    "lat row": "db bent-over row"
-  }
+    "lat row": "db bent-over row",
+    "cable crossover": "cable fly: high to low or low to high",
+    "behind-the-neck or military press": "shoulder press: behind-the-neck or military",
+    "smith or behind-the-neck press": "shoulder press: behind-the-neck or military",
+    "barbell incline bench press": "incline bench press: barbell or smith"
+  },
+  "hdArchiveSeeds": [
+    {
+      "from": "d3-5",
+      "fromVariant": "machine",
+      "to": "d3-onearm",
+      "toVariant": "machine"
+    }
+  ],
+  "pbHints": [
+    {
+      "hd": "d1-1",
+      "variants": [
+        "back"
+      ],
+      "pb": [
+        "pb-d1-squat"
+      ],
+      "factor": 1,
+      "from": "back squat",
+      "after": "the leg extension"
+    },
+    {
+      "hd": "d2-2",
+      "pb": [
+        "pb-d2-bench"
+      ],
+      "factor": 0.95,
+      "from": "bench press (incline taken as 95% of flat)",
+      "after": "the incline fly superset",
+      "variants": [
+        "barbell"
+      ]
+    },
+    {
+      "hd": "d4-0",
+      "variants": [
+        "military"
+      ],
+      "pb": [
+        "pb-d2-ohp"
+      ],
+      "factor": 1,
+      "from": "standing overhead press"
+    },
+    {
+      "hd": "d5-4",
+      "pb": [
+        "pb-d3-rdl"
+      ],
+      "factor": 1,
+      "from": "Romanian deadlift"
+    },
+    {
+      "hd": "d5-1",
+      "pb": [
+        "pb-d1-legpress"
+      ],
+      "factor": 1,
+      "from": "leg press",
+      "after": "the squat"
+    },
+    {
+      "hd": "d1-3",
+      "pb": [
+        "pb-d3-legcurl"
+      ],
+      "factor": 1,
+      "from": "lying leg curl"
+    }
+  ]
 }

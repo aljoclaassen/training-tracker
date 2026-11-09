@@ -576,6 +576,29 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .cal-block__actions .button{ flex: 1 1 140px; }
 .cal-block p.small.muted{ margin: 0; }
 .plan-switch__title{ margin: var(--space-2) 0 0; }
+.plan-sections{ display: flex; width: 100%; margin-top: var(--space-1); }
+.plan-sections .button{ flex: 1 1 0; }
+.cal-now{ display: grid; gap: var(--space-0-5); padding: var(--space-1-5); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); box-shadow: var(--shadow-1); }
+.cal-now p{ margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--space-0-5); }
+.cal-now__label{ display: inline-block; min-width: 3.2em; font-size: var(--font-size-xs); font-weight: var(--font-weight-bold); text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); }
+.calendar > *{ min-width: 0; }
+.cal-strip{ min-width: 0; max-width: 100%; }
+.cal-strip ol{ list-style: none; margin: 0; padding: 2px; display: flex; gap: var(--space-0-5); overflow-x: auto; scrollbar-width: thin; }
+.cal-chip{ display: grid; justify-items: center; min-width: 64px; min-height: 48px; padding: var(--space-0-5) var(--space-1); border-radius: var(--radius-md); background: var(--color-surface); border: var(--border-width) solid var(--color-card-border); border-top: 4px solid var(--cal-colour); color: var(--color-text); text-decoration: none; font-size: var(--font-size-xs); white-space: nowrap; }
+.cal-chip--hd{ --cal-colour: var(--color-metric-1); }
+.cal-chip--pb{ --cal-colour: var(--color-metric-3); }
+.cal-chip.is-current{ border-color: var(--color-accent); background: var(--color-accent-soft); }
+.cal-chip__plan{ font-weight: var(--font-weight-bold); }
+.cal-block__details > summary{ list-style: none; cursor: pointer; border-radius: var(--radius-md); min-height: var(--size-tap); }
+.cal-block__details > summary::-webkit-details-marker{ display: none; }
+.cal-block__summary .cal-block__head{ justify-content: space-between; align-items: center; }
+.cal-block__summary .cal-block__head > span{ display: grid; gap: 2px; }
+.cal-block__chev{ flex: none; width: 24px; height: 24px; color: var(--color-text-muted); transition: transform var(--duration-fast) var(--ease); }
+.cal-block__details[open] .cal-block__chev{ transform: rotate(180deg); }
+.cal-block__body{ display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+.cal-block.is-past{ opacity: .85; }
+.cal-tag--quiet{ background: var(--color-surface-alt); color: var(--color-text-muted); }
+@media (prefers-reduced-motion: reduce){ .cal-block__chev{ transition: none; } }
 
 /* Done and upcoming sets: badge on the left, set name above its numbers, so nothing collides in a narrow column */
 .pair-group.is-open .set-row__compact{ display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "badge name" "badge value"; column-gap: var(--space-1); row-gap: 0; align-items: center; padding: var(--space-0-5) var(--space-1); min-height: var(--size-input-height); }
@@ -723,17 +746,23 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
     <!-- PLAN VIEW: read-only plan for either programme -->
     <section id="view-plan" aria-labelledby="plan-title" hidden>
       <h1 class="page-title" id="plan-title" tabindex="-1">Plans</h1>
-      <!-- CALENDAR: blocks of each plan; add or remove weeks to stay on a plan longer -->
-      <section class="calendar" id="calendar" aria-labelledby="calendar-title"></section>
-      <div class="plan-switch">
-        <h2 class="plan-switch__title">Plan details</h2>
-        <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
-        <p class="small muted" id="plan-switch-note"></p>
+      <div class="segmented plan-sections" role="group" aria-label="Plans page section" id="plan-sections"></div>
+      <!-- PLAN: what each day holds -->
+      <div id="plan-section-plan">
+        <div class="plan-switch">
+          <h2 class="plan-switch__title">Plan details</h2>
+          <div class="segmented" role="group" aria-label="Plan to view" id="plan-switch"></div>
+          <p class="small muted" id="plan-switch-note"></p>
+        </div>
+        <div id="today-card"></div>
+        <nav class="week-tiles" aria-label="Week overview" id="week-tiles"></nav>
+        <div id="plan-guide"></div>
+        <div id="plan-days"></div>
       </div>
-      <div id="today-card"></div>
-      <nav class="week-tiles" aria-label="Week overview" id="week-tiles"></nav>
-      <div id="plan-guide"></div>
-      <div id="plan-days"></div>
+      <!-- BLOCKS: the calendar; add or remove weeks to stay on a plan longer -->
+      <div id="plan-section-blocks" hidden>
+        <section class="calendar" id="calendar" aria-labelledby="calendar-title"></section>
+      </div>
     </section>
   </div>
 </main>
