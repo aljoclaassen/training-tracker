@@ -1245,6 +1245,73 @@ function pbHint(item, pbSlot, unit){
   return null;
 }
 
+/* ---------- Heavy Duty intensity techniques: forced reps and rest-pause ---------- */
+// Takes a week from weekInfo. Returns {phase, label, max, capped, week, of} for a Heavy Duty week, or null.
+// Rules: week 1 of a block is re-entry (none), the last week is the peak (two a day), weeks between are
+//   build weeks (one a day), an easy week has none. A one-week block is re-entry. After more than
+//   CONFIG.techniques.capAfterHard hard weeks in a row, a peak week stays a build week.
+function hdTechWeek(w){
+  if (!w || w.before || w.plan !== "hd") return null;
+  const T = CONFIG.techniques;
+  let phase = w.easy ? "cruise" : w.blockWeeks <= 1 || w.blockWeek === 1 ? "reentry" : w.blockWeek >= w.blockWeeks ? "peak" : "build", capped = false;
+  if (phase === "peak" && w.hardRun + 1 > T.capAfterHard){ phase = "build"; capped = true; }
+  return {phase: phase, label: T.phases[phase].label, max: T.phases[phase].max, capped: capped, week: w.blockWeek, of: w.blockWeeks};
+}
+// Takes a Heavy Duty session item. Returns the techniques allowed on it with its chosen variation, e.g. ["rp", "fr"].
+function hdTechFor(item){
+  const meta = EXERCISES[item.id], src = meta && meta.item;
+  if (!src || meta.plan !== "hd") return [];
+  const list = src.variants ? PROGRAMME.plans.hd.variants[src.variants] || [] : null;
+  const v = list ? list.filter(x => x.id === item.variant)[0] : null;
+  return (v && v.tech) || src.tech || [];
+}
+// Takes a Heavy Duty session, its slot and the week. Returns today's picks [{id, name, tech: ["rp", ...]}].
+// Rules: first pick is the first main exercise that allows a technique; the peak's second pick is the first
+//   other exercise after it, from another muscle group when there is one. Skipped: optional exercises, the
+//   first half of a superset, anything before the day's first main lift, and any exercise whose working
+//   set last week fell below its rep range.
+function hdTechPicks(session, slot, w){
+  const tw = hdTechWeek(w);
+  if (!tw || !tw.max || !session || session.rest) return [];
+  const lw = (slot && slot.lastWeek && slot.lastWeek.entries) || {};
+  const struggled = it => {
+    const e = lw[it.id], r = repRange(it);
+    if (!e || !r) return false;
+    if (it.variants && (e.variant || it.variants[0].id) !== it.variant) return false;
+    const work = (e.sets || []).filter((x, i) => it.rows[i] && it.rows[i].role === "work" && isLogged(x));
+    return work.length > 0 && Math.max.apply(null, work.map(x => Number(x.reps) || 0)) < r.min;
+  };
+  const list = [];
+  let muscle = null, seenMain = false;
+  session.groups.forEach(g => {
+    if (g.title) muscle = g.title;
+    g.items.forEach(it => {
+      // Nothing before the day's first main lift: a pre-exhaust taken past failure would cost the main lift
+      if (EXERCISES[it.id] && EXERCISES[it.id].item.techMain) seenMain = true;
+      if (!seenMain || it.optional || it.skipped || (it.pair && /1$/.test(it.pair))) return;
+      const tech = hdTechFor(it);
+      if (!tech.length || struggled(it)) return;
+      list.push({id: it.id, name: it.name, tech: tech, main: !!(EXERCISES[it.id].item.techMain), muscle: muscle, at: list.length});
+    });
+  });
+  const first = list.filter(x => x.main)[0] || list[0];
+  if (!first) return [];
+  const picks = [first];
+  if (tw.max > 1){
+    const later = list.filter(x => x !== first && !x.main && x.at > first.at);
+    const second = later.filter(x => x.muscle !== first.muscle)[0] || later[0] || list.filter(x => x !== first && !x.main)[0];
+    if (second) picks.push(second);
+  }
+  return picks.map(x => ({id: x.id, name: x.name, tech: x.tech}));
+}
+// Takes text. Returns it with a capital first letter.
+function cap(t){ t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); }
+// Takes a list of technique ids. Returns "rest-pause", or "rest-pause or forced reps (with a spotter)".
+function techText(tech){
+  const n = CONFIG.techniques.names;
+  return tech.map(t => n[t] + (t === "fr" && tech.length > 1 ? " (with a spotter)" : "")).join(" or ");
+}
+
 // Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
 function hdArchiveExtras(extras, layout){
   if (layout >= CONFIG.hdLayout || !extras) return extras;

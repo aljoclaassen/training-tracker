@@ -248,6 +248,11 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     hdRemapDays(slot) : Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
     hdSeedFromArchive(slot, archive) : Takes a Heavy Duty slot and the history archive. Gives an exercise's variation history its last logged numbers from archived weeks when the slot has none: the one-arm machine row, which 2026-11-09.1 did not carry over. Changes slot in place. Rule: runs once per device (slot.hdSeeded); takes the newest archived week that logged it.
     pbHint(item, pbSlot, unit) : Takes a Heavy Duty session item, the Powerbuilding slot and the unit the item is logged in. Returns an information-only hint {kg, reps, from, date, after} from Powerbuilding, or null. Rule: the best estimated max in the newest Powerbuilding week that logged the matching exercise (load × (1 + (reps + reps left) ÷ 30)), times the lift factor, turned back into a load for the bottom of the Heavy Duty rep range taken to failure, rounded down. Same unit only. Never changes the target.
+    hdTechWeek(w) : Takes a week from weekInfo. Returns {phase, label, max, capped, week, of} for a Heavy Duty week, or null. Rules: week 1 of a block is re-entry (none), the last week is the peak (two a day), weeks between are build weeks (one a day), an easy week has none. A one-week block is re-entry. After more than CONFIG.techniques.capAfterHard hard weeks in a row, a peak week stays a build week.
+    hdTechFor(item) : Takes a Heavy Duty session item. Returns the techniques allowed on it with its chosen variation, e.g. ["rp", "fr"].
+    hdTechPicks(session, slot, w) : Takes a Heavy Duty session, its slot and the week. Returns today's picks [{id, name, tech: ["rp", ...]}]. Rules: first pick is the first main exercise that allows a technique; the peak's second pick is the first other exercise after it, from another muscle group when there is one. Skipped: optional exercises, the first half of a superset, anything before the day's first main lift, and any exercise whose working set last week fell below its rep range.
+    cap(t) : Takes text. Returns it with a capital first letter.
+    techText(tech) : Takes a list of technique ids. Returns "rest-pause", or "rest-pause or forced reps (with a spotter)".
     hdArchiveExtras(extras, layout) : Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
     isCalf(name)
     mergedHistory(slot, sessions, unitFor) : Takes the slot, the plan id and the week's sessions. Returns {exerciseId: {name, date, kg, reps, unit}}: the latest best set per exercise name, this week included.
@@ -1652,6 +1657,10 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .cal-block__details[open] .cal-block__chev{ transform: rotate(180deg); }
 .cal-block__body{ display: grid; gap: var(--space-1); margin-top: var(--space-1); }
 .cal-block.is-past{ opacity: .85; }
+.guide__body .cal-past__list{ list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0-5); }
+.cal-past__item{ display: flex; gap: var(--space-1); align-items: flex-start; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); background: var(--color-surface-alt); border-left: 4px solid var(--cal-colour); }
+.exercise__tag--tech{ background: var(--color-accent-soft); color: var(--color-accent-text); border-color: transparent; }
+.tech-line{ padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-md); background: var(--color-accent-soft); color: var(--color-text); }
 .cal-tag--quiet{ background: var(--color-surface-alt); color: var(--color-text-muted); }
 @media (prefers-reduced-motion: reduce){ .cal-block__chev{ transition: none; } }
 
@@ -2071,7 +2080,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-11-09.2",
+ "appVersion": "2026-11-09.3",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -3008,7 +3017,49 @@ const CONFIG = {
    "factor": 1,
    "from": "lying leg curl"
   }
- ]
+ ],
+ "techniques": {
+  "capAfterHard": 6,
+  "names": {
+   "rp": "rest-pause",
+   "fr": "forced reps"
+  },
+  "how": {
+   "rp": "Rest-pause: after failure, rest 10 to 15 seconds, then one more mini-set to failure.",
+   "fr": "Forced reps: after failure, up to 2 more reps with a spotter helping only the lifting part."
+  },
+  "phases": {
+   "reentry": {
+    "label": "Re-entry week",
+    "max": 0,
+    "text": "Plain failure today, no forced reps or rest-pause. You are setting your Heavy Duty numbers again."
+   },
+   "build": {
+    "label": "Build week",
+    "max": 1,
+    "text": "One technique today"
+   },
+   "peak": {
+    "label": "Peak week",
+    "max": 2,
+    "text": "Up to two techniques today"
+   },
+   "cruise": {
+    "label": "Easy week",
+    "max": 0,
+    "text": "No forced reps or rest-pause this week."
+   }
+  },
+  "cappedText": "More than 6 hard weeks in a row, so this stays a build week until you take an easy week.",
+  "rules": [
+   "Week 1 of a Heavy Duty block is re-entry: plain failure. The last week is the peak: two techniques a day. Weeks in between are build weeks: one a day. Change the block length in Blocks and this follows.",
+   "Never both on one set. Each exercise gets at most one technique a week.",
+   "Rest-pause suits machines, cables, the Smith machine and dumbbell isolation. Forced reps suit presses and curls when a spotter is there.",
+   "No techniques on free-weight squats, deadlifts, barbell rows or the behind-the-neck barbell press.",
+   "If last week's working set fell below the rep range, that exercise gets a plain failure set and the technique moves to the next one.",
+   "After more than 6 hard weeks in a row, the peak week stays a build week until you take an easy week."
+  ]
+ }
 };
 
 const PROGRAMME = {
@@ -3079,7 +3130,8 @@ const PROGRAMME = {
        "Warm-up 1",
        "Warm-up 2",
        "Working"
-      ]
+      ],
+      "tech": []
      },
      {
       "id": "military",
@@ -3088,6 +3140,9 @@ const PROGRAMME = {
        "Warm-up 1",
        "Warm-up 2",
        "Working"
+      ],
+      "tech": [
+       "fr"
       ]
      },
      {
@@ -3098,7 +3153,11 @@ const PROGRAMME = {
        "Warm-up 2",
        "Working"
       ],
-      "unit": "kg"
+      "unit": "kg",
+      "tech": [
+       "rp",
+       "fr"
+      ]
      },
      {
       "id": "btn-smith",
@@ -3108,7 +3167,11 @@ const PROGRAMME = {
        "Warm-up 2",
        "Working"
       ],
-      "unit": "kg"
+      "unit": "kg",
+      "tech": [
+       "rp",
+       "fr"
+      ]
      }
     ],
     "LATMACH": [
@@ -3477,7 +3540,10 @@ const PROGRAMME = {
       "rows": [
        "Working"
       ],
-      "unit": "plates"
+      "unit": "plates",
+      "tech": [
+       "rp"
+      ]
      }
     ],
     "SQUAT": [
@@ -3527,7 +3593,10 @@ const PROGRAMME = {
        "Warm-up",
        "Working"
       ],
-      "unit": "kg"
+      "unit": "kg",
+      "tech": [
+       "fr"
+      ]
      },
      {
       "id": "pulldown",
@@ -3536,7 +3605,10 @@ const PROGRAMME = {
        "Warm-up",
        "Working"
       ],
-      "unit": "plates"
+      "unit": "plates",
+      "tech": [
+       "rp"
+      ]
      }
     ],
     "HAMCON": [
@@ -3627,6 +3699,9 @@ const PROGRAMME = {
        "Warm-up 2",
        "Warm-up 3",
        "Working"
+      ],
+      "tech": [
+       "fr"
       ]
      },
      {
@@ -3637,6 +3712,10 @@ const PROGRAMME = {
        "Warm-up 2",
        "Warm-up 3",
        "Working"
+      ],
+      "tech": [
+       "rp",
+       "fr"
       ]
      }
     ]
@@ -3657,7 +3736,10 @@ const PROGRAMME = {
          "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
          "rest": "90 s",
          "notes": "",
-         "tag": "R"
+         "tag": "R",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d1-1",
@@ -3667,7 +3749,8 @@ const PROGRAMME = {
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "3 min",
          "notes": "Failure means the last clean rep. Set safety pins. Pick back or Zercher in the Tracker.",
-         "variants": "SQUAT"
+         "variants": "SQUAT",
+         "techMain": true
         },
         {
          "id": "d5-1",
@@ -3677,7 +3760,11 @@ const PROGRAMME = {
          "reps": "12 @ 50%, 12 @ 70% → 10–12 @ 100%",
          "rest": "2 min",
          "notes": "",
-         "tag": "R"
+         "tag": "R",
+         "tech": [
+          "rp"
+         ],
+         "techMain": true
         },
         {
          "id": "d1-2",
@@ -3688,7 +3775,10 @@ const PROGRAMME = {
          "rest": "2–3 min",
          "notes": "Optional. Pick hack or pendulum in the Tracker.",
          "variants": "HACKPEND",
-         "optional": true
+         "optional": true,
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d5-4",
@@ -3708,7 +3798,10 @@ const PROGRAMME = {
          "reps": "8–10 @ 60% → 8–10 @ 100%",
          "rest": "90 s",
          "notes": "",
-         "tag": "R"
+         "tag": "R",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       },
@@ -3722,7 +3815,10 @@ const PROGRAMME = {
          "sets": "1W + 1",
          "reps": "10–12 @ 60% → 10–12 @ 100%",
          "rest": "60–90 s",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d1-7",
@@ -3731,7 +3827,10 @@ const PROGRAMME = {
          "sets": "1",
          "reps": "10–12 @ 100%",
          "rest": "60–90 s",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       }
@@ -3763,7 +3862,8 @@ const PROGRAMME = {
          "rest": "2–3 min",
          "notes": "Superset partner of the incline fly. Pick the barbell on the fixed incline bench, or the Smith machine with an adjustable bench, in the Tracker. Pre-exhausted, so expect less weight than a fresh set.",
          "pair": "A2",
-         "variants": "INCBENCH"
+         "variants": "INCBENCH",
+         "techMain": true
         },
         {
          "id": "d2-1",
@@ -3773,7 +3873,12 @@ const PROGRAMME = {
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "2 min",
          "notes": "",
-         "tag": "R"
+         "tag": "R",
+         "tech": [
+          "rp",
+          "fr"
+         ],
+         "techMain": true
         },
         {
          "id": "d2-dbpress",
@@ -3782,7 +3887,10 @@ const PROGRAMME = {
          "sets": "1",
          "reps": "6–8 @ 100%",
          "rest": "2 min",
-         "notes": "Chest is warm from the presses, so no warm-up."
+         "notes": "Chest is warm from the presses, so no warm-up.",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d2-4",
@@ -3793,7 +3901,10 @@ const PROGRAMME = {
          "rest": "60–90 s",
          "notes": "Optional. Pick high to low, low to high, or both (one set each) in the Tracker.",
          "optional": true,
-         "variants": "CABLEFLY"
+         "variants": "CABLEFLY",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d2-pec",
@@ -3803,7 +3914,10 @@ const PROGRAMME = {
          "reps": "8–10 @ 100%",
          "rest": "60–90 s",
          "notes": "Optional. Chest already warm from the presses, so no warm-up.",
-         "optional": true
+         "optional": true,
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d2-5",
@@ -3827,7 +3941,10 @@ const PROGRAMME = {
          "sets": "1W + 1",
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "90 s",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d2-8",
@@ -3848,7 +3965,10 @@ const PROGRAMME = {
          "rest": "90 s",
          "notes": "Pick the variation in the Tracker. Single-arm versions log each arm.",
          "tag": "R",
-         "variants": "PREACHER"
+         "variants": "PREACHER",
+         "tech": [
+          "fr"
+         ]
         },
         {
          "id": "d2-10",
@@ -3859,7 +3979,10 @@ const PROGRAMME = {
          "rest": "60–90 s",
          "notes": "Optional. Pick hammer or concentration curl in the Tracker.",
          "variants": "HAMCON",
-         "optional": true
+         "optional": true,
+         "tech": [
+          "rp"
+         ]
         }
        ]
       }
@@ -3886,7 +4009,8 @@ const PROGRAMME = {
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "2–3 min",
          "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
-         "variants": "OHP"
+         "variants": "OHP",
+         "techMain": true
         },
         {
          "id": "d4-3",
@@ -3896,7 +4020,10 @@ const PROGRAMME = {
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "60–90 s",
          "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
-         "variants": "LATMACH"
+         "variants": "LATMACH",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d4-5",
@@ -3907,7 +4034,10 @@ const PROGRAMME = {
          "rest": "60–90 s",
          "notes": "One arm or cross-body. Warm up once, then a working set for each arm.",
          "tag": "R",
-         "variants": "CABLELAT"
+         "variants": "CABLELAT",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d4-1",
@@ -3916,7 +4046,11 @@ const PROGRAMME = {
          "sets": "2W + 1",
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "2 min",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "fr"
+         ],
+         "techMain": true
         },
         {
          "id": "d4-2",
@@ -3934,7 +4068,10 @@ const PROGRAMME = {
          "sets": "1W + 1",
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "90 s",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       },
@@ -3950,7 +4087,10 @@ const PROGRAMME = {
          "rest": "90 s",
          "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
          "tag": "R",
-         "variants": "PUSHDOWN"
+         "variants": "PUSHDOWN",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d4-9",
@@ -3960,7 +4100,10 @@ const PROGRAMME = {
          "reps": "6–8 @ 100%",
          "rest": "90 s",
          "notes": "Pick a tricep extension or a JM press in the Tracker. The JM press keeps its warm-up.",
-         "variants": "TRIEXT"
+         "variants": "TRIEXT",
+         "tech": [
+          "fr"
+         ]
         },
         {
          "id": "d4-dbext",
@@ -3970,7 +4113,10 @@ const PROGRAMME = {
          "reps": "6–8 @ 100%",
          "rest": "90 s",
          "variants": "DBEXT",
-         "notes": "Pick skull crusher or overhead extension in the Tracker."
+         "notes": "Pick skull crusher or overhead extension in the Tracker.",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d4-10",
@@ -3981,7 +4127,10 @@ const PROGRAMME = {
          "rest": "60–90 s",
          "notes": "Pick the reverse-grip cable option in the Tracker for the reverse pressdown.",
          "tag": "R",
-         "variants": "ONEARMPD"
+         "variants": "ONEARMPD",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       }
@@ -4006,7 +4155,11 @@ const PROGRAMME = {
           "2 shy of failure",
           "1 shy of failure",
           "Max reps"
-         ]
+         ],
+         "tech": [
+          "fr"
+         ],
+         "techMain": true
         },
         {
          "id": "d3-1",
@@ -4034,7 +4187,11 @@ const PROGRAMME = {
          "sets": "1W + 1",
          "reps": "10 @ 60% → 6–8 @ 100%",
          "rest": "90 s",
-         "notes": ""
+         "notes": "",
+         "tech": [
+          "rp"
+         ],
+         "techMain": true
         },
         {
          "id": "d3-3",
@@ -4045,7 +4202,11 @@ const PROGRAMME = {
          "rest": "90 s",
          "notes": "Variations: both arms or one arm.",
          "tag": "R",
-         "variants": "CABLEROW"
+         "variants": "CABLEROW",
+         "tech": [
+          "rp"
+         ],
+         "techMain": true
         },
         {
          "id": "d3-onearm",
@@ -4056,7 +4217,10 @@ const PROGRAMME = {
          "rest": "90 s",
          "optional": true,
          "variants": "ONEROW",
-         "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm."
+         "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm.",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d3-hgpull",
@@ -4066,7 +4230,10 @@ const PROGRAMME = {
          "reps": "6–8 @ 100%",
          "rest": "90 s",
          "optional": true,
-         "notes": "Optional. Neutral grip."
+         "notes": "Optional. Neutral grip.",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       },
@@ -4080,7 +4247,10 @@ const PROGRAMME = {
          "sets": "1",
          "reps": "8–10 @ 100%",
          "rest": "60–90 s",
-         "notes": "Rope at face height. Pull to your forehead, elbows high."
+         "notes": "Rope at face height. Pull to your forehead, elbows high.",
+         "tech": [
+          "rp"
+         ]
         },
         {
          "id": "d3-7",
@@ -4090,7 +4260,10 @@ const PROGRAMME = {
          "reps": "6–8 @ 100%",
          "rest": "60–90 s",
          "notes": "Both arms, or one arm at a time if the station is busy.",
-         "variants": "RDFLY"
+         "variants": "RDFLY",
+         "tech": [
+          "rp"
+         ]
         }
        ]
       },
@@ -6512,6 +6685,73 @@ function pbHint(item, pbSlot, unit){
   return null;
 }
 
+/* ---------- Heavy Duty intensity techniques: forced reps and rest-pause ---------- */
+// Takes a week from weekInfo. Returns {phase, label, max, capped, week, of} for a Heavy Duty week, or null.
+// Rules: week 1 of a block is re-entry (none), the last week is the peak (two a day), weeks between are
+//   build weeks (one a day), an easy week has none. A one-week block is re-entry. After more than
+//   CONFIG.techniques.capAfterHard hard weeks in a row, a peak week stays a build week.
+function hdTechWeek(w){
+  if (!w || w.before || w.plan !== "hd") return null;
+  const T = CONFIG.techniques;
+  let phase = w.easy ? "cruise" : w.blockWeeks <= 1 || w.blockWeek === 1 ? "reentry" : w.blockWeek >= w.blockWeeks ? "peak" : "build", capped = false;
+  if (phase === "peak" && w.hardRun + 1 > T.capAfterHard){ phase = "build"; capped = true; }
+  return {phase: phase, label: T.phases[phase].label, max: T.phases[phase].max, capped: capped, week: w.blockWeek, of: w.blockWeeks};
+}
+// Takes a Heavy Duty session item. Returns the techniques allowed on it with its chosen variation, e.g. ["rp", "fr"].
+function hdTechFor(item){
+  const meta = EXERCISES[item.id], src = meta && meta.item;
+  if (!src || meta.plan !== "hd") return [];
+  const list = src.variants ? PROGRAMME.plans.hd.variants[src.variants] || [] : null;
+  const v = list ? list.filter(x => x.id === item.variant)[0] : null;
+  return (v && v.tech) || src.tech || [];
+}
+// Takes a Heavy Duty session, its slot and the week. Returns today's picks [{id, name, tech: ["rp", ...]}].
+// Rules: first pick is the first main exercise that allows a technique; the peak's second pick is the first
+//   other exercise after it, from another muscle group when there is one. Skipped: optional exercises, the
+//   first half of a superset, anything before the day's first main lift, and any exercise whose working
+//   set last week fell below its rep range.
+function hdTechPicks(session, slot, w){
+  const tw = hdTechWeek(w);
+  if (!tw || !tw.max || !session || session.rest) return [];
+  const lw = (slot && slot.lastWeek && slot.lastWeek.entries) || {};
+  const struggled = it => {
+    const e = lw[it.id], r = repRange(it);
+    if (!e || !r) return false;
+    if (it.variants && (e.variant || it.variants[0].id) !== it.variant) return false;
+    const work = (e.sets || []).filter((x, i) => it.rows[i] && it.rows[i].role === "work" && isLogged(x));
+    return work.length > 0 && Math.max.apply(null, work.map(x => Number(x.reps) || 0)) < r.min;
+  };
+  const list = [];
+  let muscle = null, seenMain = false;
+  session.groups.forEach(g => {
+    if (g.title) muscle = g.title;
+    g.items.forEach(it => {
+      // Nothing before the day's first main lift: a pre-exhaust taken past failure would cost the main lift
+      if (EXERCISES[it.id] && EXERCISES[it.id].item.techMain) seenMain = true;
+      if (!seenMain || it.optional || it.skipped || (it.pair && /1$/.test(it.pair))) return;
+      const tech = hdTechFor(it);
+      if (!tech.length || struggled(it)) return;
+      list.push({id: it.id, name: it.name, tech: tech, main: !!(EXERCISES[it.id].item.techMain), muscle: muscle, at: list.length});
+    });
+  });
+  const first = list.filter(x => x.main)[0] || list[0];
+  if (!first) return [];
+  const picks = [first];
+  if (tw.max > 1){
+    const later = list.filter(x => x !== first && !x.main && x.at > first.at);
+    const second = later.filter(x => x.muscle !== first.muscle)[0] || later[0] || list.filter(x => x !== first && !x.main)[0];
+    if (second) picks.push(second);
+  }
+  return picks.map(x => ({id: x.id, name: x.name, tech: x.tech}));
+}
+// Takes text. Returns it with a capital first letter.
+function cap(t){ t = String(t || ""); return t.charAt(0).toUpperCase() + t.slice(1); }
+// Takes a list of technique ids. Returns "rest-pause", or "rest-pause or forced reps (with a spotter)".
+function techText(tech){
+  const n = CONFIG.techniques.names;
+  return tech.map(t => n[t] + (t === "fr" && tech.length > 1 ? " (with a spotter)" : "")).join(" or ");
+}
+
 // Takes an export's extras and its layout number. Returns the extras keyed by the current day numbers.
 function hdArchiveExtras(extras, layout){
   if (layout >= CONFIG.hdLayout || !extras) return extras;
@@ -7550,9 +7790,14 @@ function renderDayTabs(c){
 function renderSessionHead(c, day){
   const lwDay = c.slot.lastWeek && c.slot.lastWeek.missedDays ? c.slot.lastWeek.missedDays[day.n] : null;
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
+  const tw = day.plan === "hd" && !day.rest ? hdTechWeek(c.slotWeek) : null, picks = tw ? hdTechPicks(day, c.slot, c.slotWeek) : [];
+  const T = CONFIG.techniques;
+  const techLine = !tw || tw.phase === "cruise" ? "" : '<p class="small tech-line"><strong>' + esc(tw.label) + " (week " + tw.week + " of " + tw.of + "):</strong> " +
+    (tw.max === 0 ? esc(T.phases.reentry.text) : picks.length ? esc(T.phases[tw.phase].text) + ": " + picks.map(p => esc(techText(p.tech)) + " on " + esc(p.name)).join("; ") + "." : "No exercise today suits a technique, so plain failure.") +
+    (tw.capped ? " " + esc(T.cappedText) : "") + "</p>";
   $("#session-head").innerHTML = '<h2 class="session-head__title">Day ' + day.n + ": " + esc(day.title) + (todaysDay(c) === day.n ? " (today)" : "") + "</h2>" +
     (day.time ? '<p class="small muted">Takes ' + (day.timeEstimated ? "about " : "") + esc(day.time) + (day.timeEstimated ? ", warm-up sets and rests included." : ", warm-up included.") + "</p>" : "") +
-    (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
+    (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes + techLine +
     (lwDay ? '<p class="small muted">Last week: ' + esc(lwDay.note.replace(/^Day \d+: /, "")) + ".</p>" : "");
 }
 // Summary card: a ring for today's exercises and three colour-coded counts (sets, exercises, week)
@@ -7692,7 +7937,8 @@ function exerciseHTML(c, item){
   const done = isComplete(e), missed = isMissed(e), madeUp = isMadeUp(e);
   const cls = "exercise" + (open ? " is-open" : "") + (done ? " is-done" : "") + (missed ? " is-missed" : "") + (item.skipped ? " is-skipped" : "");
   const status = done ? "✓" : missed ? "–" : (item.pair || "");
-  const tags = (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
+  const tp = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+  const tags = (tp ? '<span class="exercise__tag exercise__tag--tech">' + esc(cap(techText(tp.tech).replace(" (with a spotter)", ""))) + "</span>" : "") + (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
     (madeUp ? '<span class="exercise__tag">Made up</span>' : "") + (e && e.replaced ? '<span class="exercise__tag">Swapped</span>' : "") + (item.skipped ? '<span class="exercise__tag">Skip</span>' : "");
   return '<article class="' + cls + '" id="ex-' + item.id + '" data-id="' + item.id + '">' +
     '<button type="button" class="exercise__summary" aria-expanded="' + open + '" aria-controls="ex-' + item.id + '-panel">' +
@@ -7724,6 +7970,8 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
+    const tpick = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+    if (tpick) html += '<p class="remind tech-how"><strong>Today: ' + esc(techText(tpick.tech)) + ".</strong> " + tpick.tech.map(t => esc(CONFIG.techniques.how[t])).join(" ") + " On the working set only.</p>";
     const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
     if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
       (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
@@ -8280,6 +8528,24 @@ function easyNudgeText(c){
   for (let k = 1; k <= 2; k++) if (weekInfo(c.cycle, addDays(c.now.weekStart, 7 * k)).easy) return "";
   return "You have trained hard for " + weekWord(c.now.hardRun) + " in a row. An easy week now helps your next hard weeks go better.";
 }
+// Takes the context. Returns the Past blocks list (newest first) with weeks per plan, or "" before any block has ended.
+// Rule: a block is past when its last week is before this week; the block you are in is never listed here.
+function pastBlocksHTML(c){
+  if (!state.cycle || c.now.before) return "";
+  const nowWeek = c.now.weekStart;
+  const past = calendarBlocks(c.cycle, 0, c.now.blockIndex + 1).filter(bl => addDays(bl.start, 7 * bl.weeks - 1) < nowWeek).reverse();
+  if (!past.length) return "";
+  const totals = {}, counts = {};
+  past.forEach(bl => { totals[bl.plan] = (totals[bl.plan] || 0) + bl.weeks; counts[bl.plan] = (counts[bl.plan] || 0) + 1; });
+  const sum = PLAN_IDS.filter(p => totals[p]).map(p => PLAN_NAMES[p] + ": " + weekWord(totals[p]) + " in " + counts[p] + (counts[p] === 1 ? " block" : " blocks")).join(" · ");
+  return '<details class="guide cal-past"><summary>Past blocks (' + past.length + ")</summary><div class=\"guide__body\">" +
+    '<p class="small muted">' + esc(sum) + ".</p>" +
+    '<ol class="cal-past__list">' + past.map(bl => {
+      const end = addDays(bl.start, 7 * bl.weeks - 1), easyN = bl.list.filter(w => w.easy).length;
+      return '<li class="cal-past__item cal-chip--' + bl.plan + '">' + planBadge(bl.plan) + "<span><strong>" + esc(PLAN_NAMES[bl.plan]) + '</strong> <span class="muted">run ' + planRun(c.cycle, bl.index) + "</span><br>" +
+        '<span class="small">' + esc(fmtSpan(bl.start, end)) + " · <strong>" + esc(weekWord(bl.weeks)) + "</strong>" + (easyN ? " · " + easyN + " easy" : "") + "</span></span></li>";
+    }).join("") + "</ol></div></details>";
+}
 // Takes the index of the block to open when nothing is stored. Returns the set of block indexes shown open.
 // Rule: the current block starts open; after that the owner's own opening and closing is remembered.
 // Takes an ISO date. Returns "2 Nov" for the block strip.
@@ -8307,6 +8573,7 @@ function renderCalendar(c){
     const nw = curBlock ? curBlock.list.filter(w => w.weekStart === nowWeek)[0] : null;
     html += '<div class="cal-now">' +
       (curBlock ? '<p><span class="cal-now__label">Now</span> ' + planBadge(curBlock.plan) + "<strong>" + esc(PLAN_NAMES[curBlock.plan]) + ",</strong> " + esc(calWeekLabel(nw).toLowerCase()) + (nw && nw.easy ? " (easy week)" : "") + '<span class="small muted"> · until ' + esc(fmtDate(addDays(curBlock.start, 7 * curBlock.weeks - 1))) + "</span></p>" : "") +
+      (nw && !nw.easy ? '<p><span class="cal-now__label">Run</span> ' + esc(weekWord(nw.hardRun + 1)) + " hard in a row, counting this one" + '<span class="small muted"> · an easy week is suggested after ' + CONFIG.easy.nudgeWeeks + "</span></p>" : "") +
       (nextBlock ? '<p><span class="cal-now__label">Next</span> ' + planBadge(nextBlock.plan) + "<strong>" + esc(PLAN_NAMES[nextBlock.plan]) + "</strong> from " + esc(fmtDayDate(nextBlock.start)) + '<span class="small muted"> · ' + esc(weekWord(nextBlock.weeks)) + "</span></p>" : "") +
       "</div>";
   }
@@ -8349,7 +8616,7 @@ function renderCalendar(c){
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
       "</div></details></li>";
   });
-  html += "</ol><div class=\"button-row\">" +
+  html += "</ol>" + pastBlocksHTML(c) + "<div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
     (state.cycle && !c.now.before ? '<button type="button" class="button" data-cal-switch>Switch to ' + esc(PLAN_NAMES[otherPlan(c.plan)]) + " this week</button>" : "") +
     (hasUpcomingChanges(c.cycle, c.today) ? '<button type="button" class="button button--quiet" data-cal-reset>Set upcoming blocks to ' + weekWord(CONFIG.blockWeeks) + "</button>" : "") +
@@ -8442,7 +8709,8 @@ function renderTodayCard(c, view){
 function guide(title, body, open){ return '<details class="guide"' + (open ? " open" : "") + "><summary>" + esc(title) + '</summary><div class="guide__body">' + body + "</div></details>"; }
 function hdGuideHTML(){
   const p = PROGRAMME.plans.hd;
-  return '<p class="small plan-summary">' + esc(p.summary) + "</p>" + guide("How to read this plan", p.legend.map(l => "<p>" + esc(l) + "</p>").join("") +
+  const T = CONFIG.techniques;
+  return '<p class="small plan-summary">' + esc(p.summary) + "</p>" + guide("Forced reps and rest-pause", "<ul>" + T.rules.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul><p>" + esc(T.how.rp) + "</p><p>" + esc(T.how.fr) + "</p>") + guide("How to read this plan", p.legend.map(l => "<p>" + esc(l) + "</p>").join("") +
     "<p>" + term("warmup", "Warm-up") + ", " + term("mainset", "main set") + " and " + term("failure", "failure") + " explain themselves when tapped.</p>");
 }
 function pbGuideHTML(){

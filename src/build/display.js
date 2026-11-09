@@ -221,9 +221,14 @@ function renderDayTabs(c){
 function renderSessionHead(c, day){
   const lwDay = c.slot.lastWeek && c.slot.lastWeek.missedDays ? c.slot.lastWeek.missedDays[day.n] : null;
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
+  const tw = day.plan === "hd" && !day.rest ? hdTechWeek(c.slotWeek) : null, picks = tw ? hdTechPicks(day, c.slot, c.slotWeek) : [];
+  const T = CONFIG.techniques;
+  const techLine = !tw || tw.phase === "cruise" ? "" : '<p class="small tech-line"><strong>' + esc(tw.label) + " (week " + tw.week + " of " + tw.of + "):</strong> " +
+    (tw.max === 0 ? esc(T.phases.reentry.text) : picks.length ? esc(T.phases[tw.phase].text) + ": " + picks.map(p => esc(techText(p.tech)) + " on " + esc(p.name)).join("; ") + "." : "No exercise today suits a technique, so plain failure.") +
+    (tw.capped ? " " + esc(T.cappedText) : "") + "</p>";
   $("#session-head").innerHTML = '<h2 class="session-head__title">Day ' + day.n + ": " + esc(day.title) + (todaysDay(c) === day.n ? " (today)" : "") + "</h2>" +
     (day.time ? '<p class="small muted">Takes ' + (day.timeEstimated ? "about " : "") + esc(day.time) + (day.timeEstimated ? ", warm-up sets and rests included." : ", warm-up included.") + "</p>" : "") +
-    (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes +
+    (day.intro ? '<p class="small">' + term("pair", "Supersets") + ": " + esc(day.intro.replace(/^Exercises run in pairs: /, "")) + "</p>" : "") + notes + techLine +
     (lwDay ? '<p class="small muted">Last week: ' + esc(lwDay.note.replace(/^Day \d+: /, "")) + ".</p>" : "");
 }
 // Summary card: a ring for today's exercises and three colour-coded counts (sets, exercises, week)
@@ -363,7 +368,8 @@ function exerciseHTML(c, item){
   const done = isComplete(e), missed = isMissed(e), madeUp = isMadeUp(e);
   const cls = "exercise" + (open ? " is-open" : "") + (done ? " is-done" : "") + (missed ? " is-missed" : "") + (item.skipped ? " is-skipped" : "");
   const status = done ? "✓" : missed ? "–" : (item.pair || "");
-  const tags = (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
+  const tp = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+  const tags = (tp ? '<span class="exercise__tag exercise__tag--tech">' + esc(cap(techText(tp.tech).replace(" (with a spotter)", ""))) + "</span>" : "") + (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
     (madeUp ? '<span class="exercise__tag">Made up</span>' : "") + (e && e.replaced ? '<span class="exercise__tag">Swapped</span>' : "") + (item.skipped ? '<span class="exercise__tag">Skip</span>' : "");
   return '<article class="' + cls + '" id="ex-' + item.id + '" data-id="' + item.id + '">' +
     '<button type="button" class="exercise__summary" aria-expanded="' + open + '" aria-controls="ex-' + item.id + '-panel">' +
@@ -395,6 +401,8 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
+    const tpick = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+    if (tpick) html += '<p class="remind tech-how"><strong>Today: ' + esc(techText(tpick.tech)) + ".</strong> " + tpick.tech.map(t => esc(CONFIG.techniques.how[t])).join(" ") + " On the working set only.</p>";
     const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
     if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
       (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
@@ -951,6 +959,24 @@ function easyNudgeText(c){
   for (let k = 1; k <= 2; k++) if (weekInfo(c.cycle, addDays(c.now.weekStart, 7 * k)).easy) return "";
   return "You have trained hard for " + weekWord(c.now.hardRun) + " in a row. An easy week now helps your next hard weeks go better.";
 }
+// Takes the context. Returns the Past blocks list (newest first) with weeks per plan, or "" before any block has ended.
+// Rule: a block is past when its last week is before this week; the block you are in is never listed here.
+function pastBlocksHTML(c){
+  if (!state.cycle || c.now.before) return "";
+  const nowWeek = c.now.weekStart;
+  const past = calendarBlocks(c.cycle, 0, c.now.blockIndex + 1).filter(bl => addDays(bl.start, 7 * bl.weeks - 1) < nowWeek).reverse();
+  if (!past.length) return "";
+  const totals = {}, counts = {};
+  past.forEach(bl => { totals[bl.plan] = (totals[bl.plan] || 0) + bl.weeks; counts[bl.plan] = (counts[bl.plan] || 0) + 1; });
+  const sum = PLAN_IDS.filter(p => totals[p]).map(p => PLAN_NAMES[p] + ": " + weekWord(totals[p]) + " in " + counts[p] + (counts[p] === 1 ? " block" : " blocks")).join(" · ");
+  return '<details class="guide cal-past"><summary>Past blocks (' + past.length + ")</summary><div class=\"guide__body\">" +
+    '<p class="small muted">' + esc(sum) + ".</p>" +
+    '<ol class="cal-past__list">' + past.map(bl => {
+      const end = addDays(bl.start, 7 * bl.weeks - 1), easyN = bl.list.filter(w => w.easy).length;
+      return '<li class="cal-past__item cal-chip--' + bl.plan + '">' + planBadge(bl.plan) + "<span><strong>" + esc(PLAN_NAMES[bl.plan]) + '</strong> <span class="muted">run ' + planRun(c.cycle, bl.index) + "</span><br>" +
+        '<span class="small">' + esc(fmtSpan(bl.start, end)) + " · <strong>" + esc(weekWord(bl.weeks)) + "</strong>" + (easyN ? " · " + easyN + " easy" : "") + "</span></span></li>";
+    }).join("") + "</ol></div></details>";
+}
 // Takes the index of the block to open when nothing is stored. Returns the set of block indexes shown open.
 // Rule: the current block starts open; after that the owner's own opening and closing is remembered.
 // Takes an ISO date. Returns "2 Nov" for the block strip.
@@ -978,6 +1004,7 @@ function renderCalendar(c){
     const nw = curBlock ? curBlock.list.filter(w => w.weekStart === nowWeek)[0] : null;
     html += '<div class="cal-now">' +
       (curBlock ? '<p><span class="cal-now__label">Now</span> ' + planBadge(curBlock.plan) + "<strong>" + esc(PLAN_NAMES[curBlock.plan]) + ",</strong> " + esc(calWeekLabel(nw).toLowerCase()) + (nw && nw.easy ? " (easy week)" : "") + '<span class="small muted"> · until ' + esc(fmtDate(addDays(curBlock.start, 7 * curBlock.weeks - 1))) + "</span></p>" : "") +
+      (nw && !nw.easy ? '<p><span class="cal-now__label">Run</span> ' + esc(weekWord(nw.hardRun + 1)) + " hard in a row, counting this one" + '<span class="small muted"> · an easy week is suggested after ' + CONFIG.easy.nudgeWeeks + "</span></p>" : "") +
       (nextBlock ? '<p><span class="cal-now__label">Next</span> ' + planBadge(nextBlock.plan) + "<strong>" + esc(PLAN_NAMES[nextBlock.plan]) + "</strong> from " + esc(fmtDayDate(nextBlock.start)) + '<span class="small muted"> · ' + esc(weekWord(nextBlock.weeks)) + "</span></p>" : "") +
       "</div>";
   }
@@ -1020,7 +1047,7 @@ function renderCalendar(c){
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
       "</div></details></li>";
   });
-  html += "</ol><div class=\"button-row\">" +
+  html += "</ol>" + pastBlocksHTML(c) + "<div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
     (state.cycle && !c.now.before ? '<button type="button" class="button" data-cal-switch>Switch to ' + esc(PLAN_NAMES[otherPlan(c.plan)]) + " this week</button>" : "") +
     (hasUpcomingChanges(c.cycle, c.today) ? '<button type="button" class="button button--quiet" data-cal-reset>Set upcoming blocks to ' + weekWord(CONFIG.blockWeeks) + "</button>" : "") +
@@ -1113,7 +1140,8 @@ function renderTodayCard(c, view){
 function guide(title, body, open){ return '<details class="guide"' + (open ? " open" : "") + "><summary>" + esc(title) + '</summary><div class="guide__body">' + body + "</div></details>"; }
 function hdGuideHTML(){
   const p = PROGRAMME.plans.hd;
-  return '<p class="small plan-summary">' + esc(p.summary) + "</p>" + guide("How to read this plan", p.legend.map(l => "<p>" + esc(l) + "</p>").join("") +
+  const T = CONFIG.techniques;
+  return '<p class="small plan-summary">' + esc(p.summary) + "</p>" + guide("Forced reps and rest-pause", "<ul>" + T.rules.map(r => "<li>" + esc(r) + "</li>").join("") + "</ul><p>" + esc(T.how.rp) + "</p><p>" + esc(T.how.fr) + "</p>") + guide("How to read this plan", p.legend.map(l => "<p>" + esc(l) + "</p>").join("") +
     "<p>" + term("warmup", "Warm-up") + ", " + term("mainset", "main set") + " and " + term("failure", "failure") + " explain themselves when tapped.</p>");
 }
 function pbGuideHTML(){

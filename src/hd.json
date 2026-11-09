@@ -51,7 +51,8 @@
      "Warm-up 1",
      "Warm-up 2",
      "Working"
-    ]
+    ],
+    "tech": []
    },
    {
     "id": "military",
@@ -60,6 +61,9 @@
      "Warm-up 1",
      "Warm-up 2",
      "Working"
+    ],
+    "tech": [
+     "fr"
     ]
    },
    {
@@ -70,7 +74,11 @@
      "Warm-up 2",
      "Working"
     ],
-    "unit": "kg"
+    "unit": "kg",
+    "tech": [
+     "rp",
+     "fr"
+    ]
    },
    {
     "id": "btn-smith",
@@ -80,7 +88,11 @@
      "Warm-up 2",
      "Working"
     ],
-    "unit": "kg"
+    "unit": "kg",
+    "tech": [
+     "rp",
+     "fr"
+    ]
    }
   ],
   "LATMACH": [
@@ -449,7 +461,10 @@
     "rows": [
      "Working"
     ],
-    "unit": "plates"
+    "unit": "plates",
+    "tech": [
+     "rp"
+    ]
    }
   ],
   "SQUAT": [
@@ -499,7 +514,10 @@
      "Warm-up",
      "Working"
     ],
-    "unit": "kg"
+    "unit": "kg",
+    "tech": [
+     "fr"
+    ]
    },
    {
     "id": "pulldown",
@@ -508,7 +526,10 @@
      "Warm-up",
      "Working"
     ],
-    "unit": "plates"
+    "unit": "plates",
+    "tech": [
+     "rp"
+    ]
    }
   ],
   "HAMCON": [
@@ -599,6 +620,9 @@
      "Warm-up 2",
      "Warm-up 3",
      "Working"
+    ],
+    "tech": [
+     "fr"
     ]
    },
    {
@@ -609,6 +633,10 @@
      "Warm-up 2",
      "Warm-up 3",
      "Working"
+    ],
+    "tech": [
+     "rp",
+     "fr"
     ]
    }
   ]
@@ -629,7 +657,10 @@
        "reps": "15 @ 50%, 12 @ 70% → 10–12 @ 100%",
        "rest": "90 s",
        "notes": "",
-       "tag": "R"
+       "tag": "R",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d1-1",
@@ -639,7 +670,8 @@
        "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
        "rest": "3 min",
        "notes": "Failure means the last clean rep. Set safety pins. Pick back or Zercher in the Tracker.",
-       "variants": "SQUAT"
+       "variants": "SQUAT",
+       "techMain": true
       },
       {
        "id": "d5-1",
@@ -649,7 +681,11 @@
        "reps": "12 @ 50%, 12 @ 70% → 10–12 @ 100%",
        "rest": "2 min",
        "notes": "",
-       "tag": "R"
+       "tag": "R",
+       "tech": [
+        "rp"
+       ],
+       "techMain": true
       },
       {
        "id": "d1-2",
@@ -660,7 +696,10 @@
        "rest": "2–3 min",
        "notes": "Optional. Pick hack or pendulum in the Tracker.",
        "variants": "HACKPEND",
-       "optional": true
+       "optional": true,
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d5-4",
@@ -680,7 +719,10 @@
        "reps": "8–10 @ 60% → 8–10 @ 100%",
        "rest": "90 s",
        "notes": "",
-       "tag": "R"
+       "tag": "R",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     },
@@ -694,7 +736,10 @@
        "sets": "1W + 1",
        "reps": "10–12 @ 60% → 10–12 @ 100%",
        "rest": "60–90 s",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d1-7",
@@ -703,7 +748,10 @@
        "sets": "1",
        "reps": "10–12 @ 100%",
        "rest": "60–90 s",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     }
@@ -735,7 +783,8 @@
        "rest": "2–3 min",
        "notes": "Superset partner of the incline fly. Pick the barbell on the fixed incline bench, or the Smith machine with an adjustable bench, in the Tracker. Pre-exhausted, so expect less weight than a fresh set.",
        "pair": "A2",
-       "variants": "INCBENCH"
+       "variants": "INCBENCH",
+       "techMain": true
       },
       {
        "id": "d2-1",
@@ -745,7 +794,12 @@
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "2 min",
        "notes": "",
-       "tag": "R"
+       "tag": "R",
+       "tech": [
+        "rp",
+        "fr"
+       ],
+       "techMain": true
       },
       {
        "id": "d2-dbpress",
@@ -754,7 +808,10 @@
        "sets": "1",
        "reps": "6–8 @ 100%",
        "rest": "2 min",
-       "notes": "Chest is warm from the presses, so no warm-up."
+       "notes": "Chest is warm from the presses, so no warm-up.",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d2-4",
@@ -765,7 +822,10 @@
        "rest": "60–90 s",
        "notes": "Optional. Pick high to low, low to high, or both (one set each) in the Tracker.",
        "optional": true,
-       "variants": "CABLEFLY"
+       "variants": "CABLEFLY",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d2-pec",
@@ -775,7 +835,10 @@
        "reps": "8–10 @ 100%",
        "rest": "60–90 s",
        "notes": "Optional. Chest already warm from the presses, so no warm-up.",
-       "optional": true
+       "optional": true,
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d2-5",
@@ -799,7 +862,10 @@
        "sets": "1W + 1",
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "90 s",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d2-8",
@@ -820,7 +886,10 @@
        "rest": "90 s",
        "notes": "Pick the variation in the Tracker. Single-arm versions log each arm.",
        "tag": "R",
-       "variants": "PREACHER"
+       "variants": "PREACHER",
+       "tech": [
+        "fr"
+       ]
       },
       {
        "id": "d2-10",
@@ -831,7 +900,10 @@
        "rest": "60–90 s",
        "notes": "Optional. Pick hammer or concentration curl in the Tracker.",
        "variants": "HAMCON",
-       "optional": true
+       "optional": true,
+       "tech": [
+        "rp"
+       ]
       }
      ]
     }
@@ -858,7 +930,8 @@
        "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
        "rest": "2–3 min",
        "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
-       "variants": "OHP"
+       "variants": "OHP",
+       "techMain": true
       },
       {
        "id": "d4-3",
@@ -868,7 +941,10 @@
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "60–90 s",
        "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
-       "variants": "LATMACH"
+       "variants": "LATMACH",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d4-5",
@@ -879,7 +955,10 @@
        "rest": "60–90 s",
        "notes": "One arm or cross-body. Warm up once, then a working set for each arm.",
        "tag": "R",
-       "variants": "CABLELAT"
+       "variants": "CABLELAT",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d4-1",
@@ -888,7 +967,11 @@
        "sets": "2W + 1",
        "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
        "rest": "2 min",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "fr"
+       ],
+       "techMain": true
       },
       {
        "id": "d4-2",
@@ -906,7 +989,10 @@
        "sets": "1W + 1",
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "90 s",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     },
@@ -922,7 +1008,10 @@
        "rest": "90 s",
        "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
        "tag": "R",
-       "variants": "PUSHDOWN"
+       "variants": "PUSHDOWN",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d4-9",
@@ -932,7 +1021,10 @@
        "reps": "6–8 @ 100%",
        "rest": "90 s",
        "notes": "Pick a tricep extension or a JM press in the Tracker. The JM press keeps its warm-up.",
-       "variants": "TRIEXT"
+       "variants": "TRIEXT",
+       "tech": [
+        "fr"
+       ]
       },
       {
        "id": "d4-dbext",
@@ -942,7 +1034,10 @@
        "reps": "6–8 @ 100%",
        "rest": "90 s",
        "variants": "DBEXT",
-       "notes": "Pick skull crusher or overhead extension in the Tracker."
+       "notes": "Pick skull crusher or overhead extension in the Tracker.",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d4-10",
@@ -953,7 +1048,10 @@
        "rest": "60–90 s",
        "notes": "Pick the reverse-grip cable option in the Tracker for the reverse pressdown.",
        "tag": "R",
-       "variants": "ONEARMPD"
+       "variants": "ONEARMPD",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     }
@@ -978,7 +1076,11 @@
         "2 shy of failure",
         "1 shy of failure",
         "Max reps"
-       ]
+       ],
+       "tech": [
+        "fr"
+       ],
+       "techMain": true
       },
       {
        "id": "d3-1",
@@ -1006,7 +1108,11 @@
        "sets": "1W + 1",
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "90 s",
-       "notes": ""
+       "notes": "",
+       "tech": [
+        "rp"
+       ],
+       "techMain": true
       },
       {
        "id": "d3-3",
@@ -1017,7 +1123,11 @@
        "rest": "90 s",
        "notes": "Variations: both arms or one arm.",
        "tag": "R",
-       "variants": "CABLEROW"
+       "variants": "CABLEROW",
+       "tech": [
+        "rp"
+       ],
+       "techMain": true
       },
       {
        "id": "d3-onearm",
@@ -1028,7 +1138,10 @@
        "rest": "90 s",
        "optional": true,
        "variants": "ONEROW",
-       "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm."
+       "notes": "Optional. Pick the high-to-low cable row or the machine row in the Tracker. One working set per arm.",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d3-hgpull",
@@ -1038,7 +1151,10 @@
        "reps": "6–8 @ 100%",
        "rest": "90 s",
        "optional": true,
-       "notes": "Optional. Neutral grip."
+       "notes": "Optional. Neutral grip.",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     },
@@ -1052,7 +1168,10 @@
        "sets": "1",
        "reps": "8–10 @ 100%",
        "rest": "60–90 s",
-       "notes": "Rope at face height. Pull to your forehead, elbows high."
+       "notes": "Rope at face height. Pull to your forehead, elbows high.",
+       "tech": [
+        "rp"
+       ]
       },
       {
        "id": "d3-7",
@@ -1062,7 +1181,10 @@
        "reps": "6–8 @ 100%",
        "rest": "60–90 s",
        "notes": "Both arms, or one arm at a time if the station is busy.",
-       "variants": "RDFLY"
+       "variants": "RDFLY",
+       "tech": [
+        "rp"
+       ]
       }
      ]
     },

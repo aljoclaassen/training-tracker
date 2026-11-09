@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-11-09.2",
+  "appVersion": "2026-11-09.3",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -937,5 +937,47 @@
       "factor": 1,
       "from": "lying leg curl"
     }
-  ]
+  ],
+  "techniques": {
+    "capAfterHard": 6,
+    "names": {
+      "rp": "rest-pause",
+      "fr": "forced reps"
+    },
+    "how": {
+      "rp": "Rest-pause: after failure, rest 10 to 15 seconds, then one more mini-set to failure.",
+      "fr": "Forced reps: after failure, up to 2 more reps with a spotter helping only the lifting part."
+    },
+    "phases": {
+      "reentry": {
+        "label": "Re-entry week",
+        "max": 0,
+        "text": "Plain failure today, no forced reps or rest-pause. You are setting your Heavy Duty numbers again."
+      },
+      "build": {
+        "label": "Build week",
+        "max": 1,
+        "text": "One technique today"
+      },
+      "peak": {
+        "label": "Peak week",
+        "max": 2,
+        "text": "Up to two techniques today"
+      },
+      "cruise": {
+        "label": "Easy week",
+        "max": 0,
+        "text": "No forced reps or rest-pause this week."
+      }
+    },
+    "cappedText": "More than 6 hard weeks in a row, so this stays a build week until you take an easy week.",
+    "rules": [
+      "Week 1 of a Heavy Duty block is re-entry: plain failure. The last week is the peak: two techniques a day. Weeks in between are build weeks: one a day. Change the block length in Blocks and this follows.",
+      "Never both on one set. Each exercise gets at most one technique a week.",
+      "Rest-pause suits machines, cables, the Smith machine and dumbbell isolation. Forced reps suit presses and curls when a spotter is there.",
+      "No techniques on free-weight squats, deadlifts, barbell rows or the behind-the-neck barbell press.",
+      "If last week's working set fell below the rep range, that exercise gets a plain failure set and the technique moves to the next one.",
+      "After more than 6 hard weeks in a row, the peak week stays a build week until you take an easy week."
+    ]
+  }
 }

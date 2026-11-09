@@ -597,6 +597,10 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
 .cal-block__details[open] .cal-block__chev{ transform: rotate(180deg); }
 .cal-block__body{ display: grid; gap: var(--space-1); margin-top: var(--space-1); }
 .cal-block.is-past{ opacity: .85; }
+.guide__body .cal-past__list{ list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-0-5); }
+.cal-past__item{ display: flex; gap: var(--space-1); align-items: flex-start; padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-sm); background: var(--color-surface-alt); border-left: 4px solid var(--cal-colour); }
+.exercise__tag--tech{ background: var(--color-accent-soft); color: var(--color-accent-text); border-color: transparent; }
+.tech-line{ padding: var(--space-1) var(--space-1-5); border-radius: var(--radius-md); background: var(--color-accent-soft); color: var(--color-text); }
 .cal-tag--quiet{ background: var(--color-surface-alt); color: var(--color-text-muted); }
 @media (prefers-reduced-motion: reduce){ .cal-block__chev{ transition: none; } }
 
