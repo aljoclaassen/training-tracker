@@ -1333,6 +1333,11 @@ body.has-hazard .next-fab, body.has-hazard .to-top{ bottom: calc(var(--size-nav)
 .update-bar{ position: fixed; left: var(--space-1); right: var(--space-1); top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); z-index: 65; max-width: var(--size-dialog-max); margin: 0 auto; display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-1-5); background: var(--color-surface-raised); border: var(--border-width-strong) solid var(--color-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); }
 .update-bar__text{ flex: 1; font-weight: var(--font-weight-bold); }
 .compat-banner{ position: fixed; top: 0; left: 0; right: 0; z-index: 70; padding: calc(var(--space-1-5) + env(safe-area-inset-top, 0px)) var(--space-2) var(--space-1-5); background: var(--color-danger); color: var(--color-on-danger); font-weight: var(--font-weight-bold); }
+.compat-banner p{ margin: 0; }
+.compat-banner__details{ margin-top: var(--space-0-5) !important; font-weight: var(--font-weight-regular); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.compat-banner__row{ display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+.compat-banner__button{ min-height: var(--size-tap); padding: 0 var(--space-1-5); border-radius: var(--radius-md); border: 2px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: var(--font-weight-bold); cursor: pointer; }
+.compat-banner__button:focus-visible{ outline: 3px solid currentColor; outline-offset: 2px; }
 
 
 /* =====================================================================
@@ -2064,13 +2069,30 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
   if (!CSS.escape) CSS.escape = function(v){ return String(v).replace(/[^a-zA-Z0-9_-]/g, function(c){ return "\\" + c; }); };
   if (window.Element && !Element.prototype.closest) Element.prototype.closest = function(sel){ var el = this; while (el && el.nodeType === 1){ if (el.matches(sel)) return el; el = el.parentElement; } return null; };
   if (window.Element && !Element.prototype.matches) Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+  // Any error the app did not catch: say so plainly, keep the details so they can be sent on, let the owner close it
   var shown = false;
-  window.addEventListener("error", function(){
+  window.reportAppError = function(err, where){
     if (shown || !document.body) return; shown = true;
+    var msg = (err && (err.message || String(err))) || "Unknown error";
+    var stack = err && err.stack ? String(err.stack).split("\n").slice(0, 4).join("\n") : "";
+    var details = "Version " + (typeof CONFIG !== "undefined" ? CONFIG.appVersion : "?") + (where ? " · " + where : "") + "\n" + msg + (stack ? "\n" + stack : "") + "\n" + navigator.userAgent;
     var b = document.createElement("div"); b.className = "compat-banner"; b.setAttribute("role", "alert");
-    b.textContent = "Part of the app couldn't run on this browser. Update the browser, or try Firefox or Opera.";
+    var t = document.createElement("p"); t.className = "compat-banner__title"; t.textContent = "Something in the app went wrong. Your logs are safe.";
+    var d = document.createElement("p"); d.className = "compat-banner__details"; d.textContent = msg;
+    var row = document.createElement("div"); row.className = "compat-banner__row";
+    var copy = document.createElement("button"); copy.type = "button"; copy.className = "compat-banner__button"; copy.textContent = "Copy error details";
+    copy.onclick = function(){
+      var done = function(){ copy.textContent = "Copied"; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(details).then(done, function(){ window.prompt("Copy these details:", details); });
+      else window.prompt("Copy these details:", details);
+    };
+    var close = document.createElement("button"); close.type = "button"; close.className = "compat-banner__button"; close.textContent = "Close";
+    close.onclick = function(){ b.parentNode.removeChild(b); };
+    row.appendChild(copy); row.appendChild(close);
+    b.appendChild(t); b.appendChild(d); b.appendChild(row);
     document.body.appendChild(b);
-  });
+  };
+  window.addEventListener("error", function(ev){ window.reportAppError(ev.error || {message: ev.message, stack: (ev.filename || "") + ":" + ev.lineno + ":" + ev.colno}); });
 })();
 
 /* =====================================================================
@@ -2080,7 +2102,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-11-09.3",
+ "appVersion": "2026-11-09.4",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -6585,7 +6607,9 @@ function hdMoveSlot(slot){
   const keepNewer = (k, rec) => { if (rec && (!vh[k] || (vh[k].date || "") < (rec.date || ""))) vh[k] = rec; };
   if (lw && lw.entries){
     Object.keys(lw.entries).forEach(id => {
-      const e = lw.entries[id], to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
+      const e = lw.entries[id];
+      if (!e || typeof e !== "object"){ delete lw.entries[id]; return; }
+      const to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
       delete lw.entries[id];
       if (!to) return;
       const moved = Object.assign({}, e); if (to.variant) moved.variant = to.variant; else delete moved.variant;
@@ -6598,6 +6622,7 @@ function hdMoveSlot(slot){
     const nk = to ? to.id + "|" + (to.variant || "-") : null;
     if (nk === k) return;
     const rec = vh[k]; delete vh[k];
+    if (!rec || typeof rec !== "object") return;
     if (nk) keepNewer(nk, Object.assign({}, rec, {variant: to.variant || null}));
   });
   const units = slot.units = objOr(slot.units, {});
@@ -6644,12 +6669,12 @@ function hdRemapDays(slot){
 function hdSeedFromArchive(slot, archive){
   if (slot.hdSeeded >= 1) return slot;
   const vh = slot.varHistory = objOr(slot.varHistory, {});
-  const weeks = ((archive && archive.hd) || []).slice().sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
+  const weeks = ((archive && archive.hd) || []).filter(w => w && typeof w === "object").sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
   CONFIG.hdArchiveSeeds.forEach(seed => {
     const key = seed.to + "|" + seed.toVariant;
     if (vh[key]) return;
     for (const w of weeks){
-      const e = (w.entries || {})[seed.from];
+      const e = ((w && w.entries) || {})[seed.from];
       if (e && (e.variant || "") === seed.fromVariant && (e.sets || []).some(isLogged)){
         vh[key] = {name: EXERCISES[seed.to] ? EXERCISES[seed.to].item.name : "", variant: seed.toVariant, date: e.doneAt || w.weekStart || "", unit: e.unit || "plates", sets: e.sets};
         break;
@@ -7650,9 +7675,13 @@ function term(key, label){ return '<button type="button" class="term" data-term=
 const PLAN_NAMES = {hd: PROGRAMME.plans.hd.name, pb: PROGRAMME.plans.pb.name};
 
 /* ---------- 3.2 State, saving and context ---------- */
+// Runs an extra (hints, guides) that must never stop the page drawing. On an error: reports it, returns fallback.
+function safe(fn, fallback, where){
+  try { return fn(); } catch (err){ if (window.reportAppError) window.reportAppError(err, where); return fallback; }
+}
 let storageOK = storageAvailable();
 let state = normaliseState(storageLoad(), todayISO());
-hdSeedFromArchive(state, archiveLoad());
+safe(() => hdSeedFromArchive(state, archiveLoad()), null, "history refill");
 if (state.ui.tab !== "plan") state.ui.tab = "train";
 ensurePbSlot(state, todayISO());
 
@@ -7790,7 +7819,7 @@ function renderDayTabs(c){
 function renderSessionHead(c, day){
   const lwDay = c.slot.lastWeek && c.slot.lastWeek.missedDays ? c.slot.lastWeek.missedDays[day.n] : null;
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
-  const tw = day.plan === "hd" && !day.rest ? hdTechWeek(c.slotWeek) : null, picks = tw ? hdTechPicks(day, c.slot, c.slotWeek) : [];
+  const tw = day.plan === "hd" && !day.rest ? safe(() => hdTechWeek(c.slotWeek), null, "technique week") : null, picks = tw ? safe(() => hdTechPicks(day, c.slot, c.slotWeek), [], "technique picks") : [];
   const T = CONFIG.techniques;
   const techLine = !tw || tw.phase === "cruise" ? "" : '<p class="small tech-line"><strong>' + esc(tw.label) + " (week " + tw.week + " of " + tw.of + "):</strong> " +
     (tw.max === 0 ? esc(T.phases.reentry.text) : picks.length ? esc(T.phases[tw.phase].text) + ": " + picks.map(p => esc(techText(p.tech)) + " on " + esc(p.name)).join("; ") + "." : "No exercise today suits a technique, so plain failure.") +
@@ -7937,7 +7966,7 @@ function exerciseHTML(c, item){
   const done = isComplete(e), missed = isMissed(e), madeUp = isMadeUp(e);
   const cls = "exercise" + (open ? " is-open" : "") + (done ? " is-done" : "") + (missed ? " is-missed" : "") + (item.skipped ? " is-skipped" : "");
   const status = done ? "✓" : missed ? "–" : (item.pair || "");
-  const tp = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+  const tp = item.plan === "hd" ? safe(() => hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0], null, "technique tag") : null;
   const tags = (tp ? '<span class="exercise__tag exercise__tag--tech">' + esc(cap(techText(tp.tech).replace(" (with a spotter)", ""))) + "</span>" : "") + (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
     (madeUp ? '<span class="exercise__tag">Made up</span>' : "") + (e && e.replaced ? '<span class="exercise__tag">Swapped</span>' : "") + (item.skipped ? '<span class="exercise__tag">Skip</span>' : "");
   return '<article class="' + cls + '" id="ex-' + item.id + '" data-id="' + item.id + '">' +
@@ -7970,9 +7999,9 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
-    const tpick = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+    const tpick = item.plan === "hd" ? safe(() => hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0], null, "technique how-to") : null;
     if (tpick) html += '<p class="remind tech-how"><strong>Today: ' + esc(techText(tpick.tech)) + ".</strong> " + tpick.tech.map(t => esc(CONFIG.techniques.how[t])).join(" ") + " On the working set only.</p>";
-    const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
+    const ph = item.plan === "hd" ? safe(() => pbHint(item, slotOf(state, "pb"), unit), null, "Powerbuilding hint") : null;
     if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
       (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
@@ -8616,7 +8645,7 @@ function renderCalendar(c){
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
       "</div></details></li>";
   });
-  html += "</ol>" + pastBlocksHTML(c) + "<div class=\"button-row\">" +
+  html += "</ol>" + safe(() => pastBlocksHTML(c), "", "past blocks") + "<div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
     (state.cycle && !c.now.before ? '<button type="button" class="button" data-cal-switch>Switch to ' + esc(PLAN_NAMES[otherPlan(c.plan)]) + " this week</button>" : "") +
     (hasUpcomingChanges(c.cycle, c.today) ? '<button type="button" class="button button--quiet" data-cal-reset>Set upcoming blocks to ' + weekWord(CONFIG.blockWeeks) + "</button>" : "") +

@@ -1145,7 +1145,9 @@ function hdMoveSlot(slot){
   const keepNewer = (k, rec) => { if (rec && (!vh[k] || (vh[k].date || "") < (rec.date || ""))) vh[k] = rec; };
   if (lw && lw.entries){
     Object.keys(lw.entries).forEach(id => {
-      const e = lw.entries[id], to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
+      const e = lw.entries[id];
+      if (!e || typeof e !== "object"){ delete lw.entries[id]; return; }
+      const to = hdMove(id, e.variant); if (to && to.id === id && to.variant === e.variant) return;
       delete lw.entries[id];
       if (!to) return;
       const moved = Object.assign({}, e); if (to.variant) moved.variant = to.variant; else delete moved.variant;
@@ -1158,6 +1160,7 @@ function hdMoveSlot(slot){
     const nk = to ? to.id + "|" + (to.variant || "-") : null;
     if (nk === k) return;
     const rec = vh[k]; delete vh[k];
+    if (!rec || typeof rec !== "object") return;
     if (nk) keepNewer(nk, Object.assign({}, rec, {variant: to.variant || null}));
   });
   const units = slot.units = objOr(slot.units, {});
@@ -1204,12 +1207,12 @@ function hdRemapDays(slot){
 function hdSeedFromArchive(slot, archive){
   if (slot.hdSeeded >= 1) return slot;
   const vh = slot.varHistory = objOr(slot.varHistory, {});
-  const weeks = ((archive && archive.hd) || []).slice().sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
+  const weeks = ((archive && archive.hd) || []).filter(w => w && typeof w === "object").sort((a, b) => (a.weekStart || "") < (b.weekStart || "") ? 1 : -1);
   CONFIG.hdArchiveSeeds.forEach(seed => {
     const key = seed.to + "|" + seed.toVariant;
     if (vh[key]) return;
     for (const w of weeks){
-      const e = (w.entries || {})[seed.from];
+      const e = ((w && w.entries) || {})[seed.from];
       if (e && (e.variant || "") === seed.fromVariant && (e.sets || []).some(isLogged)){
         vh[key] = {name: EXERCISES[seed.to] ? EXERCISES[seed.to].item.name : "", variant: seed.toVariant, date: e.doneAt || w.weekStart || "", unit: e.unit || "plates", sets: e.sets};
         break;

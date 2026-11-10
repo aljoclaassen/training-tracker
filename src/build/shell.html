@@ -273,6 +273,11 @@ body.has-hazard .next-fab, body.has-hazard .to-top{ bottom: calc(var(--size-nav)
 .update-bar{ position: fixed; left: var(--space-1); right: var(--space-1); top: calc(var(--space-1) + env(safe-area-inset-top, 0px)); z-index: 65; max-width: var(--size-dialog-max); margin: 0 auto; display: flex; align-items: center; gap: var(--space-1-5); padding: var(--space-1-5); background: var(--color-surface-raised); border: var(--border-width-strong) solid var(--color-accent); border-radius: var(--radius-lg); box-shadow: var(--shadow-3); }
 .update-bar__text{ flex: 1; font-weight: var(--font-weight-bold); }
 .compat-banner{ position: fixed; top: 0; left: 0; right: 0; z-index: 70; padding: calc(var(--space-1-5) + env(safe-area-inset-top, 0px)) var(--space-2) var(--space-1-5); background: var(--color-danger); color: var(--color-on-danger); font-weight: var(--font-weight-bold); }
+.compat-banner p{ margin: 0; }
+.compat-banner__details{ margin-top: var(--space-0-5) !important; font-weight: var(--font-weight-regular); font-size: var(--font-size-sm); overflow-wrap: anywhere; }
+.compat-banner__row{ display: flex; flex-wrap: wrap; gap: var(--space-1); margin-top: var(--space-1); }
+.compat-banner__button{ min-height: var(--size-tap); padding: 0 var(--space-1-5); border-radius: var(--radius-md); border: 2px solid currentColor; background: transparent; color: inherit; font: inherit; font-weight: var(--font-weight-bold); cursor: pointer; }
+.compat-banner__button:focus-visible{ outline: 3px solid currentColor; outline-offset: 2px; }
 
 
 /* =====================================================================

@@ -53,13 +53,30 @@ compat = r'''/* ================================================================
   if (!CSS.escape) CSS.escape = function(v){ return String(v).replace(/[^a-zA-Z0-9_-]/g, function(c){ return "\\" + c; }); };
   if (window.Element && !Element.prototype.closest) Element.prototype.closest = function(sel){ var el = this; while (el && el.nodeType === 1){ if (el.matches(sel)) return el; el = el.parentElement; } return null; };
   if (window.Element && !Element.prototype.matches) Element.prototype.matches = Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
+  // Any error the app did not catch: say so plainly, keep the details so they can be sent on, let the owner close it
   var shown = false;
-  window.addEventListener("error", function(){
+  window.reportAppError = function(err, where){
     if (shown || !document.body) return; shown = true;
+    var msg = (err && (err.message || String(err))) || "Unknown error";
+    var stack = err && err.stack ? String(err.stack).split("\n").slice(0, 4).join("\n") : "";
+    var details = "Version " + (typeof CONFIG !== "undefined" ? CONFIG.appVersion : "?") + (where ? " · " + where : "") + "\n" + msg + (stack ? "\n" + stack : "") + "\n" + navigator.userAgent;
     var b = document.createElement("div"); b.className = "compat-banner"; b.setAttribute("role", "alert");
-    b.textContent = "Part of the app couldn't run on this browser. Update the browser, or try Firefox or Opera.";
+    var t = document.createElement("p"); t.className = "compat-banner__title"; t.textContent = "Something in the app went wrong. Your logs are safe.";
+    var d = document.createElement("p"); d.className = "compat-banner__details"; d.textContent = msg;
+    var row = document.createElement("div"); row.className = "compat-banner__row";
+    var copy = document.createElement("button"); copy.type = "button"; copy.className = "compat-banner__button"; copy.textContent = "Copy error details";
+    copy.onclick = function(){
+      var done = function(){ copy.textContent = "Copied"; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(details).then(done, function(){ window.prompt("Copy these details:", details); });
+      else window.prompt("Copy these details:", details);
+    };
+    var close = document.createElement("button"); close.type = "button"; close.className = "compat-banner__button"; close.textContent = "Close";
+    close.onclick = function(){ b.parentNode.removeChild(b); };
+    row.appendChild(copy); row.appendChild(close);
+    b.appendChild(t); b.appendChild(d); b.appendChild(row);
     document.body.appendChild(b);
-  });
+  };
+  window.addEventListener("error", function(ev){ window.reportAppError(ev.error || {message: ev.message, stack: (ev.filename || "") + ":" + ev.lineno + ":" + ev.colno}); });
 })();
 '''
 data = '''/* =====================================================================

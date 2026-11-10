@@ -81,9 +81,13 @@ function term(key, label){ return '<button type="button" class="term" data-term=
 const PLAN_NAMES = {hd: PROGRAMME.plans.hd.name, pb: PROGRAMME.plans.pb.name};
 
 /* ---------- 3.2 State, saving and context ---------- */
+// Runs an extra (hints, guides) that must never stop the page drawing. On an error: reports it, returns fallback.
+function safe(fn, fallback, where){
+  try { return fn(); } catch (err){ if (window.reportAppError) window.reportAppError(err, where); return fallback; }
+}
 let storageOK = storageAvailable();
 let state = normaliseState(storageLoad(), todayISO());
-hdSeedFromArchive(state, archiveLoad());
+safe(() => hdSeedFromArchive(state, archiveLoad()), null, "history refill");
 if (state.ui.tab !== "plan") state.ui.tab = "train";
 ensurePbSlot(state, todayISO());
 
@@ -221,7 +225,7 @@ function renderDayTabs(c){
 function renderSessionHead(c, day){
   const lwDay = c.slot.lastWeek && c.slot.lastWeek.missedDays ? c.slot.lastWeek.missedDays[day.n] : null;
   const notes = day.notes.map(n => '<p class="small">' + esc(n) + "</p>").join("");
-  const tw = day.plan === "hd" && !day.rest ? hdTechWeek(c.slotWeek) : null, picks = tw ? hdTechPicks(day, c.slot, c.slotWeek) : [];
+  const tw = day.plan === "hd" && !day.rest ? safe(() => hdTechWeek(c.slotWeek), null, "technique week") : null, picks = tw ? safe(() => hdTechPicks(day, c.slot, c.slotWeek), [], "technique picks") : [];
   const T = CONFIG.techniques;
   const techLine = !tw || tw.phase === "cruise" ? "" : '<p class="small tech-line"><strong>' + esc(tw.label) + " (week " + tw.week + " of " + tw.of + "):</strong> " +
     (tw.max === 0 ? esc(T.phases.reentry.text) : picks.length ? esc(T.phases[tw.phase].text) + ": " + picks.map(p => esc(techText(p.tech)) + " on " + esc(p.name)).join("; ") + "." : "No exercise today suits a technique, so plain failure.") +
@@ -368,7 +372,7 @@ function exerciseHTML(c, item){
   const done = isComplete(e), missed = isMissed(e), madeUp = isMadeUp(e);
   const cls = "exercise" + (open ? " is-open" : "") + (done ? " is-done" : "") + (missed ? " is-missed" : "") + (item.skipped ? " is-skipped" : "");
   const status = done ? "✓" : missed ? "–" : (item.pair || "");
-  const tp = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+  const tp = item.plan === "hd" ? safe(() => hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0], null, "technique tag") : null;
   const tags = (tp ? '<span class="exercise__tag exercise__tag--tech">' + esc(cap(techText(tp.tech).replace(" (with a spotter)", ""))) + "</span>" : "") + (item.optional && item.kind !== "warmup" ? '<span class="exercise__tag">Optional</span>' : "") + (missed ? '<span class="exercise__tag">Missed</span>' : "") +
     (madeUp ? '<span class="exercise__tag">Made up</span>' : "") + (e && e.replaced ? '<span class="exercise__tag">Swapped</span>' : "") + (item.skipped ? '<span class="exercise__tag">Skip</span>' : "");
   return '<article class="' + cls + '" id="ex-' + item.id + '" data-id="' + item.id + '">' +
@@ -401,9 +405,9 @@ function panelHTML(c, item){
   if (!missed && !swapped){
     if (item.plan === "pb" && item.log === "carry") html += '<p class="small muted">After each carry, pick ' + term("carryeffort", "how hard it was") + ".</p>";
     else if (item.plan === "pb" && hasWeight(item)) html += '<p class="small muted">After each set, pick how many ' + term("repsleft", "reps you had left") + ".</p>";
-    const tpick = item.plan === "hd" ? hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0] : null;
+    const tpick = item.plan === "hd" ? safe(() => hdTechPicks(sessionOf(c, item.day), c.slot, c.slotWeek).filter(p => p.id === item.id)[0], null, "technique how-to") : null;
     if (tpick) html += '<p class="remind tech-how"><strong>Today: ' + esc(techText(tpick.tech)) + ".</strong> " + tpick.tech.map(t => esc(CONFIG.techniques.how[t])).join(" ") + " On the working set only.</p>";
-    const ph = item.plan === "hd" ? pbHint(item, slotOf(state, "pb"), unit) : null;
+    const ph = item.plan === "hd" ? safe(() => pbHint(item, slotOf(state, "pb"), unit), null, "Powerbuilding hint") : null;
     if (ph) html += '<p class="small muted pb-hint">' + planBadge("pb") + "Powerbuilding suggests about <strong>" + esc(fmtLoad(ph.kg, unit)) + " × " + ph.reps + "</strong>, from your " + esc(ph.from) +
       (ph.date && parseISO(ph.date) ? " (week of " + esc(fmtDate(ph.date)) + ")" : "") + ". A fresh estimate" + (ph.after ? "; you do this after " + esc(ph.after) + ", so expect less" : "") + ". For information only: your target still comes from Heavy Duty.</p>";
     html += '<div class="set-rows" data-kind="main">' + e.sets.map((s, i) => setRowHTML(c, item, "main", i, s, a)).join("") + "</div>";
@@ -1047,7 +1051,7 @@ function renderCalendar(c){
         (why ? '<p class="small muted">' + esc(why) + "</p>" : "")) +
       "</div></details></li>";
   });
-  html += "</ol>" + pastBlocksHTML(c) + "<div class=\"button-row\">" +
+  html += "</ol>" + safe(() => pastBlocksHTML(c), "", "past blocks") + "<div class=\"button-row\">" +
     (show < 24 ? '<button type="button" class="button" data-cal-more>Show more blocks</button>' : "") +
     (state.cycle && !c.now.before ? '<button type="button" class="button" data-cal-switch>Switch to ' + esc(PLAN_NAMES[otherPlan(c.plan)]) + " this week</button>" : "") +
     (hasUpcomingChanges(c.cycle, c.today) ? '<button type="button" class="button button--quiet" data-cal-reset>Set upcoming blocks to ' + weekWord(CONFIG.blockWeeks) + "</button>" : "") +
