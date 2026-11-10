@@ -2105,6 +2105,14 @@ function normaliseState(raw, today){
   if (raw && typeof raw === "object" && raw.entries && !(st.hdLayout >= CONFIG.hdLayout)) hdRemapDays(st);
   st.hdLayout = CONFIG.hdLayout;
   hdMoveSlot(st);
+  // One-off corrections to a logged week, each applied once per device (e.g. a set logged before its variation existed)
+  st.hdFixesDone = Array.isArray(st.hdFixesDone) ? st.hdFixesDone : [];
+  (CONFIG.hdWeekFixes || []).forEach(f => {
+    if (st.hdFixesDone.indexOf(f.key) >= 0) return;
+    const e = st.entries && st.entries[f.id];
+    if (st.weekStart === f.week && e && typeof e === "object" && f.from.indexOf(e.variant || "-") >= 0) e.variant = f.to;
+    st.hdFixesDone.push(f.key);
+  });
   st.weekStart = mondayOf(parseISO(st.weekStart) ? st.weekStart : today);
   ["units", "history", "varHistory", "loadedStreaks", "missedDays", "extras", "savedSwaps", "savedExtras"].forEach(k => { if (!objOr(st[k], null)) st[k] = {}; });
   if (!Array.isArray(st.pastVariations)) st.pastVariations = [];

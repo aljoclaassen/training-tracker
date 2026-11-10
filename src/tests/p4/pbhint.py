@@ -35,8 +35,8 @@ with sync_playwright() as p:
     tgt = pg.evaluate("() => { const c = ctx(); const it = itemOf(c, 'd1-1'); return rowTarget(it, firstWorkRow(it), rowArgs(c, it)).kg; }")
     check("target is not taken from the hint", tgt != 135, tgt)
     # Cable fly options
-    rows = pg.evaluate("() => ['high', 'low', 'both'].map(v => { const s = buildHdSession(2, {'d2-4': v}, null); let it; s.groups.forEach(g => g.items.forEach(i => { if (i.id === 'd2-4') it = i; })); return it.name + ':' + it.rows.map(r => r.label).join('/') + ':' + it.optional; })")
-    check("cable fly: high, low or both", rows == ["Cable Fly: High to Low or Low to High:Working:true", "Cable Fly: High to Low or Low to High:Working:true", "Cable Fly: High to Low or Low to High:High to low/Low to high:true"], rows)
+    rows = pg.evaluate("() => buildHdSession(2, {}, null).groups.reduce((a, g) => a.concat(g.items), []).filter(i => /^Cable Fly/.test(i.name)).map(i => i.id + ':' + i.name + ':' + !!i.optional)")
+    check("cable fly: two separate exercises, not optional", rows == ["d2-cflylow:Cable Fly: Low to High:false", "d2-4:Cable Fly: High to Low:false"], rows)
     # One-arm row option on back day
     names = pg.evaluate("() => buildHdSession(5, {}, null).groups[0].items.map(i => i.id + (i.optional ? '*' : ''))")
     check("back day: one-arm row is optional, after the cable row", names == ["d3-0", "d3-1", "d3-2", "d3-5", "d3-3", "d3-onearm*", "d3-hgpull*"], names)
@@ -45,7 +45,7 @@ with sync_playwright() as p:
         state.varHistory = {'d3-5|machine-both': {sets: [{reps: '8', kg: '9'}]}}; hdMoveSlot(state); }""")
     st = pg.evaluate("() => ({lw: state.lastWeek.entries, vh: state.varHistory})")
     check("machine lat row last week -> one-arm row, machine", st["lw"].get("d3-onearm", {}).get("variant") == "machine" and "d3-5" not in st["lw"], st["lw"])
-    check("crossover last week -> cable fly high to low", st["lw"].get("d2-4", {}).get("variant") == "high", st["lw"].get("d2-4"))
+    check("crossover last week -> cable fly high to low", "d2-4" in st["lw"] and st["lw"]["d2-4"].get("variant") is None, st["lw"].get("d2-4"))
     check("two-arm machine row has no home and is dropped", not any(k.startswith("d3-5|") for k in st["vh"]), st["vh"])
     # Archive recovery for phones that already ran 2026-11-09.1
     seeded = pg.evaluate("""() => { const s = {varHistory: {}}; const arch = {hd: [

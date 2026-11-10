@@ -18,7 +18,7 @@ with sync_playwright() as p:
     check("banner shows the error", "went wrong" in pg.inner_text(".compat-banner") and "test break" in pg.inner_text(".compat-banner"), pg.inner_text(".compat-banner") if pg.locator(".compat-banner").count() else "")
     pg.click(".compat-banner >> text=Copy error details"); pg.wait_for_timeout(200)
     clip = pg.evaluate("navigator.clipboard.readText()")
-    check("details copied with version and place", "2026-11-09" in clip and "test break" in clip and "technique" in clip, clip)
+    check("details copied with version and place", "Version 2026-11" in clip and "test break" in clip and "technique" in clip, clip)
     pg.click(".compat-banner >> text=Close")
     check("banner closes", pg.locator(".compat-banner").count() == 0)
     # Odd stored data does not throw

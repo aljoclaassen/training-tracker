@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-11-09.4",
+  "appVersion": "2026-11-10.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -835,7 +835,8 @@
     "d3-5": {
       "to": "d3-5",
       "variants": {
-        "db": "-",
+        "-": "bent",
+        "db": "bent",
         "machine": "d3-onearm|machine",
         "machine-both": "x"
       }
@@ -843,13 +844,29 @@
     "d2-4": {
       "to": "d2-4",
       "variants": {
-        "-": "high"
+        "-": "-",
+        "high": "-",
+        "low": "d2-cflylow|-",
+        "both": "x"
       }
     },
     "d2-2": {
       "to": "d2-2",
       "variants": {
         "-": "barbell"
+      }
+    },
+    "d5-4": {
+      "to": "d5-4",
+      "variants": {
+        "-": "barbell",
+        "free": "barbell"
+      }
+    },
+    "d3-2": {
+      "to": "d3-2",
+      "variants": {
+        "-": "chest"
       }
     }
   },
@@ -862,11 +879,14 @@
     "db hammer curl": "hammer or concentration curl",
     "upright row": "barbell upright row",
     "tricep extension": "tricep extension or jm press",
-    "lat row": "db bent-over row",
-    "cable crossover": "cable fly: high to low or low to high",
+    "lat row": "db row: bent over or chest-supported",
+    "cable crossover": "cable fly: high to low",
     "behind-the-neck or military press": "shoulder press: behind-the-neck or military",
     "smith or behind-the-neck press": "shoulder press: behind-the-neck or military",
-    "barbell incline bench press": "incline bench press: barbell or smith"
+    "barbell incline bench press": "incline bench press: barbell or smith",
+    "db bent-over row": "db row: bent over or chest-supported",
+    "t-bar row": "t-bar row: chest-supported or standing",
+    "cable fly: high to low or low to high": "cable fly: high to low"
   },
   "hdArchiveSeeds": [
     {
@@ -918,7 +938,10 @@
         "pb-d3-rdl"
       ],
       "factor": 1,
-      "from": "Romanian deadlift"
+      "from": "Romanian deadlift",
+      "variants": [
+        "barbell"
+      ]
     },
     {
       "hd": "d5-1",
@@ -979,5 +1002,17 @@
       "If last week's working set fell below the rep range, that exercise gets a plain failure set and the technique moves to the next one.",
       "After more than 6 hard weeks in a row, the peak week stays a build week until you take an easy week."
     ]
-  }
+  },
+  "hdWeekFixes": [
+    {
+      "key": "sldl-db-2026-11-09",
+      "week": "2026-11-09",
+      "id": "d5-4",
+      "from": [
+        "-",
+        "free"
+      ],
+      "to": "dumbbell"
+    }
+  ]
 }

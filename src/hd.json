@@ -228,8 +228,15 @@
   ],
   "SLDL": [
    {
-    "id": "free",
-    "label": "Barbell or dumbbell",
+    "id": "barbell",
+    "label": "Barbell",
+    "rows": [
+     "Working"
+    ]
+   },
+   {
+    "id": "dumbbell",
+    "label": "Dumbbells",
     "rows": [
      "Working"
     ]
@@ -565,30 +572,6 @@
     ]
    }
   ],
-  "CABLEFLY": [
-   {
-    "id": "high",
-    "label": "High to low",
-    "rows": [
-     "Working"
-    ]
-   },
-   {
-    "id": "low",
-    "label": "Low to high",
-    "rows": [
-     "Working"
-    ]
-   },
-   {
-    "id": "both",
-    "label": "Both: high to low, then low to high",
-    "rows": [
-     "High to low",
-     "Low to high"
-    ]
-   }
-  ],
   "ONEROW": [
    {
     "id": "cable-hl",
@@ -638,6 +621,44 @@
      "rp",
      "fr"
     ]
+   }
+  ],
+  "DBROW": [
+   {
+    "id": "bent",
+    "label": "Bent over",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   },
+   {
+    "id": "chest",
+    "label": "Chest-supported",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ]
+   }
+  ],
+  "TBAR": [
+   {
+    "id": "chest",
+    "label": "Chest-supported",
+    "rows": [
+     "Working"
+    ],
+    "tech": [
+     "rp"
+    ]
+   },
+   {
+    "id": "free",
+    "label": "Standing",
+    "rows": [
+     "Working"
+    ],
+    "tech": []
    }
   ]
  },
@@ -704,11 +725,11 @@
       {
        "id": "d5-4",
        "name": "Stiff-Leg or Romanian Deadlift",
-       "equip": "Barbell, dumbbell or Smith machine",
+       "equip": "Barbell, dumbbells or Smith machine",
        "sets": "1",
        "reps": "10 @ 100%",
        "rest": "2 min",
-       "notes": "No warm-up in the original. Add 10 @ 60% if needed. Variations: barbell or dumbbell, or Smith machine.",
+       "notes": "No warm-up in the original. Add 10 @ 60% if needed. Pick barbell, dumbbells or Smith machine in the Tracker; each keeps its own numbers.",
        "variants": "SLDL"
       },
       {
@@ -814,15 +835,25 @@
        ]
       },
       {
-       "id": "d2-4",
-       "name": "Cable Fly: High to Low or Low to High",
+       "id": "d2-cflylow",
+       "name": "Cable Fly: Low to High",
        "equip": "Cable",
        "sets": "1",
        "reps": "8–10 @ 100%",
        "rest": "60–90 s",
-       "notes": "Optional. Pick high to low, low to high, or both (one set each) in the Tracker.",
-       "optional": true,
-       "variants": "CABLEFLY",
+       "notes": "Cables set low, bring the hands up and together.",
+       "tech": [
+        "rp"
+       ]
+      },
+      {
+       "id": "d2-4",
+       "name": "Cable Fly: High to Low",
+       "equip": "Cable",
+       "sets": "1",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Cables set high, bring the hands down and together.",
        "tech": [
         "rp"
        ]
@@ -1094,25 +1125,27 @@
       },
       {
        "id": "d3-2",
-       "name": "T-Bar Row",
+       "name": "T-Bar Row: Chest-Supported or Standing",
        "equip": "T-bar",
        "sets": "1",
        "reps": "6–8 @ 100%",
        "rest": "2 min",
-       "notes": "Same pattern as the row before it, so no warm-up."
+       "notes": "Pick the chest-supported T-bar or standing in the Tracker; each keeps its own numbers. Same pattern as the row before it, so no warm-up.",
+       "variants": "TBAR"
       },
       {
        "id": "d3-5",
-       "name": "DB Bent-Over Row",
+       "name": "DB Row: Bent Over or Chest-Supported",
        "equip": "Dumbbell",
        "sets": "1W + 1",
        "reps": "10 @ 60% → 6–8 @ 100%",
        "rest": "90 s",
-       "notes": "",
+       "notes": "Pick bent over or chest-supported on an incline bench in the Tracker; each keeps its own numbers.",
        "tech": [
         "rp"
        ],
-       "techMain": true
+       "techMain": true,
+       "variants": "DBROW"
       },
       {
        "id": "d3-3",
@@ -1182,6 +1215,18 @@
        "rest": "60–90 s",
        "notes": "Both arms, or one arm at a time if the station is busy.",
        "variants": "RDFLY",
+       "tech": [
+        "rp"
+       ]
+      },
+      {
+       "id": "d3-dbrdfly",
+       "name": "DB Rear Delt Fly",
+       "equip": "Dumbbell",
+       "sets": "1",
+       "reps": "8–10 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Bent over or chest down on an incline bench. Lead with the elbows.",
        "tech": [
         "rp"
        ]
