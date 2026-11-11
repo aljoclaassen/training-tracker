@@ -133,7 +133,7 @@ function partnerFor(c, item){
 function rowArgs(c, item){
   return {entry: c.slot.entries[item.id], last: lastEntryFor(c.slot, item, c.today, c.cycle), unit: unitOf(c.slot.units, item),
     streak: (c.slot.loadedStreaks || {})[item.id] || 0, cycle: c.cycle, lastWeekStart: c.slot.lastWeek ? c.slot.lastWeek.weekStart : null,
-    partner: partnerFor(c, item)};
+    partner: partnerFor(c, item), pbSlot: item.plan === "hd" ? slotOf(state, "pb") : null};
 }
 // Training day number for today in this slot's week, or 0
 function todaysDay(c){ return c.slot.weekStart === c.now.weekStart && !c.now.before && dayOfWeek(c.today) <= CONFIG.trainingDays ? dayOfWeek(c.today) : 0; }

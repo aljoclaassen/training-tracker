@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-11-10.1",
+  "appVersion": "2026-11-10.2",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -1013,6 +1013,18 @@
         "free"
       ],
       "to": "dumbbell"
+    }
+  ],
+  "hdFirstGuess": [
+    {
+      "hd": "d3-hexdl",
+      "pb": [
+        "pb-d5-farmer"
+      ],
+      "factor": 1.1,
+      "unit": "kg",
+      "from": "hex-bar farmer's carry",
+      "why": "If you can walk with it, you can pull a bit more: carry weight plus 10%, rounded down."
     }
   ]
 }

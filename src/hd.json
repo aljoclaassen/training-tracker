@@ -1237,6 +1237,15 @@
      "title": "Lower Back",
      "items": [
       {
+       "id": "d3-hexdl",
+       "name": "Hex Bar Deadlift",
+       "equip": "Hex bar",
+       "sets": "2W + 1",
+       "reps": "10 @ 50%, 6 @ 70% → 6–8 @ 100%",
+       "rest": "3 min",
+       "notes": "Last heavy pull of back day, as Yates and Mentzer did, and before the back extension so the lower back is fresh for it. Reps, not a max."
+      },
+      {
        "id": "d3-8",
        "name": "Back Extension",
        "equip": "Hyperextension bench, weighted",
