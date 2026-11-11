@@ -1,6 +1,6 @@
 {
   "appId": "heavy-duty-tracker",
-  "appVersion": "2026-11-10.2",
+  "appVersion": "2026-11-11.1",
   "dataVersion": 2,
   "readableVersions": [
     1,
@@ -389,13 +389,6 @@
           "name": "Incline Dumbbell Press"
         },
         {
-          "name": "Dips"
-        },
-        {
-          "name": "Low-to-High Cable Fly",
-          "unit": "plates"
-        },
-        {
           "name": "Push-up to Failure"
         },
         {
@@ -437,9 +430,6 @@
           "name": "Close-Grip Bench Press"
         },
         {
-          "name": "Triceps Dips"
-        },
-        {
           "name": "Diamond Push-up"
         },
         {
@@ -447,10 +437,6 @@
         },
         {
           "name": "Cable Crunch",
-          "unit": "plates"
-        },
-        {
-          "name": "Overhead Cable Extension",
           "unit": "plates"
         },
         {
@@ -754,7 +740,7 @@
         "3": [],
         "4": [
           "d4-0",
-          "d4-3",
+          "d4-dblat",
           "d4-7",
           "d4-9"
         ],
@@ -868,6 +854,21 @@
       "variants": {
         "-": "chest"
       }
+    },
+    "d4-3": {
+      "to": "d4-dblat",
+      "variants": {
+        "-": "d4-machlat|standing",
+        "standing": "d4-machlat|standing",
+        "seated": "d4-machlat|seated",
+        "dumbbell": "-"
+      }
+    },
+    "d4-10": {
+      "to": "d4-10",
+      "variants": {
+        "reverse": "cable"
+      }
     }
   },
   "hdNameMoves": {
@@ -886,7 +887,8 @@
     "barbell incline bench press": "incline bench press: barbell or smith",
     "db bent-over row": "db row: bent over or chest-supported",
     "t-bar row": "t-bar row: chest-supported or standing",
-    "cable fly: high to low or low to high": "cable fly: high to low"
+    "cable fly: high to low or low to high": "cable fly: high to low",
+    "one-arm pushdown": "underhand one-arm pushdown"
   },
   "hdArchiveSeeds": [
     {
@@ -1025,6 +1027,17 @@
       "unit": "kg",
       "from": "hex-bar farmer's carry",
       "why": "If you can walk with it, you can pull a bit more: carry weight plus 10%, rounded down."
+    },
+    {
+      "hd": "d4-dblat",
+      "pb": [
+        "pb-d4-lateral"
+      ],
+      "mode": "reps",
+      "factor": 0.95,
+      "unit": "kg",
+      "from": "Powerbuilding lateral raises",
+      "why": "Worked out from your best Powerbuilding set taken close to failure, then 5% off because those are high-rep sets."
     }
   ]
 }

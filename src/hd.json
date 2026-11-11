@@ -33,14 +33,6 @@
      "Left arm",
      "Right arm"
     ]
-   },
-   {
-    "id": "reverse",
-    "label": "Cable, reverse grip",
-    "rows": [
-     "Left arm",
-     "Right arm"
-    ]
    }
   ],
   "OHP": [
@@ -660,6 +652,26 @@
     ],
     "tech": []
    }
+  ],
+  "MACHLAT": [
+   {
+    "id": "standing",
+    "label": "Machine, standing",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "plates"
+   },
+   {
+    "id": "seated",
+    "label": "Machine, seated",
+    "rows": [
+     "Warm-up",
+     "Working"
+    ],
+    "unit": "plates"
+   }
   ]
  },
  "days": [
@@ -828,11 +840,22 @@
        "equip": "Dumbbell",
        "sets": "1",
        "reps": "6–8 @ 100%",
-       "rest": "2 min",
-       "notes": "Chest is warm from the presses, so no warm-up.",
+       "rest": "None",
+       "notes": "Superset: on its last set, go straight into chest dips.",
        "tech": [
         "rp"
-       ]
+       ],
+       "pair": "B1"
+      },
+      {
+       "id": "d2-cdips",
+       "name": "Chest Dips",
+       "equip": "Dip bars, bodyweight",
+       "sets": "1",
+       "reps": "6–12 @ 100%",
+       "rest": "2 min",
+       "pair": "B2",
+       "notes": "Superset partner of the DB chest press. Lean forward, elbows out, go deep enough to stretch the chest. Log added weight, or 0 for bodyweight."
       },
       {
        "id": "d2-cflylow",
@@ -954,28 +977,29 @@
      "title": "Shoulders",
      "items": [
       {
+       "id": "d4-dblat",
+       "name": "DB Lateral Raise",
+       "equip": "Dumbbells",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "None",
+       "pair": "A1",
+       "tech": [
+        "rp"
+       ],
+       "notes": "Superset, Mentzer's pre-exhaust: lateral raise to failure, then straight into the shoulder press. Do the press warm-up first."
+      },
+      {
        "id": "d4-0",
        "name": "Shoulder Press: Behind-the-Neck or Military",
        "equip": "Barbell or Smith machine",
        "sets": "2W + 1",
        "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
        "rest": "2–3 min",
-       "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
+       "notes": "Superset partner of the DB lateral raise: pre-exhausted, so expect less weight than a fresh set. Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
        "variants": "OHP",
-       "techMain": true
-      },
-      {
-       "id": "d4-3",
-       "name": "Lateral Raise",
-       "equip": "Machine or dumbbell",
-       "sets": "1W + 1",
-       "reps": "10 @ 60% → 6–8 @ 100%",
-       "rest": "60–90 s",
-       "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
-       "variants": "LATMACH",
-       "tech": [
-        "rp"
-       ]
+       "techMain": true,
+       "pair": "A2"
       },
       {
        "id": "d4-5",
@@ -990,6 +1014,20 @@
        "tech": [
         "rp"
        ]
+      },
+      {
+       "id": "d4-machlat",
+       "name": "Machine Lateral Raise",
+       "equip": "Machine",
+       "sets": "1W + 1",
+       "reps": "10 @ 60% → 6–8 @ 100%",
+       "rest": "60–90 s",
+       "optional": true,
+       "variants": "MACHLAT",
+       "tech": [
+        "rp"
+       ],
+       "notes": "Optional. Pick standing or seated in the Tracker; each keeps its own numbers."
       },
       {
        "id": "d4-1",
@@ -1036,13 +1074,24 @@
        "equip": "Cable or machine",
        "sets": "1W + 1",
        "reps": "10 @ 60% → 6–8 @ 100%",
-       "rest": "90 s",
-       "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
+       "rest": "None",
+       "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker. Superset: on the last set, go straight into tricep dips.",
        "tag": "R",
        "variants": "PUSHDOWN",
        "tech": [
         "rp"
-       ]
+       ],
+       "pair": "B1"
+      },
+      {
+       "id": "d4-tdips",
+       "name": "Tricep Dips",
+       "equip": "Dip bars or bench, bodyweight",
+       "sets": "1",
+       "reps": "6–12 @ 100%",
+       "rest": "90 s",
+       "pair": "B2",
+       "notes": "Superset partner of the pushdown. Stay upright, elbows in, lock out hard. Log added weight, or 0 for bodyweight."
       },
       {
        "id": "d4-9",
@@ -1072,14 +1121,28 @@
       },
       {
        "id": "d4-10",
-       "name": "One-Arm Pushdown",
+       "name": "Underhand One-Arm Pushdown",
        "equip": "Cable or machine",
        "sets": "1 per arm",
        "reps": "6–8 @ 100%",
        "rest": "60–90 s",
-       "notes": "Pick the reverse-grip cable option in the Tracker for the reverse pressdown.",
+       "notes": "Underhand (reverse) grip. Pick cable or machine in the Tracker.",
        "tag": "R",
        "variants": "ONEARMPD",
+       "tech": [
+        "rp"
+       ]
+      },
+      {
+       "id": "d4-ohcable",
+       "name": "Overhead Cable Tricep Extension",
+       "equip": "Cable",
+       "sets": "1",
+       "reps": "6–8 @ 100%",
+       "rest": "60–90 s",
+       "notes": "Optional. Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
+       "variants": "OHCABLE",
+       "optional": true,
        "tech": [
         "rp"
        ]
@@ -1365,19 +1428,6 @@
    }
   },
   {
-   "day": 4,
-   "item": {
-    "id": "d4-ohcable",
-    "name": "Overhead Cable Tricep Extension",
-    "equip": "Cable",
-    "sets": "1",
-    "reps": "6–8 @ 100%",
-    "rest": "60–90 s",
-    "notes": "Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
-    "variants": "OHCABLE"
-   }
-  },
-  {
    "day": 1,
    "item": {
     "id": "d5-0",
@@ -1448,6 +1498,22 @@
     "reps": "10–12 @ 100%",
     "rest": "60–90 s",
     "notes": ""
+   }
+  },
+  {
+   "day": 4,
+   "item": {
+    "id": "d4-3",
+    "name": "Lateral Raise",
+    "equip": "Machine or dumbbell",
+    "sets": "1W + 1",
+    "reps": "10 @ 60% → 6–8 @ 100%",
+    "rest": "60–90 s",
+    "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
+    "variants": "LATMACH",
+    "tech": [
+     "rp"
+    ]
    }
   }
  ]

@@ -248,7 +248,7 @@ LOGIC FUNCTIONS (Layer 2): name(inputs) : what it returns and the rule it applie
     hdRemapDays(slot) : Takes a Heavy Duty slot on the old five-day layout. Renumbers its day-keyed data: old Day 3 (back) is now Day 5, old Day 5 (legs B) is now Day 1. Changes slot in place. Rule: run once, guarded by the stored layout number.
     hdSeedFromArchive(slot, archive) : Takes a Heavy Duty slot and the history archive. Gives an exercise's variation history its last logged numbers from archived weeks when the slot has none: the one-arm machine row, which 2026-11-09.1 did not carry over. Changes slot in place. Rule: runs once per device (slot.hdSeeded); takes the newest archived week that logged it.
     pbHint(item, pbSlot, unit) : Takes a Heavy Duty session item, the Powerbuilding slot and the unit the item is logged in. Returns an information-only hint {kg, reps, from, date, after} from Powerbuilding, or null. Rule: the best estimated max in the newest Powerbuilding week that logged the matching exercise (load × (1 + (reps + reps left) ÷ 30)), times the lift factor, turned back into a load for the bottom of the Heavy Duty rep range taken to failure, rounded down. Same unit only. Never changes the target.
-    hdFirstGuess(item, pbSlot, unit) : Takes a Heavy Duty session item, the Powerbuilding slot and the unit. Returns a first-time target {kg, base, reps, from, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null. Rule: the heaviest logged set in the newest Powerbuilding week that has one (a swapped exercise does not count), else the best-set history; times the factor, rounded down to the load step. Same unit only.
+    hdFirstGuess(item, pbSlot, unit) : Takes a Heavy Duty session item, the Powerbuilding slot and the unit. Returns a first-time target {kg, reps, from, baseText, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null. Rules: looks at the newest Powerbuilding week with a logged set (a swapped exercise does not count), else the best-set history. Mode "max" (default): heaviest weight × factor (the hex-bar carry). Mode "reps": best estimated max (weight × (1 + (reps + reps left) ÷ 30)) × factor, turned into a load for the bottom of the Heavy Duty rep range to failure (lateral raises). Rounded down to the load step. Same unit only.
     hdTechWeek(w) : Takes a week from weekInfo. Returns {phase, label, max, capped, week, of} for a Heavy Duty week, or null. Rules: week 1 of a block is re-entry (none), the last week is the peak (two a day), weeks between are build weeks (one a day), an easy week has none. A one-week block is re-entry. After more than CONFIG.techniques.capAfterHard hard weeks in a row, a peak week stays a build week.
     hdTechFor(item) : Takes a Heavy Duty session item. Returns the techniques allowed on it with its chosen variation, e.g. ["rp", "fr"].
     hdTechPicks(session, slot, w) : Takes a Heavy Duty session, its slot and the week. Returns today's picks [{id, name, tech: ["rp", ...]}]. Rules: first pick is the first main exercise that allows a technique; the peak's second pick is the first other exercise after it, from another muscle group when there is one. Skipped: optional exercises, the first half of a superset, anything before the day's first main lift, and any exercise whose working set last week fell below its rep range.
@@ -2103,7 +2103,7 @@ body.has-hazard{ padding-bottom: calc(var(--size-nav) + var(--size-input) + var(
    ===================================================================== */
 const CONFIG = {
  "appId": "heavy-duty-tracker",
- "appVersion": "2026-11-10.2",
+ "appVersion": "2026-11-11.1",
  "dataVersion": 2,
  "readableVersions": [
   1,
@@ -2492,13 +2492,6 @@ const CONFIG = {
      "name": "Incline Dumbbell Press"
     },
     {
-     "name": "Dips"
-    },
-    {
-     "name": "Low-to-High Cable Fly",
-     "unit": "plates"
-    },
-    {
      "name": "Push-up to Failure"
     },
     {
@@ -2540,9 +2533,6 @@ const CONFIG = {
      "name": "Close-Grip Bench Press"
     },
     {
-     "name": "Triceps Dips"
-    },
-    {
      "name": "Diamond Push-up"
     },
     {
@@ -2550,10 +2540,6 @@ const CONFIG = {
     },
     {
      "name": "Cable Crunch",
-     "unit": "plates"
-    },
-    {
-     "name": "Overhead Cable Extension",
      "unit": "plates"
     },
     {
@@ -2857,7 +2843,7 @@ const CONFIG = {
     "3": [],
     "4": [
      "d4-0",
-     "d4-3",
+     "d4-dblat",
      "d4-7",
      "d4-9"
     ],
@@ -2971,6 +2957,21 @@ const CONFIG = {
    "variants": {
     "-": "chest"
    }
+  },
+  "d4-3": {
+   "to": "d4-dblat",
+   "variants": {
+    "-": "d4-machlat|standing",
+    "standing": "d4-machlat|standing",
+    "seated": "d4-machlat|seated",
+    "dumbbell": "-"
+   }
+  },
+  "d4-10": {
+   "to": "d4-10",
+   "variants": {
+    "reverse": "cable"
+   }
   }
  },
  "hdNameMoves": {
@@ -2989,7 +2990,8 @@ const CONFIG = {
   "barbell incline bench press": "incline bench press: barbell or smith",
   "db bent-over row": "db row: bent over or chest-supported",
   "t-bar row": "t-bar row: chest-supported or standing",
-  "cable fly: high to low or low to high": "cable fly: high to low"
+  "cable fly: high to low or low to high": "cable fly: high to low",
+  "one-arm pushdown": "underhand one-arm pushdown"
  },
  "hdArchiveSeeds": [
   {
@@ -3128,6 +3130,17 @@ const CONFIG = {
    "unit": "kg",
    "from": "hex-bar farmer's carry",
    "why": "If you can walk with it, you can pull a bit more: carry weight plus 10%, rounded down."
+  },
+  {
+   "hd": "d4-dblat",
+   "pb": [
+    "pb-d4-lateral"
+   ],
+   "mode": "reps",
+   "factor": 0.95,
+   "unit": "kg",
+   "from": "Powerbuilding lateral raises",
+   "why": "Worked out from your best Powerbuilding set taken close to failure, then 5% off because those are high-rep sets."
   }
  ]
 };
@@ -3178,14 +3191,6 @@ const PROGRAMME = {
      {
       "id": "machine",
       "label": "Machine",
-      "rows": [
-       "Left arm",
-       "Right arm"
-      ]
-     },
-     {
-      "id": "reverse",
-      "label": "Cable, reverse grip",
       "rows": [
        "Left arm",
        "Right arm"
@@ -3809,6 +3814,26 @@ const PROGRAMME = {
       ],
       "tech": []
      }
+    ],
+    "MACHLAT": [
+     {
+      "id": "standing",
+      "label": "Machine, standing",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "unit": "plates"
+     },
+     {
+      "id": "seated",
+      "label": "Machine, seated",
+      "rows": [
+       "Warm-up",
+       "Working"
+      ],
+      "unit": "plates"
+     }
     ]
    },
    "days": [
@@ -3977,11 +4002,22 @@ const PROGRAMME = {
          "equip": "Dumbbell",
          "sets": "1",
          "reps": "6–8 @ 100%",
-         "rest": "2 min",
-         "notes": "Chest is warm from the presses, so no warm-up.",
+         "rest": "None",
+         "notes": "Superset: on its last set, go straight into chest dips.",
          "tech": [
           "rp"
-         ]
+         ],
+         "pair": "B1"
+        },
+        {
+         "id": "d2-cdips",
+         "name": "Chest Dips",
+         "equip": "Dip bars, bodyweight",
+         "sets": "1",
+         "reps": "6–12 @ 100%",
+         "rest": "2 min",
+         "pair": "B2",
+         "notes": "Superset partner of the DB chest press. Lean forward, elbows out, go deep enough to stretch the chest. Log added weight, or 0 for bodyweight."
         },
         {
          "id": "d2-cflylow",
@@ -4103,28 +4139,29 @@ const PROGRAMME = {
        "title": "Shoulders",
        "items": [
         {
+         "id": "d4-dblat",
+         "name": "DB Lateral Raise",
+         "equip": "Dumbbells",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "None",
+         "pair": "A1",
+         "tech": [
+          "rp"
+         ],
+         "notes": "Superset, Mentzer's pre-exhaust: lateral raise to failure, then straight into the shoulder press. Do the press warm-up first."
+        },
+        {
          "id": "d4-0",
          "name": "Shoulder Press: Behind-the-Neck or Military",
          "equip": "Barbell or Smith machine",
          "sets": "2W + 1",
          "reps": "12 @ 50%, 10 @ 70% → 8–10 @ 100%",
          "rest": "2–3 min",
-         "notes": "Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
+         "notes": "Superset partner of the DB lateral raise: pre-exhausted, so expect less weight than a fresh set. Pick behind-the-neck or military, on a barbell or the Smith machine, in the Tracker.",
          "variants": "OHP",
-         "techMain": true
-        },
-        {
-         "id": "d4-3",
-         "name": "Lateral Raise",
-         "equip": "Machine or dumbbell",
-         "sets": "1W + 1",
-         "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "60–90 s",
-         "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
-         "variants": "LATMACH",
-         "tech": [
-          "rp"
-         ]
+         "techMain": true,
+         "pair": "A2"
         },
         {
          "id": "d4-5",
@@ -4139,6 +4176,20 @@ const PROGRAMME = {
          "tech": [
           "rp"
          ]
+        },
+        {
+         "id": "d4-machlat",
+         "name": "Machine Lateral Raise",
+         "equip": "Machine",
+         "sets": "1W + 1",
+         "reps": "10 @ 60% → 6–8 @ 100%",
+         "rest": "60–90 s",
+         "optional": true,
+         "variants": "MACHLAT",
+         "tech": [
+          "rp"
+         ],
+         "notes": "Optional. Pick standing or seated in the Tracker; each keeps its own numbers."
         },
         {
          "id": "d4-1",
@@ -4185,13 +4236,24 @@ const PROGRAMME = {
          "equip": "Cable or machine",
          "sets": "1W + 1",
          "reps": "10 @ 60% → 6–8 @ 100%",
-         "rest": "90 s",
-         "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker.",
+         "rest": "None",
+         "notes": "Overhand, both arms. One warm-up is enough after the presses. Pick cable bar, cable rope or machine in the Tracker. Superset: on the last set, go straight into tricep dips.",
          "tag": "R",
          "variants": "PUSHDOWN",
          "tech": [
           "rp"
-         ]
+         ],
+         "pair": "B1"
+        },
+        {
+         "id": "d4-tdips",
+         "name": "Tricep Dips",
+         "equip": "Dip bars or bench, bodyweight",
+         "sets": "1",
+         "reps": "6–12 @ 100%",
+         "rest": "90 s",
+         "pair": "B2",
+         "notes": "Superset partner of the pushdown. Stay upright, elbows in, lock out hard. Log added weight, or 0 for bodyweight."
         },
         {
          "id": "d4-9",
@@ -4221,14 +4283,28 @@ const PROGRAMME = {
         },
         {
          "id": "d4-10",
-         "name": "One-Arm Pushdown",
+         "name": "Underhand One-Arm Pushdown",
          "equip": "Cable or machine",
          "sets": "1 per arm",
          "reps": "6–8 @ 100%",
          "rest": "60–90 s",
-         "notes": "Pick the reverse-grip cable option in the Tracker for the reverse pressdown.",
+         "notes": "Underhand (reverse) grip. Pick cable or machine in the Tracker.",
          "tag": "R",
          "variants": "ONEARMPD",
+         "tech": [
+          "rp"
+         ]
+        },
+        {
+         "id": "d4-ohcable",
+         "name": "Overhead Cable Tricep Extension",
+         "equip": "Cable",
+         "sets": "1",
+         "reps": "6–8 @ 100%",
+         "rest": "60–90 s",
+         "notes": "Optional. Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
+         "variants": "OHCABLE",
+         "optional": true,
          "tech": [
           "rp"
          ]
@@ -4514,19 +4590,6 @@ const PROGRAMME = {
      }
     },
     {
-     "day": 4,
-     "item": {
-      "id": "d4-ohcable",
-      "name": "Overhead Cable Tricep Extension",
-      "equip": "Cable",
-      "sets": "1",
-      "reps": "6–8 @ 100%",
-      "rest": "60–90 s",
-      "notes": "Facing away from the stack, elbows by your head. Pick bar or rope in the Tracker. Triceps are warm by now, so no warm-up.",
-      "variants": "OHCABLE"
-     }
-    },
-    {
      "day": 1,
      "item": {
       "id": "d5-0",
@@ -4597,6 +4660,22 @@ const PROGRAMME = {
       "reps": "10–12 @ 100%",
       "rest": "60–90 s",
       "notes": ""
+     }
+    },
+    {
+     "day": 4,
+     "item": {
+      "id": "d4-3",
+      "name": "Lateral Raise",
+      "equip": "Machine or dumbbell",
+      "sets": "1W + 1",
+      "reps": "10 @ 60% → 6–8 @ 100%",
+      "rest": "60–90 s",
+      "notes": "Pick machine (standing or seated) or dumbbell in the Tracker.",
+      "variants": "LATMACH",
+      "tech": [
+       "rp"
+      ]
      }
     }
    ]
@@ -6813,28 +6892,38 @@ function pbHint(item, pbSlot, unit){
 }
 
 // Takes a Heavy Duty session item, the Powerbuilding slot and the unit. Returns a first-time target
-// {kg, base, reps, from, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null.
-// Rule: the heaviest logged set in the newest Powerbuilding week that has one (a swapped exercise does not count),
-//   else the best-set history; times the factor, rounded down to the load step. Same unit only.
+// {kg, reps, from, baseText, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null.
+// Rules: looks at the newest Powerbuilding week with a logged set (a swapped exercise does not count),
+//   else the best-set history. Mode "max" (default): heaviest weight × factor (the hex-bar carry).
+//   Mode "reps": best estimated max (weight × (1 + (reps + reps left) ÷ 30)) × factor, turned into a load for the
+//   bottom of the Heavy Duty rep range to failure (lateral raises). Rounded down to the load step. Same unit only.
 function hdFirstGuess(item, pbSlot, unit){
   const g = (CONFIG.hdFirstGuess || []).filter(x => x.hd === item.id)[0], range = g && repRange(item);
   if (!g || !range || !pbSlot || unit !== (g.unit || "kg")) return null;
-  let base = 0;
+  const reps = g.mode === "reps";
+  let best = null;   // {score, kg, reps}
+  const consider = (kg, r, left) => {
+    kg = Number(kg) || 0; r = Number(r) || 0;
+    if (kg <= 0 || (reps && r <= 0)) return;
+    const score = reps ? estMax(kg, r, Number(left) || 0) : kg;
+    if (!best || score > best.score) best = {score: score, kg: kg, reps: r};
+  };
   [pbSlot.entries, pbSlot.lastWeek && pbSlot.lastWeek.entries].some(entries => {
     (g.pb || []).forEach(id => {
       const e = entries && entries[id];
       if (!e || e.replaced || (e.unit && e.unit !== unit)) return;
-      (e.sets || []).forEach(x => { if (isLogged(x)) base = Math.max(base, Number(x.kg) || 0); });
+      (e.sets || []).forEach(x => { if (isLogged(x)) consider(x.kg, x.reps, x.left); });
     });
-    return base > 0;
+    return !!best;
   });
-  if (!base) (g.pb || []).forEach(id => {
+  if (!best) (g.pb || []).forEach(id => {
     const meta = EXERCISES[id], h = meta && (pbSlot.history || {})[keyOf(meta.item.name)];
-    if (h && (h.unit || "kg") === unit) base = Math.max(base, Number(h.kg) || 0);
+    if (h && (h.unit || "kg") === unit) consider(h.kg, h.reps, h.left);
   });
-  if (!base) return null;
-  const kg = Math.floor(base * g.factor / CONFIG.kgStep) * CONFIG.kgStep;
-  return {kg: kg, base: base, reps: range.min, from: g.from, why: g.why};
+  if (!best) return null;
+  const raw = reps ? best.score * g.factor / (1 + range.min / PROGRAMME.plans.pb.estimatedMax.divisor) : best.score * g.factor;
+  const step = loadStep(raw, unit), kg = Math.max(step, Math.floor(raw / step) * step);
+  return {kg: kg, reps: range.min, from: g.from, why: g.why, baseText: reps ? fmtLoad(best.kg, unit) + " × " + best.reps : fmtLoad(best.kg, unit)};
 }
 
 /* ---------- Heavy Duty intensity techniques: forced reps and rest-pause ---------- */
@@ -7272,7 +7361,7 @@ function rowTarget(item, i, a){
     // Never done before: a first guess from a Powerbuilding lift, when one is set up for this exercise
     if (own.kg == null && !a.last && i === firstWorkRow(item)){
       const fg = hdFirstGuess(item, a.pbSlot, a.unit);
-      if (fg) return {text: "First time: about " + fmtLoad(fg.kg, a.unit) + " × " + fg.reps + "+. From your " + fg.from + " (" + fmtLoad(fg.base, a.unit) + "). " + fg.why, kg: fg.kg, reps: fg.reps, from: "firstGuess"};
+      if (fg) return {text: "First time: about " + fmtLoad(fg.kg, a.unit) + " × " + fg.reps + "+. From your " + fg.from + " (" + fg.baseText + "). " + fg.why, kg: fg.kg, reps: fg.reps, from: "firstGuess"};
     }
     const p = a.partner;
     // Same exercise earlier this week (Legs A → Legs B): start from that result. Main set only, same unit only.

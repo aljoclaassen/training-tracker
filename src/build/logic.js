@@ -1249,28 +1249,38 @@ function pbHint(item, pbSlot, unit){
 }
 
 // Takes a Heavy Duty session item, the Powerbuilding slot and the unit. Returns a first-time target
-// {kg, base, reps, from, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null.
-// Rule: the heaviest logged set in the newest Powerbuilding week that has one (a swapped exercise does not count),
-//   else the best-set history; times the factor, rounded down to the load step. Same unit only.
+// {kg, reps, from, baseText, why} from a Powerbuilding lift (CONFIG.hdFirstGuess), or null.
+// Rules: looks at the newest Powerbuilding week with a logged set (a swapped exercise does not count),
+//   else the best-set history. Mode "max" (default): heaviest weight × factor (the hex-bar carry).
+//   Mode "reps": best estimated max (weight × (1 + (reps + reps left) ÷ 30)) × factor, turned into a load for the
+//   bottom of the Heavy Duty rep range to failure (lateral raises). Rounded down to the load step. Same unit only.
 function hdFirstGuess(item, pbSlot, unit){
   const g = (CONFIG.hdFirstGuess || []).filter(x => x.hd === item.id)[0], range = g && repRange(item);
   if (!g || !range || !pbSlot || unit !== (g.unit || "kg")) return null;
-  let base = 0;
+  const reps = g.mode === "reps";
+  let best = null;   // {score, kg, reps}
+  const consider = (kg, r, left) => {
+    kg = Number(kg) || 0; r = Number(r) || 0;
+    if (kg <= 0 || (reps && r <= 0)) return;
+    const score = reps ? estMax(kg, r, Number(left) || 0) : kg;
+    if (!best || score > best.score) best = {score: score, kg: kg, reps: r};
+  };
   [pbSlot.entries, pbSlot.lastWeek && pbSlot.lastWeek.entries].some(entries => {
     (g.pb || []).forEach(id => {
       const e = entries && entries[id];
       if (!e || e.replaced || (e.unit && e.unit !== unit)) return;
-      (e.sets || []).forEach(x => { if (isLogged(x)) base = Math.max(base, Number(x.kg) || 0); });
+      (e.sets || []).forEach(x => { if (isLogged(x)) consider(x.kg, x.reps, x.left); });
     });
-    return base > 0;
+    return !!best;
   });
-  if (!base) (g.pb || []).forEach(id => {
+  if (!best) (g.pb || []).forEach(id => {
     const meta = EXERCISES[id], h = meta && (pbSlot.history || {})[keyOf(meta.item.name)];
-    if (h && (h.unit || "kg") === unit) base = Math.max(base, Number(h.kg) || 0);
+    if (h && (h.unit || "kg") === unit) consider(h.kg, h.reps, h.left);
   });
-  if (!base) return null;
-  const kg = Math.floor(base * g.factor / CONFIG.kgStep) * CONFIG.kgStep;
-  return {kg: kg, base: base, reps: range.min, from: g.from, why: g.why};
+  if (!best) return null;
+  const raw = reps ? best.score * g.factor / (1 + range.min / PROGRAMME.plans.pb.estimatedMax.divisor) : best.score * g.factor;
+  const step = loadStep(raw, unit), kg = Math.max(step, Math.floor(raw / step) * step);
+  return {kg: kg, reps: range.min, from: g.from, why: g.why, baseText: reps ? fmtLoad(best.kg, unit) + " × " + best.reps : fmtLoad(best.kg, unit)};
 }
 
 /* ---------- Heavy Duty intensity techniques: forced reps and rest-pause ---------- */
@@ -1708,7 +1718,7 @@ function rowTarget(item, i, a){
     // Never done before: a first guess from a Powerbuilding lift, when one is set up for this exercise
     if (own.kg == null && !a.last && i === firstWorkRow(item)){
       const fg = hdFirstGuess(item, a.pbSlot, a.unit);
-      if (fg) return {text: "First time: about " + fmtLoad(fg.kg, a.unit) + " × " + fg.reps + "+. From your " + fg.from + " (" + fmtLoad(fg.base, a.unit) + "). " + fg.why, kg: fg.kg, reps: fg.reps, from: "firstGuess"};
+      if (fg) return {text: "First time: about " + fmtLoad(fg.kg, a.unit) + " × " + fg.reps + "+. From your " + fg.from + " (" + fg.baseText + "). " + fg.why, kg: fg.kg, reps: fg.reps, from: "firstGuess"};
     }
     const p = a.partner;
     // Same exercise earlier this week (Legs A → Legs B): start from that result. Main set only, same unit only.

@@ -24,7 +24,7 @@ with sync_playwright() as p:
     check("over 6 hard weeks: peak held at build", pg.evaluate(PH, [8, wk[7]]) == "build*", pg.evaluate(PH, [8, wk[7]]))
     check("powerbuilding week: no guide", pg.evaluate("() => hdTechWeek(weekInfo({start: '2026-11-02', first: 'pb', lengths: [2]}, '2026-11-02'))") is None)
     pk = pg.evaluate(PICKS, [2, wk[1]])
-    check("peak picks: legs, chest, shoulders, back", pk == ["d5-1:rp, d1-6:rp", "d2-2:fr, d2-6:rp", "d4-1:fr, d4-7:rp", "d3-0:fr, d3-facepull:rp"], pk)
+    check("peak picks: legs, chest, shoulders, back", pk == ["d5-1:rp, d1-6:rp", "d2-2:fr, d2-6:rp", "d4-1:fr, d4-9:fr", "d3-0:fr, d3-facepull:rp"], pk)
     pk = pg.evaluate(PICKS, [3, wk[1]])
     check("build picks: one a day", pk == ["d5-1:rp", "d2-2:fr", "d4-1:fr", "d3-0:fr"], pk)
     check("re-entry picks: none", pg.evaluate(PICKS, [2, wk[0]]) == ["", "", "", ""])
